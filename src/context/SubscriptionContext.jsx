@@ -89,26 +89,26 @@ export function SubscriptionProvider({ children }) {
   const forceBlock = async () => {
     setForcedState('fase3')
     if (!isMaster) {
-      await supabase.from('businesses').update({ forcePhase: 3 }).eq('id', bid)
+      await supabase.from('businesses').update({ force_phase: 3 }).eq('id', bid)
     }
   }
 
   const forceUnblock = async () => {
     setForcedState('fase1')
     if (!isMaster) {
-      await supabase.from('businesses').update({ forcePhase: null }).eq('id', bid)
+      await supabase.from('businesses').update({ force_phase: null }).eq('id', bid)
     }
   }
   
   const addMonth = async (days = 30) => {
     setForcedState(null)
-    const currentDays = myBiz?.daysRemaining || 0
+    const currentDays = myBiz?.daysRemaining || myBiz?.days_remaining || 0
     const newDays = currentDays + days
-    setBusinesses(prev => prev.map(b => b.id === bid ? { ...b, daysRemaining: newDays } : b))
+    setBusinesses(prev => prev.map(b => b.id === bid ? { ...b, daysRemaining: newDays, days_remaining: newDays } : b))
     
     if (!isMaster) {
       try {
-        await supabase.from('businesses').update({ daysRemaining: newDays }).eq('id', bid)
+        await supabase.from('businesses').update({ days_remaining: newDays }).eq('id', bid)
       } catch (e) {
         console.error(e)
       }
@@ -117,13 +117,13 @@ export function SubscriptionProvider({ children }) {
 
   const removeMonth = async () => {
     setForcedState(null)
-    const currentDays = myBiz?.daysRemaining || 0
+    const currentDays = myBiz?.daysRemaining || myBiz?.days_remaining || 0
     const newDays = Math.max(0, currentDays - 30)
-    setBusinesses(prev => prev.map(b => b.id === bid ? { ...b, daysRemaining: newDays } : b))
+    setBusinesses(prev => prev.map(b => b.id === bid ? { ...b, daysRemaining: newDays, days_remaining: newDays } : b))
     
     if (!isMaster) {
       try {
-        await supabase.from('businesses').update({ daysRemaining: newDays }).eq('id', bid)
+        await supabase.from('businesses').update({ days_remaining: newDays }).eq('id', bid)
       } catch (e) {
         console.error(e)
       }
@@ -132,13 +132,13 @@ export function SubscriptionProvider({ children }) {
 
   const simulateDateChange = async (daysOffset) => {
     setForcedState(null)
-    const currentDays = myBiz?.daysRemaining || 0
+    const currentDays = myBiz?.daysRemaining || myBiz?.days_remaining || 0
     const newDays = currentDays + daysOffset
-    setBusinesses(prev => prev.map(b => b.id === bid ? { ...b, daysRemaining: newDays } : b))
+    setBusinesses(prev => prev.map(b => b.id === bid ? { ...b, daysRemaining: newDays, days_remaining: newDays } : b))
     
     if (!isMaster) {
       try {
-        await supabase.from('businesses').update({ daysRemaining: newDays }).eq('id', bid)
+        await supabase.from('businesses').update({ days_remaining: newDays }).eq('id', bid)
       } catch (e) {
         console.error(e)
       }

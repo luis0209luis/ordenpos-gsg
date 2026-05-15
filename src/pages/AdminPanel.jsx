@@ -93,13 +93,17 @@ export default function AdminPanel() {
         password: formData.cedula,
         password_hash: formData.cedula,
         settings: { currency: 'COP', globalMinStock: 5 },
-        forcePhase: null,
-        daysRemaining: 30
+        force_phase: null,
+        days_remaining: 30
       }
       try {
-        const { data } = await supabase.from('businesses').insert(newBusiness).select().single()
+        const { data, error } = await supabase.from('businesses').insert(newBusiness).select().single()
+        if (error) {
+          console.error("Supabase Error en AdminPanel:", error)
+          throw error
+        }
         if (data) setBusinesses([...businesses, data])
-      } catch (e) { console.error(e) }
+      } catch (e) { console.error("Catch error:", e) }
     }
     
     handleCloseModal()
@@ -145,24 +149,24 @@ export default function AdminPanel() {
   }
 
   const handleBizBlock = async (id) => {
-    setBusinesses(prev => prev.map(b => b.id === id ? { ...b, forcePhase: 3 } : b))
-    try { await supabase.from('businesses').update({ forcePhase: 3 }).eq('id', id) } catch (e) { console.error(e) }
+    setBusinesses(prev => prev.map(b => b.id === id ? { ...b, forcePhase: 3, force_phase: 3 } : b))
+    try { await supabase.from('businesses').update({ force_phase: 3 }).eq('id', id) } catch (e) { console.error(e) }
   }
   const handleBizUnblock = async (id) => {
-    setBusinesses(prev => prev.map(b => b.id === id ? { ...b, forcePhase: null } : b))
-    try { await supabase.from('businesses').update({ forcePhase: null }).eq('id', id) } catch (e) { console.error(e) }
+    setBusinesses(prev => prev.map(b => b.id === id ? { ...b, forcePhase: null, force_phase: null } : b))
+    try { await supabase.from('businesses').update({ force_phase: null }).eq('id', id) } catch (e) { console.error(e) }
   }
   const handleBizAddMonth = async (id) => {
     const biz = businesses.find(b => b.id === id)
-    const newDays = (biz?.daysRemaining || 0) + 30
-    setBusinesses(prev => prev.map(b => b.id === id ? { ...b, daysRemaining: newDays } : b))
-    try { await supabase.from('businesses').update({ daysRemaining: newDays }).eq('id', id) } catch (e) { console.error(e) }
+    const newDays = (biz?.daysRemaining || biz?.days_remaining || 0) + 30
+    setBusinesses(prev => prev.map(b => b.id === id ? { ...b, daysRemaining: newDays, days_remaining: newDays } : b))
+    try { await supabase.from('businesses').update({ days_remaining: newDays }).eq('id', id) } catch (e) { console.error(e) }
   }
   const handleBizRemoveMonth = async (id) => {
     const biz = businesses.find(b => b.id === id)
-    const newDays = Math.max(0, (biz?.daysRemaining || 0) - 30)
-    setBusinesses(prev => prev.map(b => b.id === id ? { ...b, daysRemaining: newDays } : b))
-    try { await supabase.from('businesses').update({ daysRemaining: newDays }).eq('id', id) } catch (e) { console.error(e) }
+    const newDays = Math.max(0, (biz?.daysRemaining || biz?.days_remaining || 0) - 30)
+    setBusinesses(prev => prev.map(b => b.id === id ? { ...b, daysRemaining: newDays, days_remaining: newDays } : b))
+    try { await supabase.from('businesses').update({ days_remaining: newDays }).eq('id', id) } catch (e) { console.error(e) }
   }
 
   const getBizPhase = (biz) => {
