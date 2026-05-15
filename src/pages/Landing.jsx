@@ -136,14 +136,14 @@ export default function Landing() {
 
     // 2. Abrir WhatsApp para el cliente (se abre en nueva pestaña)
     const textWA = `Hola equipo ORDENPOS, deseo registrar mi negocio.%0A- Negocio: ${formData.businessName}%0A- Titular: ${formData.ownerName}%0A- Teléfono: ${formData.phone}`
-    window.open(`https://wa.me/573000000000?text=${textWA}`, '_blank')
+    window.open(`https://wa.me/573136622089?text=${textWA}`, '_blank')
 
     setRegisterStep(2)
   }
 
   const handleWhatsApp = () => {
     const text = `Hola equipo ORDENPOS, deseo registrar mi negocio. Mis datos son: %0A- Negocio: ${formData.businessName} %0A- Titular: ${formData.ownerName} %0A- Teléfono: ${formData.phone}`
-    window.open(`https://wa.me/573000000000?text=${text}`, '_blank')
+    window.open(`https://wa.me/573136622089?text=${text}`, '_blank')
   }
 
   const fadeInUp = {
@@ -696,7 +696,7 @@ export default function Landing() {
               Registrar mi Negocio
             </button>
             <button
-              onClick={() => window.open("https://wa.me/573000000000?text=Hola,%20quiero%20registrar%20mi%20negocio%20en%20ORDENPOS%20y%20necesito%20informaci%C3%B3n.", "_blank")}
+              onClick={() => window.open("https://wa.me/573136622089?text=Hola,%20quiero%20registrar%20mi%20negocio%20en%20ORDENPOS%20y%20necesito%20informaci%C3%B3n.", "_blank")}
               className="w-full sm:w-auto px-10 py-5 rounded-2xl bg-[#25D366] text-white font-bold text-lg hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-3"
               style={{ boxShadow: '0 8px 30px rgba(37,211,102,0.3)' }}
             >
@@ -888,7 +888,7 @@ export default function Landing() {
           </div>
 
           <button
-            onClick={() => window.open('https://wa.me/573000000000?text=Hola,%20tengo%20una%20consulta%20sobre%20ORDENPOS', '_blank')}
+            onClick={() => window.open('https://wa.me/573136622089?text=Hola,%20tengo%20una%20consulta%20sobre%20ORDENPOS', '_blank')}
             className="flex items-center justify-center gap-2 px-8 py-3.5 rounded-full bg-[#25D366] text-white font-bold text-lg hover:scale-105 active:scale-95 transition-transform shadow-[0_0_15px_rgba(37,211,102,0.4)] mb-8 w-full sm:w-auto"
           >
             <MessageCircle size={20} />
