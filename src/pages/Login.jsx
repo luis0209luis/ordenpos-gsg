@@ -38,7 +38,7 @@ export default function Login() {
     setError('')
 
     await new Promise(r => setTimeout(r, 600))
-    const result = verifyBusiness(businessInput)
+    const result = await verifyBusiness(businessInput)
     setLoading(false)
 
     if (result.success) {
@@ -60,7 +60,7 @@ export default function Login() {
     setLoading(true)
     setError('')
     await new Promise(r => setTimeout(r, 600))
-    const result = login(username, password, businessContext.id)
+    const result = await login(username, password, businessContext.id)
     setLoading(false)
 
     if (result.success) {
@@ -96,7 +96,7 @@ export default function Login() {
     setError('')
     await new Promise(r => setTimeout(r, 600))
 
-    changePassword(tempUser, newPassword)
+    await changePassword(tempUser, newPassword)
     setLoading(false)
     navigate('/dashboard')
   }
