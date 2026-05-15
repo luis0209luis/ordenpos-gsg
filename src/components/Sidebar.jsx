@@ -57,7 +57,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
         />
       )}
       <aside className={`
-        fixed md:relative top-0 left-0 flex flex-col h-screen shrink-0 z-50 md:z-20
+        fixed md:relative top-0 left-0 flex flex-col h-[100dvh] shrink-0 z-50 md:z-20
         transition-transform duration-300 ease-in-out
         ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         ${collapsed ? 'md:w-[72px] w-[240px]' : 'w-[240px]'}
