@@ -14,70 +14,70 @@ export function FinanceProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let isMounted = true
+    let expensesChannel
+    let employeesChannel
+
     async function loadData() {
       if (bid === 'default' || bid === 'master') {
-        setLoading(false)
+        if (isMounted) setLoading(false)
         return
       }
-      setLoading(true)
+      if (isMounted) setLoading(true)
       try {
         const [expRes, empRes, payRes] = await Promise.all([
           supabase.from('expenses').select('*').eq('business_id', bid).order('date', { ascending: false }),
           supabase.from('employees').select('*').eq('business_id', bid),
           supabase.from('payroll_history').select('*').eq('business_id', bid).order('date', { ascending: false })
         ])
+
+        if (!isMounted) return
+
         if (expRes.data) setExpenses(expRes.data)
         if (empRes.data) setEmployees(empRes.data)
         if (payRes.data) setPayrollHistory(payRes.data)
+
+        expensesChannel = supabase.channel('expenses-changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `business_id=eq.${bid}` }, payload => {
+            if (!isMounted) return
+            if (payload.eventType === 'INSERT') {
+              setExpenses(prev => prev.find(e => e.id === payload.new.id) ? prev : [payload.new, ...prev])
+            }
+            if (payload.eventType === 'UPDATE') {
+              setExpenses(prev => prev.map(e => e.id === payload.new.id ? { ...e, ...payload.new } : e))
+            }
+            if (payload.eventType === 'DELETE') {
+              setExpenses(prev => prev.filter(e => e.id !== payload.old.id))
+            }
+          })
+          .subscribe()
+
+        employeesChannel = supabase.channel('employees-changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'employees', filter: `business_id=eq.${bid}` }, payload => {
+            if (!isMounted) return
+            if (payload.eventType === 'INSERT') {
+              setEmployees(prev => prev.find(e => e.id === payload.new.id) ? prev : [payload.new, ...prev])
+            }
+            if (payload.eventType === 'UPDATE') {
+              setEmployees(prev => prev.map(e => e.id === payload.new.id ? { ...e, ...payload.new } : e))
+            }
+            if (payload.eventType === 'DELETE') {
+              setEmployees(prev => prev.filter(e => e.id !== payload.old.id))
+            }
+          })
+          .subscribe()
+
       } catch (e) {
         console.error("Error loading finance data:", e)
       } finally {
-        setLoading(false)
+        if (isMounted) setLoading(false)
       }
     }
 
-    let expensesChannel
-    let employeesChannel
-
-    loadData().then(() => {
-      if (bid === 'default' || bid === 'master') return
-
-      expensesChannel = supabase.channel('expenses-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `business_id=eq.${bid}` }, payload => {
-          console.log('Realtime expenses:', payload.eventType, payload)
-          if (payload.eventType === 'INSERT') {
-            setExpenses(prev => prev.find(e => e.id === payload.new.id) ? prev : [payload.new, ...prev])
-          }
-          if (payload.eventType === 'UPDATE') {
-            setExpenses(prev => prev.map(e => e.id === payload.new.id ? payload.new : e))
-          }
-          if (payload.eventType === 'DELETE') {
-            setExpenses(prev => prev.filter(e => e.id !== payload.old.id))
-          }
-        })
-        .subscribe((status) => {
-          console.log('Expenses Realtime Status:', status)
-        })
-
-      employeesChannel = supabase.channel('employees-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'employees', filter: `business_id=eq.${bid}` }, payload => {
-          console.log('Realtime employees:', payload.eventType, payload)
-          if (payload.eventType === 'INSERT') {
-            setEmployees(prev => prev.find(e => e.id === payload.new.id) ? prev : [payload.new, ...prev])
-          }
-          if (payload.eventType === 'UPDATE') {
-            setEmployees(prev => prev.map(e => e.id === payload.new.id ? payload.new : e))
-          }
-          if (payload.eventType === 'DELETE') {
-            setEmployees(prev => prev.filter(e => e.id !== payload.old.id))
-          }
-        })
-        .subscribe((status) => {
-          console.log('Employees Realtime Status:', status)
-        })
-    })
+    loadData()
 
     return () => {
+      isMounted = false
       if (expensesChannel) supabase.removeChannel(expensesChannel)
       if (employeesChannel) supabase.removeChannel(employeesChannel)
     }

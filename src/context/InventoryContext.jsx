@@ -13,18 +13,24 @@ export function InventoryProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let isMounted = true
+    let productsChannel
+    let salesChannel
+
     async function loadData() {
       if (bid === 'default' || bid === 'master') {
-        setLoading(false)
+        if (isMounted) setLoading(false)
         return
       }
 
-      setLoading(true)
+      if (isMounted) setLoading(true)
       try {
         const [prodRes, salesRes] = await Promise.all([
           supabase.from('products').select('*').eq('business_id', bid),
           supabase.from('sales').select('*').eq('business_id', bid).order('created_at', { ascending: false })
         ])
+
+        if (!isMounted) return
 
         if (prodRes.data) setProducts(prodRes.data)
         if (salesRes.data) {
@@ -35,61 +41,54 @@ export function InventoryProvider({ children }) {
           }))
           setSalesHistory(mappedSales)
         }
+
+        productsChannel = supabase.channel('products-changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `business_id=eq.${bid}` }, payload => {
+            if (!isMounted) return
+            if (payload.eventType === 'INSERT') {
+              setProducts(prev => prev.find(p => p.id === payload.new.id) ? prev : [...prev, payload.new])
+            }
+            if (payload.eventType === 'UPDATE') {
+              setProducts(prev => prev.map(p => p.id === payload.new.id ? { ...p, ...payload.new } : p))
+            }
+            if (payload.eventType === 'DELETE') {
+              setProducts(prev => prev.filter(p => p.id !== payload.old.id))
+            }
+          })
+          .subscribe()
+
+        salesChannel = supabase.channel('sales-changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'sales', filter: `business_id=eq.${bid}` }, payload => {
+            if (!isMounted) return
+            const mapSale = sale => ({
+              ...sale,
+              deliveryStatus: sale.delivery_status || sale.deliveryStatus,
+              kitchenStatus: sale.kitchen_status || sale.kitchenStatus
+            })
+            
+            if (payload.eventType === 'INSERT') {
+              setSalesHistory(prev => prev.find(s => s.id === payload.new.id) ? prev : [mapSale(payload.new), ...prev])
+            }
+            if (payload.eventType === 'UPDATE') {
+              setSalesHistory(prev => prev.map(s => s.id === payload.new.id ? { ...s, ...mapSale(payload.new) } : s))
+            }
+            if (payload.eventType === 'DELETE') {
+              setSalesHistory(prev => prev.filter(s => s.id !== payload.old.id))
+            }
+          })
+          .subscribe()
+
       } catch (e) {
         console.error("Error loading inventory data from Supabase:", e)
       } finally {
-        setLoading(false)
+        if (isMounted) setLoading(false)
       }
     }
 
-    let productsChannel
-    let salesChannel
-
-    loadData().then(() => {
-      if (bid === 'default' || bid === 'master') return
-
-      productsChannel = supabase.channel('products-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `business_id=eq.${bid}` }, payload => {
-          console.log('Realtime products:', payload.eventType, payload)
-          if (payload.eventType === 'INSERT') {
-            setProducts(prev => prev.find(p => p.id === payload.new.id) ? prev : [...prev, payload.new])
-          }
-          if (payload.eventType === 'UPDATE') {
-            setProducts(prev => prev.map(p => p.id === payload.new.id ? payload.new : p))
-          }
-          if (payload.eventType === 'DELETE') {
-            setProducts(prev => prev.filter(p => p.id !== payload.old.id))
-          }
-        })
-        .subscribe((status) => {
-          console.log('Products Realtime Status:', status)
-        })
-
-      salesChannel = supabase.channel('sales-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'sales', filter: `business_id=eq.${bid}` }, payload => {
-          console.log('Realtime sales:', payload.eventType, payload)
-          const mapSale = sale => ({
-            ...sale,
-            deliveryStatus: sale.delivery_status || sale.deliveryStatus,
-            kitchenStatus: sale.kitchen_status || sale.kitchenStatus
-          })
-          
-          if (payload.eventType === 'INSERT') {
-            setSalesHistory(prev => prev.find(s => s.id === payload.new.id) ? prev : [mapSale(payload.new), ...prev])
-          }
-          if (payload.eventType === 'UPDATE') {
-            setSalesHistory(prev => prev.map(s => s.id === payload.new.id ? mapSale(payload.new) : s))
-          }
-          if (payload.eventType === 'DELETE') {
-            setSalesHistory(prev => prev.filter(s => s.id !== payload.old.id))
-          }
-        })
-        .subscribe((status) => {
-          console.log('Sales Realtime Status:', status)
-        })
-    })
+    loadData()
 
     return () => {
+      isMounted = false
       if (productsChannel) supabase.removeChannel(productsChannel)
       if (salesChannel) supabase.removeChannel(salesChannel)
     }
