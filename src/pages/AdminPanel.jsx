@@ -4,6 +4,7 @@ import { useTheme } from '../context/AppContext'
 import { useSubscription } from '../context/SubscriptionContext'
 import { Lock, Unlock, Gift, ShieldAlert, Undo2, Plus, X, Building2, KeyRound, BellRing, LayoutDashboard, Users, CircleDollarSign, Settings, ShieldCheck, Activity, Trash2, Pencil } from 'lucide-react'
 import AdminMasterStats from '../components/AdminMasterStats'
+import { sendWelcomeEmail } from '../utils/emailService'
 
 export default function AdminPanel() {
   const { theme } = useTheme()
@@ -113,7 +114,17 @@ export default function AdminPanel() {
           console.error("Supabase Error en AdminPanel:", error)
           throw error
         }
-        if (data) setBusinesses([...businesses, data])
+        if (data) {
+          setBusinesses([...businesses, data])
+          if (formData.email) {
+            sendWelcomeEmail({
+              to: formData.email,
+              ownerName: formData.owner,
+              businessName: formData.name,
+              cedula: formData.cedula
+            }).catch(console.error)
+          }
+        }
       } catch (e) { console.error("Catch error:", e) }
     }
     
