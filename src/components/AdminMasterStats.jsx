@@ -13,10 +13,43 @@ export default function AdminMasterStats() {
     return JSON.parse(localStorage.getItem('ordenpos_master_notifications') || '[]')
   })
 
+  const [stats, setStats] = useState({
+    activeBusinesses: 0,
+    globalSalesTotal: 0,
+    totalProducts: 0,
+    expiringBusinesses: 0,
+    latestSales: []
+  })
+
   const clearNotifications = () => {
     localStorage.setItem('ordenpos_master_notifications', '[]')
     setNotifications([])
   }
+
+  useEffect(() => {
+    async function loadStats() {
+      try {
+        const { count: bCount } = await supabase.from('businesses').select('*', { count: 'exact', head: true })
+        const { data: salesData } = await supabase.from('sales').select('total')
+        const { count: pCount } = await supabase.from('products').select('*', { count: 'exact', head: true })
+        const { count: eCount } = await supabase.from('businesses').select('*', { count: 'exact', head: true }).lte('days_remaining', 5)
+        const { data: latestSales } = await supabase.from('sales').select('*').order('date', { ascending: false }).limit(5)
+        
+        const sumSales = salesData ? salesData.reduce((sum, s) => sum + (Number(s.total) || 0), 0) : 0
+        
+        setStats({
+          activeBusinesses: bCount || 0,
+          globalSalesTotal: sumSales,
+          totalProducts: pCount || 0,
+          expiringBusinesses: eCount || 0,
+          latestSales: latestSales || []
+        })
+      } catch (e) {
+        console.error(e)
+      }
+    }
+    loadStats()
+  }, [])
 
   // --- MOCK DATA PARA INTELIGENCIA DE NEGOCIO ---
   const globalVisits = {
@@ -69,16 +102,16 @@ export default function AdminMasterStats() {
           </div>
           <div className="space-y-4">
             <div className="flex justify-between items-end">
-              <span className={`text-sm font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Visitas Hoy</span>
-              <span className={`text-2xl font-black font-display ${isDark ? 'text-white' : 'text-gray-900'}`}>{globalVisits.today.toLocaleString()}</span>
+              <span className={`text-sm font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Empresas Activas</span>
+              <span className={`text-2xl font-black font-display ${isDark ? 'text-white' : 'text-gray-900'}`}>{stats.activeBusinesses}</span>
             </div>
             <div className="flex justify-between items-end">
-              <span className={`text-sm font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Este Mes</span>
-              <span className={`text-lg font-bold font-display ${isDark ? 'text-white' : 'text-gray-900'}`}>{globalVisits.month.toLocaleString()}</span>
+              <span className={`text-sm font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Ventas Globales</span>
+              <span className={`text-lg font-bold font-display ${isDark ? 'text-white' : 'text-gray-900'}`}>${stats.globalSalesTotal.toLocaleString()}</span>
             </div>
             <div className="pt-3 mt-3 border-t border-dashed border-gray-500/30 flex justify-between items-end">
-              <span className={`text-sm font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Tasa Conversión</span>
-              <span className="text-lg font-bold font-display text-emerald-500">{globalVisits.conversion}</span>
+              <span className={`text-sm font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Por Vencer (&le; 5 días)</span>
+              <span className="text-lg font-bold font-display text-emerald-500">{stats.expiringBusinesses}</span>
             </div>
           </div>
         </div>
@@ -133,31 +166,27 @@ export default function AdminMasterStats() {
       {/* Fila 2: Mapa de Calor y Feedbacks */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* Heatmap */}
+        {/* Últimas Ventas */}
         <div className={`p-6 rounded-3xl border shadow-soft-lg flex flex-col ${isDark ? 'bg-dark-card border-dark-border' : 'bg-white border-light-border'}`}>
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2.5 rounded-xl bg-orange-500/10 text-orange-500"><MousePointerClick size={20} /></div>
+            <div className="p-2.5 rounded-xl bg-green-500/10 text-green-500"><Activity size={20} /></div>
             <div>
-              <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Mapa de Calor (Uso de Módulos)</h3>
-              <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>¿Qué apartados usan más los clientes?</p>
+              <h3 className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Últimas Ventas Globales</h3>
+              <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Monitoreo en tiempo real</p>
             </div>
           </div>
           
-          <div className="flex-1 space-y-5">
-            {moduleHeatmap.map((mod, idx) => (
-              <div key={idx} className="space-y-1.5">
-                <div className="flex justify-between text-sm">
-                  <span className={`font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{mod.name}</span>
-                  <span className={`font-bold ${isDark ? 'text-gold-400' : 'text-gold-600'}`}>{mod.usage}%</span>
+          <div className="flex-1 space-y-3 overflow-y-auto pr-2 custom-scrollbar">
+            {stats.latestSales.map((sale) => (
+              <div key={sale.id} className={`p-3 rounded-xl border flex justify-between items-center ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-gray-50 border-gray-200'}`}>
+                <div>
+                  <p className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>Venta #{sale.id.split('-')[0]}</p>
+                  <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{new Date(sale.date || sale.created_at).toLocaleString()}</p>
                 </div>
-                <div className={`w-full h-2.5 rounded-full overflow-hidden ${isDark ? 'bg-dark-surface' : 'bg-gray-100'}`}>
-                  <div className="h-full bg-gold-gradient rounded-full transition-all duration-1000" style={{ width: `${mod.usage}%` }} />
-                </div>
+                <p className="font-bold text-green-500">${Number(sale.total).toLocaleString()}</p>
               </div>
             ))}
-          </div>
-          <div className="mt-4 pt-4 border-t border-dashed border-gray-500/30 text-xs text-gray-500 italic">
-            * Si el inventario tiene bajo uso, deberíamos considerar agregar importación masiva.
+            {stats.latestSales.length === 0 && <p className="text-xs text-gray-500 italic">No hay ventas registradas.</p>}
           </div>
         </div>
 

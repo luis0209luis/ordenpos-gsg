@@ -4,7 +4,9 @@ import { useTheme } from '../context/AppContext'
 import { useSubscription } from '../context/SubscriptionContext'
 import { Lock, Unlock, Gift, ShieldAlert, Undo2, Plus, X, Building2, KeyRound, BellRing, LayoutDashboard, Users, CircleDollarSign, Settings, ShieldCheck, Activity, Trash2, Pencil } from 'lucide-react'
 import AdminMasterStats from '../components/AdminMasterStats'
+import SystemSecurity from '../components/SystemSecurity'
 import { sendWelcomeEmail } from '../utils/emailService'
+import { insertLog } from '../utils/logger'
 
 export default function AdminPanel() {
   const { theme } = useTheme()
@@ -74,9 +76,11 @@ export default function AdminPanel() {
     if (password === '0209adm') {
       setIsAuthenticated(true)
       setError(false)
+      insertLog({ type: 'success', action: 'superadmin_login', business_id: 'master', username: 'Superadmin', message: 'Inicio de sesión exitoso al panel master' })
     } else {
       setError(true)
       setPassword('')
+      insertLog({ type: 'error', action: 'superadmin_login_failed', business_id: 'master', username: 'Desconocido', message: 'Intento fallido de login con clave incorrecta' })
     }
   }
 
@@ -95,7 +99,11 @@ export default function AdminPanel() {
       setBusinesses(prev => prev.map(b => b.id === editingBizId ? { ...b, ...formData, owner_name: formData.owner, start_date: formData.startDate, password_hash: b.password_hash } : b))
       try {
         await supabase.from('businesses').update(updateData).eq('id', editingBizId)
-      } catch (e) { console.error(e) }
+        insertLog({ type: 'success', action: 'update_business', business_id: editingBizId, username: 'Superadmin', message: `Negocio actualizado: ${formData.name}` })
+      } catch (e) { 
+        console.error(e) 
+        insertLog({ type: 'error', action: 'update_business', business_id: editingBizId, username: 'Superadmin', message: `Error al actualizar: ${e.message}` })
+      }
     } else {
       const newBusiness = {
         name: formData.name,
@@ -112,10 +120,12 @@ export default function AdminPanel() {
         const { data, error } = await supabase.from('businesses').insert(newBusiness).select().single()
         if (error) {
           console.error("Supabase Error en AdminPanel:", error)
+          insertLog({ type: 'error', action: 'create_business', business_id: 'master', username: 'Superadmin', message: `Error al crear negocio: ${error.message}` })
           throw error
         }
         if (data) {
           setBusinesses([...businesses, data])
+          insertLog({ type: 'success', action: 'create_business', business_id: data.id, username: 'Superadmin', message: `Negocio creado: ${data.name}` })
           if (formData.email) {
             sendWelcomeEmail({
               to: formData.email,
@@ -155,6 +165,7 @@ export default function AdminPanel() {
       setBusinesses(prev => prev.filter(b => b.id !== businessToDelete.id))
       try {
         await supabase.from('businesses').delete().eq('id', businessToDelete.id)
+        insertLog({ type: 'warning', action: 'delete_business', business_id: businessToDelete.id, username: 'Superadmin', message: `Negocio eliminado: ${businessToDelete.name}` })
       } catch (e) { console.error(e) }
       setBusinessToDelete(null)
     }
@@ -165,6 +176,7 @@ export default function AdminPanel() {
       setBusinesses(prev => prev.map(b => b.id === businessToReset.id ? { ...b, password_hash: b.cedula } : b))
       try {
         await supabase.from('businesses').update({ password_hash: businessToReset.cedula }).eq('id', businessToReset.id)
+        insertLog({ type: 'warning', action: 'reset_password', business_id: businessToReset.id, username: 'Superadmin', message: `Contraseña restablecida para: ${businessToReset.name}` })
       } catch (e) { console.error(e) }
       setBusinessToReset(null)
     }
@@ -172,23 +184,35 @@ export default function AdminPanel() {
 
   const handleBizBlock = async (id) => {
     setBusinesses(prev => prev.map(b => b.id === id ? { ...b, forcePhase: 3, force_phase: 3 } : b))
-    try { await supabase.from('businesses').update({ force_phase: 3 }).eq('id', id) } catch (e) { console.error(e) }
+    try { 
+      await supabase.from('businesses').update({ force_phase: 3 }).eq('id', id) 
+      insertLog({ type: 'warning', action: 'block_business', business_id: id, username: 'Superadmin', message: `Negocio bloqueado manualmente` })
+    } catch (e) { console.error(e) }
   }
   const handleBizUnblock = async (id) => {
     setBusinesses(prev => prev.map(b => b.id === id ? { ...b, forcePhase: null, force_phase: null } : b))
-    try { await supabase.from('businesses').update({ force_phase: null }).eq('id', id) } catch (e) { console.error(e) }
+    try { 
+      await supabase.from('businesses').update({ force_phase: null }).eq('id', id) 
+      insertLog({ type: 'success', action: 'unblock_business', business_id: id, username: 'Superadmin', message: `Negocio desbloqueado manualmente` })
+    } catch (e) { console.error(e) }
   }
   const handleBizAddMonth = async (id) => {
     const biz = businesses.find(b => b.id === id)
     const newDays = (biz?.daysRemaining || biz?.days_remaining || 0) + 30
     setBusinesses(prev => prev.map(b => b.id === id ? { ...b, daysRemaining: newDays, days_remaining: newDays } : b))
-    try { await supabase.from('businesses').update({ days_remaining: newDays }).eq('id', id) } catch (e) { console.error(e) }
+    try { 
+      await supabase.from('businesses').update({ days_remaining: newDays }).eq('id', id) 
+      insertLog({ type: 'success', action: 'add_month', business_id: id, username: 'Superadmin', message: `Agregado 1 mes de suscripción` })
+    } catch (e) { console.error(e) }
   }
   const handleBizRemoveMonth = async (id) => {
     const biz = businesses.find(b => b.id === id)
     const newDays = Math.max(0, (biz?.daysRemaining || biz?.days_remaining || 0) - 30)
     setBusinesses(prev => prev.map(b => b.id === id ? { ...b, daysRemaining: newDays, days_remaining: newDays } : b))
-    try { await supabase.from('businesses').update({ days_remaining: newDays }).eq('id', id) } catch (e) { console.error(e) }
+    try { 
+      await supabase.from('businesses').update({ days_remaining: newDays }).eq('id', id) 
+      insertLog({ type: 'warning', action: 'remove_month', business_id: id, username: 'Superadmin', message: `Removido 1 mes de suscripción` })
+    } catch (e) { console.error(e) }
   }
 
   const getBizPhase = (biz) => {
@@ -494,15 +518,7 @@ export default function AdminPanel() {
         )
       
       case 'security':
-        return (
-          <div className="space-y-6 animate-fade-in flex flex-col items-center justify-center h-full opacity-50 py-20">
-            <ShieldCheck size={64} className="text-gray-500 mb-4" />
-            <h2 className={`font-display font-bold text-2xl ${isDark ? 'text-white' : 'text-gray-900'}`}>Soporte y Seguridad</h2>
-            <p className={`text-sm text-center max-w-md ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              Próximamente: Logs de errores del sistema y gestión de permisos extendida para el Superadmin.
-            </p>
-          </div>
-        )
+        return <SystemSecurity businesses={businesses} />
     }
   }
 
