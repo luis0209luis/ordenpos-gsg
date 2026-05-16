@@ -5,6 +5,7 @@ import { useSubscription } from '../context/SubscriptionContext'
 import { Lock, Unlock, Gift, ShieldAlert, Undo2, Plus, X, Building2, KeyRound, BellRing, LayoutDashboard, Users, CircleDollarSign, Settings, ShieldCheck, Activity, Trash2, Pencil } from 'lucide-react'
 import AdminMasterStats from '../components/AdminMasterStats'
 import SystemSecurity from '../components/SystemSecurity'
+import AdminMasterFinance from '../components/AdminMasterFinance'
 import { sendWelcomeEmail } from '../utils/emailService'
 import { insertLog } from '../utils/logger'
 
@@ -401,15 +402,7 @@ export default function AdminPanel() {
         )
 
       case 'finance':
-        return (
-          <div className="space-y-6 animate-fade-in flex flex-col items-center justify-center h-full opacity-50 py-20">
-            <CircleDollarSign size={64} className="text-gray-500 mb-4" />
-            <h2 className={`font-display font-bold text-2xl ${isDark ? 'text-white' : 'text-gray-900'}`}>Módulo de Finanzas</h2>
-            <p className={`text-sm text-center max-w-md ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              Próximamente: Historial detallado de pagos, facturación y reportes de ingresos de la plataforma ORDENPOS.
-            </p>
-          </div>
-        )
+        return <AdminMasterFinance businesses={businesses} planPrice={planPrice} />
 
       case 'settings':
         return (

@@ -19,7 +19,8 @@ import {
   ShieldAlert,
 
   Truck,
-  DollarSign
+  DollarSign,
+  LifeBuoy
 } from 'lucide-react'
 
 export const NAV_ITEMS = [
@@ -30,6 +31,7 @@ export const NAV_ITEMS = [
   { label: 'Inventario',   path: '/inventory',  icon: Warehouse,       roles: ['admin', 'Superadmin', 'CAJERO'] },
   { label: 'Finanzas y Nómina', path: '/finance', icon: DollarSign,    roles: ['admin', 'Superadmin'] },
   { label: 'Reportes',     path: '/reports',    icon: BarChart3,       roles: ['admin', 'Superadmin'] },
+  { label: 'Soporte',      path: '/support',    icon: LifeBuoy,        roles: ['admin', 'Superadmin', 'CAJERO'] },
   { label: 'Mi Suscripción', path: '/payments',   icon: CreditCard,      roles: ['admin', 'Superadmin'] },
   { label: 'Configuración',path: '/settings',   icon: Settings,        roles: ['admin', 'Superadmin'] },
   { label: 'Admin Master', path: '/admin',      icon: ShieldAlert,     roles: ['Superadmin'] },

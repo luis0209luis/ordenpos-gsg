@@ -36,6 +36,7 @@ import BillingModule from './pages/BillingModule'
 import FinanceManager from './pages/FinanceManager'
 import KitchenMonitor from './pages/KitchenMonitor'
 import Welcome from './pages/Welcome'
+import SupportTickets from './pages/SupportTickets'
 
 function ProtectedRoute({ children }) {
   const { user } = useAuth()
@@ -88,6 +89,7 @@ export default function App() {
                 <Route path="payments" element={<PermissionGuard requiredPath="/payments"><BillingModule /></PermissionGuard>} />
                 <Route path="kitchen" element={<PermissionGuard requiredPath="/kitchen"><KitchenMonitor /></PermissionGuard>} />
                 <Route path="finance" element={<PermissionGuard requiredPath="/finance"><FinanceManager /></PermissionGuard>} />
+                <Route path="support" element={<PermissionGuard requiredPath="/support"><SupportTickets /></PermissionGuard>} />
                 {/* Other routes can be added here */}
                 <Route path="*" element={
                   <div className="flex items-center justify-center h-full">
