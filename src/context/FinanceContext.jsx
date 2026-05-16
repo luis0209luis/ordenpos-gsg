@@ -44,6 +44,7 @@ export function FinanceProvider({ children }) {
 
       expensesChannel = supabase.channel('expenses-changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `business_id=eq.${bid}` }, payload => {
+          console.log('Realtime expenses:', payload.eventType, payload)
           if (payload.eventType === 'INSERT') {
             setExpenses(prev => prev.find(e => e.id === payload.new.id) ? prev : [payload.new, ...prev])
           }
@@ -54,10 +55,13 @@ export function FinanceProvider({ children }) {
             setExpenses(prev => prev.filter(e => e.id !== payload.old.id))
           }
         })
-        .subscribe()
+        .subscribe((status) => {
+          console.log('Expenses Realtime Status:', status)
+        })
 
       employeesChannel = supabase.channel('employees-changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'employees', filter: `business_id=eq.${bid}` }, payload => {
+          console.log('Realtime employees:', payload.eventType, payload)
           if (payload.eventType === 'INSERT') {
             setEmployees(prev => prev.find(e => e.id === payload.new.id) ? prev : [payload.new, ...prev])
           }
@@ -68,7 +72,9 @@ export function FinanceProvider({ children }) {
             setEmployees(prev => prev.filter(e => e.id !== payload.old.id))
           }
         })
-        .subscribe()
+        .subscribe((status) => {
+          console.log('Employees Realtime Status:', status)
+        })
     })
 
     return () => {

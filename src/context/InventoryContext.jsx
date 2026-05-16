@@ -50,6 +50,7 @@ export function InventoryProvider({ children }) {
 
       productsChannel = supabase.channel('products-changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `business_id=eq.${bid}` }, payload => {
+          console.log('Realtime products:', payload.eventType, payload)
           if (payload.eventType === 'INSERT') {
             setProducts(prev => prev.find(p => p.id === payload.new.id) ? prev : [...prev, payload.new])
           }
@@ -60,10 +61,13 @@ export function InventoryProvider({ children }) {
             setProducts(prev => prev.filter(p => p.id !== payload.old.id))
           }
         })
-        .subscribe()
+        .subscribe((status) => {
+          console.log('Products Realtime Status:', status)
+        })
 
       salesChannel = supabase.channel('sales-changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'sales', filter: `business_id=eq.${bid}` }, payload => {
+          console.log('Realtime sales:', payload.eventType, payload)
           const mapSale = sale => ({
             ...sale,
             deliveryStatus: sale.delivery_status || sale.deliveryStatus,
@@ -80,7 +84,9 @@ export function InventoryProvider({ children }) {
             setSalesHistory(prev => prev.filter(s => s.id !== payload.old.id))
           }
         })
-        .subscribe()
+        .subscribe((status) => {
+          console.log('Sales Realtime Status:', status)
+        })
     })
 
     return () => {
