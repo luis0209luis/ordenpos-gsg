@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 import { useTheme, useSettings } from '../context/AppContext'
 import { useInventory } from '../context/InventoryContext'
 import { Activity, Globe, MousePointerClick, MessageSquare, TrendingUp, AlertCircle, CheckCircle2, Server, Star, Bell } from 'lucide-react'
