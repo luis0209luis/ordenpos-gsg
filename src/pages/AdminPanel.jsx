@@ -83,16 +83,27 @@ export default function AdminPanel() {
     e.preventDefault()
     
     if (editingBizId) {
-      setBusinesses(prev => prev.map(b => b.id === editingBizId ? { ...b, ...formData } : b))
+      const updateData = {
+        name: formData.name,
+        owner_name: formData.owner,
+        cedula: formData.cedula,
+        email: formData.email,
+        phone: formData.phone,
+        start_date: formData.startDate
+      }
+      setBusinesses(prev => prev.map(b => b.id === editingBizId ? { ...b, ...formData, owner_name: formData.owner, start_date: formData.startDate, password_hash: b.password_hash } : b))
       try {
-        await supabase.from('businesses').update(formData).eq('id', editingBizId)
+        await supabase.from('businesses').update(updateData).eq('id', editingBizId)
       } catch (e) { console.error(e) }
     } else {
       const newBusiness = {
-        ...formData,
-        password: formData.cedula,
+        name: formData.name,
+        owner_name: formData.owner,
+        cedula: formData.cedula,
+        email: formData.email,
+        phone: formData.phone,
+        start_date: formData.startDate,
         password_hash: formData.cedula,
-        settings: { currency: 'COP', globalMinStock: 5 },
         force_phase: null,
         days_remaining: 30
       }
@@ -119,11 +130,11 @@ export default function AdminPanel() {
     setEditingBizId(biz.id)
     setFormData({
       name: biz.name,
-      owner: biz.owner,
+      owner: biz.owner_name || '',
       cedula: biz.cedula,
       email: biz.email || '',
       phone: biz.phone || '',
-      startDate: biz.startDate
+      startDate: biz.start_date || new Date().toISOString().split('T')[0]
     })
     setIsModalOpen(true)
   }
@@ -140,9 +151,9 @@ export default function AdminPanel() {
 
   const confirmResetPassword = async () => {
     if (businessToReset) {
-      setBusinesses(prev => prev.map(b => b.id === businessToReset.id ? { ...b, password: b.cedula } : b))
+      setBusinesses(prev => prev.map(b => b.id === businessToReset.id ? { ...b, password_hash: b.cedula } : b))
       try {
-        await supabase.from('businesses').update({ password: businessToReset.cedula, password_hash: businessToReset.cedula }).eq('id', businessToReset.id)
+        await supabase.from('businesses').update({ password_hash: businessToReset.cedula }).eq('id', businessToReset.id)
       } catch (e) { console.error(e) }
       setBusinessToReset(null)
     }
@@ -265,7 +276,7 @@ export default function AdminPanel() {
                   <tbody className="divide-y divide-dark-border/50">
                     {businesses.map(biz => {
                       const computedPhase = getBizPhase(biz)
-                      const computedDate = new Date(new Date(biz.startDate).getTime() + (biz.daysRemaining*24*60*60*1000)).toLocaleDateString()
+                      const computedDate = new Date(new Date(biz.start_date || biz.startDate).getTime() + ((biz.days_remaining || biz.daysRemaining)*24*60*60*1000)).toLocaleDateString()
                       return (
                         <tr key={biz.id} className={`transition-colors ${isDark ? 'hover:bg-dark-bg/30' : 'hover:bg-gray-50'}`}>
                           <td className="px-6 py-4">
@@ -275,14 +286,14 @@ export default function AdminPanel() {
                               </div>
                               <div>
                                 <p className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{biz.name}</p>
-                                <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{biz.owner}</p>
+                                <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{biz.owner_name}</p>
                               </div>
                             </div>
                           </td>
                           <td className="px-6 py-4">
                             <div className="space-y-1">
                               <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}><span className="font-semibold text-gray-500">ID:</span> {biz.id}</p>
-                              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}><span className="font-semibold text-gray-500">PWD:</span> {biz.password}</p>
+                              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}><span className="font-semibold text-gray-500">PWD:</span> {biz.password_hash}</p>
                             </div>
                           </td>
                           <td className="px-6 py-4">

@@ -16,10 +16,13 @@ export function AuthProvider({ children }) {
     }
 
     try {
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(businessNameOrId);
+      const query = isUUID ? `id.eq.${businessNameOrId},name.ilike.${businessNameOrId}` : `name.ilike.${businessNameOrId}`;
+
       const { data, error } = await supabase
         .from('businesses')
         .select('*')
-        .or(`id.eq.${businessNameOrId},name.ilike.${businessNameOrId}`)
+        .or(query)
         .single()
 
       if (error || !data) return { success: false, error: 'Negocio no encontrado.' }
@@ -133,7 +136,7 @@ export function AuthProvider({ children }) {
     try {
       await supabase
         .from('businesses')
-        .update({ password_hash: newPassword, password: newPassword })
+        .update({ password_hash: newPassword })
         .eq('id', tempUser.businessId)
 
       sessionStorage.setItem('ordenpos_user', JSON.stringify(tempUser))
