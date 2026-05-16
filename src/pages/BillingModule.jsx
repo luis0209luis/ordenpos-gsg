@@ -4,6 +4,7 @@ import { es } from 'date-fns/locale'
 import { useSubscription } from '../context/SubscriptionContext'
 import { useTheme, useAuth } from '../context/AppContext'
 import { CreditCard, QrCode, CheckCircle, X, ShieldCheck, Crown, ArrowRight, Zap, Bell } from 'lucide-react'
+import { insertLog } from '../utils/logger'
 
 export default function BillingModule() {
   const { fechaVencimiento, daysRemaining, phase, addMonth } = useSubscription()
@@ -41,6 +42,15 @@ export default function BillingModule() {
       const savedMaster = localStorage.getItem('ordenpos_settings_master')
       const settingsMaster = savedMaster ? JSON.parse(savedMaster) : { enablePanel: true, enableEmail: false, enableWhatsApp: false }
       const businessName = user?.businessName || user?.username || 'Local'
+
+      // Registrar pago real en la base de datos para que sume a ingresos del Superadmin
+      insertLog({
+        type: 'success',
+        action: 'add_month',
+        business_id: user?.businessId || 'desconocido',
+        username: user?.username || 'Cliente',
+        message: `Renovación automática pagada (${paymentStep === 'qr' ? 'QR/Nequi' : 'Tarjeta'})`
+      })
 
       // 1. Alertas de Panel
       if (settingsMaster.enablePanel) {
