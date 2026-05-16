@@ -47,6 +47,12 @@ export function InventoryProvider({ children }) {
 
   const addProduct = async (product) => {
     try {
+      if (bid === 'default' || bid === 'master') {
+        const mockProduct = { ...product, id: `mock-${Date.now()}` }
+        setProducts(prev => [...prev, mockProduct])
+        return mockProduct
+      }
+
       const { image, ...dbProduct } = product
       const { data, error } = await supabase.from('products').insert({ ...dbProduct, business_id: bid }).select().single()
       if (error) {
@@ -65,6 +71,11 @@ export function InventoryProvider({ children }) {
 
   const updateProduct = async (id, updatedProduct) => {
     try {
+      if (bid === 'default' || bid === 'master') {
+        setProducts(prev => prev.map(p => p.id === id ? { ...p, ...updatedProduct } : p))
+        return updatedProduct
+      }
+
       const { image, ...dbProduct } = updatedProduct
       const { data, error } = await supabase.from('products').update(dbProduct).eq('id', id).select().single()
       if (error) {
@@ -83,10 +94,17 @@ export function InventoryProvider({ children }) {
 
   const deleteProduct = async (id) => {
     try {
+      if (bid === 'default' || bid === 'master') {
+        setProducts(prev => prev.filter(p => p.id !== id))
+        return
+      }
+
+      const { error } = await supabase.from('products').delete().eq('id', id)
+      if (error) throw error
       setProducts(prev => prev.filter(p => p.id !== id))
-      await supabase.from('products').delete().eq('id', id)
     } catch (e) {
-      console.error(e)
+      console.error("Catch error en InventoryContext (deleteProduct):", e)
+      throw e
     }
   }
 
