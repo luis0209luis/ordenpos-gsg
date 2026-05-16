@@ -42,7 +42,51 @@ export function InventoryProvider({ children }) {
       }
     }
 
-    loadData()
+    let productsChannel
+    let salesChannel
+
+    loadData().then(() => {
+      if (bid === 'default' || bid === 'master') return
+
+      productsChannel = supabase.channel('products-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `business_id=eq.${bid}` }, payload => {
+          if (payload.eventType === 'INSERT') {
+            setProducts(prev => prev.find(p => p.id === payload.new.id) ? prev : [...prev, payload.new])
+          }
+          if (payload.eventType === 'UPDATE') {
+            setProducts(prev => prev.map(p => p.id === payload.new.id ? payload.new : p))
+          }
+          if (payload.eventType === 'DELETE') {
+            setProducts(prev => prev.filter(p => p.id !== payload.old.id))
+          }
+        })
+        .subscribe()
+
+      salesChannel = supabase.channel('sales-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'sales', filter: `business_id=eq.${bid}` }, payload => {
+          const mapSale = sale => ({
+            ...sale,
+            deliveryStatus: sale.delivery_status || sale.deliveryStatus,
+            kitchenStatus: sale.kitchen_status || sale.kitchenStatus
+          })
+          
+          if (payload.eventType === 'INSERT') {
+            setSalesHistory(prev => prev.find(s => s.id === payload.new.id) ? prev : [mapSale(payload.new), ...prev])
+          }
+          if (payload.eventType === 'UPDATE') {
+            setSalesHistory(prev => prev.map(s => s.id === payload.new.id ? mapSale(payload.new) : s))
+          }
+          if (payload.eventType === 'DELETE') {
+            setSalesHistory(prev => prev.filter(s => s.id !== payload.old.id))
+          }
+        })
+        .subscribe()
+    })
+
+    return () => {
+      if (productsChannel) supabase.removeChannel(productsChannel)
+      if (salesChannel) supabase.removeChannel(salesChannel)
+    }
   }, [bid])
 
   const addProduct = async (product) => {

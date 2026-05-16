@@ -35,7 +35,46 @@ export function FinanceProvider({ children }) {
         setLoading(false)
       }
     }
-    loadData()
+
+    let expensesChannel
+    let employeesChannel
+
+    loadData().then(() => {
+      if (bid === 'default' || bid === 'master') return
+
+      expensesChannel = supabase.channel('expenses-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `business_id=eq.${bid}` }, payload => {
+          if (payload.eventType === 'INSERT') {
+            setExpenses(prev => prev.find(e => e.id === payload.new.id) ? prev : [payload.new, ...prev])
+          }
+          if (payload.eventType === 'UPDATE') {
+            setExpenses(prev => prev.map(e => e.id === payload.new.id ? payload.new : e))
+          }
+          if (payload.eventType === 'DELETE') {
+            setExpenses(prev => prev.filter(e => e.id !== payload.old.id))
+          }
+        })
+        .subscribe()
+
+      employeesChannel = supabase.channel('employees-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'employees', filter: `business_id=eq.${bid}` }, payload => {
+          if (payload.eventType === 'INSERT') {
+            setEmployees(prev => prev.find(e => e.id === payload.new.id) ? prev : [payload.new, ...prev])
+          }
+          if (payload.eventType === 'UPDATE') {
+            setEmployees(prev => prev.map(e => e.id === payload.new.id ? payload.new : e))
+          }
+          if (payload.eventType === 'DELETE') {
+            setEmployees(prev => prev.filter(e => e.id !== payload.old.id))
+          }
+        })
+        .subscribe()
+    })
+
+    return () => {
+      if (expensesChannel) supabase.removeChannel(expensesChannel)
+      if (employeesChannel) supabase.removeChannel(employeesChannel)
+    }
   }, [bid])
 
   const addExpense = async (expense) => {
