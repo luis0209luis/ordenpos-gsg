@@ -18,7 +18,7 @@ export default function AdminMasterFinance({ businesses, planPrice }) {
       try {
         const { data } = await supabase.from('system_logs')
           .select('*')
-          .in('action', ['add_month', 'create_business'])
+          .eq('action', 'add_month')
           .order('created_at', { ascending: false })
           
         if (data) setPaymentLogs(data)
@@ -33,25 +33,16 @@ export default function AdminMasterFinance({ businesses, planPrice }) {
 
   // Calculations based strictly on `businesses` table
   const stats = useMemo(() => {
-    let totalRevenue = 0
     let expiring = 0
     
     businesses.forEach(b => {
-      // Calculate total days ever bought: 
-      // (Days passed since start_date) + (days_remaining)
-      const startDate = new Date(b.start_date || b.startDate)
-      const daysPassed = Math.max(0, Math.floor((Date.now() - startDate.getTime()) / (1000 * 60 * 60 * 24)))
       const currentDaysRemaining = b.days_remaining || b.daysRemaining || 0
-      
-      const totalDays = daysPassed + currentDaysRemaining
-      // Assuming each 30 days equals 1 payment of planPrice
-      const monthsBought = Math.max(1, Math.floor(totalDays / 30))
-      totalRevenue += monthsBought * planPrice
-
       if (currentDaysRemaining <= 5) expiring++
     })
 
-    // Calculate revenue just for the current month (mocked from paymentLogs)
+    // Ingresos reales estrictamente basados en los pagos registrados en system_logs
+    const totalRevenue = paymentLogs.length * planPrice
+
     const currentMonth = new Date().getMonth()
     const currentYear = new Date().getFullYear()
     const monthlyRevenue = paymentLogs.filter(log => {
@@ -80,17 +71,8 @@ export default function AdminMasterFinance({ businesses, planPrice }) {
       }
     })
     
-    // Si no hay logs suficientes, rellenar basado en los negocios para que no se vea vacío
-    if (paymentLogs.length === 0) {
-      businesses.forEach(b => {
-        const d = new Date(b.start_date || b.startDate)
-        if (d.getFullYear() === currentYear) {
-          data[d.getMonth()].Ingresos += planPrice
-        }
-      })
-    }
     return data
-  }, [paymentLogs, businesses, planPrice])
+  }, [paymentLogs, planPrice])
 
   return (
     <div className="space-y-6 animate-fade-in pb-12">
@@ -172,7 +154,7 @@ export default function AdminMasterFinance({ businesses, planPrice }) {
                     <div>
                       <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>{biz?.name || 'Negocio Desconocido'}</p>
                       <p className="text-xs text-gray-500">{new Date(log.created_at).toLocaleString()}</p>
-                      <p className="text-[10px] text-green-500 mt-1 uppercase font-bold">{log.action === 'create_business' ? 'Suscripción Inicial (30 días)' : 'Renovación (+30 días)'}</p>
+                      <p className="text-[10px] text-green-500 mt-1 uppercase font-bold">Renovación de Suscripción (+30 días)</p>
                     </div>
                     <div className="text-right">
                       <p className="font-black text-green-500">${planPrice.toLocaleString()}</p>
