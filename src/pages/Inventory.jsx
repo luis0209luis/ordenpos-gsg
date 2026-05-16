@@ -196,7 +196,7 @@ export default function Inventory() {
     setErrorMsg('')
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     try {
       setErrorMsg('')
@@ -220,14 +220,16 @@ export default function Inventory() {
       }
 
       if (editingProduct) {
-        updateProduct(editingProduct.id, productData)
+        await updateProduct(editingProduct.id, productData)
       } else {
-        addProduct(productData)
+        await addProduct(productData)
       }
+      
+      // Solo se cierra el modal si la promesa se resolvió correctamente sin arrojar error
       closeModal()
     } catch (error) {
-      console.error("Error al guardar el producto:", error)
-      setErrorMsg("Ocurrió un error al guardar. Verifica los datos y vuelve a intentar.")
+      console.error("Error al guardar el producto en Inventory.jsx:", error)
+      setErrorMsg(error?.message || "Ocurrió un error al guardar en Supabase. Verifica los datos y vuelve a intentar.")
     }
   }
 

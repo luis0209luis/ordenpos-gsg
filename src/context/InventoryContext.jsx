@@ -53,20 +53,31 @@ export function InventoryProvider({ children }) {
         console.error("Supabase Error en addProduct:", error)
         throw error
       }
-      if (data) setProducts(prev => [...prev, data])
+      if (data) {
+        setProducts(prev => [...prev, data])
+        return data
+      }
     } catch (e) {
-      console.error("Catch error:", e)
+      console.error("Catch error en InventoryContext (addProduct):", e)
+      throw e
     }
   }
 
   const updateProduct = async (id, updatedProduct) => {
     try {
-      setProducts(prev => prev.map(p => p.id === id ? { ...p, ...updatedProduct } : p))
       const { image, ...dbProduct } = updatedProduct
-      const { error } = await supabase.from('products').update(dbProduct).eq('id', id)
-      if (error) console.error("Supabase Error en updateProduct:", error)
+      const { data, error } = await supabase.from('products').update(dbProduct).eq('id', id).select().single()
+      if (error) {
+        console.error("Supabase Error en updateProduct:", error)
+        throw error
+      }
+      if (data) {
+        setProducts(prev => prev.map(p => p.id === id ? { ...p, ...data } : p))
+        return data
+      }
     } catch (e) {
-      console.error(e)
+      console.error("Catch error en InventoryContext (updateProduct):", e)
+      throw e
     }
   }
 
