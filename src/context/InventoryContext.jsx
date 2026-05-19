@@ -65,7 +65,7 @@ export function InventoryProvider({ children }) {
               deliveryStatus: sale.delivery_status || sale.deliveryStatus,
               kitchenStatus: sale.kitchen_status || sale.kitchenStatus
             })
-            
+
             if (payload.eventType === 'INSERT') {
               setSalesHistory(prev => prev.find(s => s.id === payload.new.id) ? prev : [mapSale(payload.new), ...prev])
             }
@@ -181,7 +181,7 @@ export function InventoryProvider({ children }) {
       if (data) {
         const mappedData = { ...data, deliveryStatus: data.delivery_status, kitchenStatus: data.kitchen_status }
         setSalesHistory(prev => [mappedData, ...prev])
-        
+
         for (const item of cartItems) {
           const product = products.find(p => p.id === item.id)
           if (product) {
@@ -191,7 +191,7 @@ export function InventoryProvider({ children }) {
               .eq('id', item.id)
           }
         }
-        
+
         return mappedData
       }
     } catch (e) {
@@ -254,8 +254,8 @@ export function InventoryProvider({ children }) {
   }
 
   return (
-    <InventoryContext.Provider value={{ 
-      products, addProduct, updateProduct, deleteProduct, 
+    <InventoryContext.Provider value={{
+      products, addProduct, updateProduct, deleteProduct,
       processSale, salesHistory, deleteSale, updateDeliveryStatus, updateKitchenStatus, loading
     }}>
       {children}

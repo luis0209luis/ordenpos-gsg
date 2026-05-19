@@ -3,7 +3,6 @@ import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import Topbar  from '../components/Topbar'
 import { useTheme } from '../context/AppContext'
-import FeedbackWidget from '../components/FeedbackWidget'
 
 const PAGE_TITLES = {
   '/dashboard':  'Dashboard',
@@ -34,7 +33,6 @@ export default function AppLayout() {
           ${isDark ? 'bg-dark-bg' : 'bg-light-surface'}`}>
           <Outlet />
         </main>
-        <FeedbackWidget />
       </div>
     </div>
   )
