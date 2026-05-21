@@ -25,6 +25,12 @@ export default async function handler(req, res) {
         external_reference: businessId
       })
     });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      return res.status(response.status).json({ error: errorData.message || 'Error from Mercado Pago', details: errorData });
+    }
+
     const data = await response.json();
     return res.status(200).json({ id: data.id });
   } catch (error) {
