@@ -45,25 +45,29 @@ export default function SubscriptionWrapper({ children }) {
   if (phase === 3 && location.pathname !== '/payments') {
     return (
       <div className={`h-screen w-screen flex flex-col items-center justify-center relative overflow-hidden ${isDark ? 'bg-dark-bg' : 'bg-light-bg'}`}>
-        <div className="flex flex-col items-center gap-3 p-8 rounded-3xl bg-red-500/10 border border-red-500/30 text-red-400 max-w-md text-center shadow-2xl animate-slide-in-up">
-          <CalendarX size={56} className="text-red-400 mb-4" />
-          <h1 className="font-display font-bold text-2xl text-white mb-1">
-            Acceso Suspendido
+        <div className={`flex flex-col items-center gap-4 p-8 rounded-3xl max-w-md text-center shadow-2xl animate-slide-in-up border ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
+          <img 
+            src={isDark ? '/monster-dark.png' : '/monster-light.png'} 
+            alt="Suscripción Vencida" 
+            className="w-56 h-56 object-contain mb-2 drop-shadow-2xl" 
+          />
+          <h1 className="font-display font-bold text-3xl">
+            ¡Ups, Pago Vencido!
           </h1>
-          <p className="text-sm font-medium leading-relaxed text-gray-300">
-            ¡Upps! Olvidaste pagar. Regulariza tu suscripción para continuar usando ORDENPOS.
+          <p className={`text-sm font-medium leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            Tu suscripción llegó a su fin y el acceso se ha pausado. Regulariza tu cuenta para seguir usando ORDENPOS sin interrupciones.
           </p>
           {isBusinessAdmin && (
             <button 
               onClick={() => navigate('/payments')}
-              className="mt-6 w-full py-4 rounded-xl font-bold uppercase tracking-wider bg-red-500 text-white shadow-lg shadow-red-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              className="mt-4 w-full py-4 rounded-2xl font-bold uppercase tracking-widest bg-gold-gradient text-black shadow-gold-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
             >
               <CreditCard size={20} />
               Ir a Pagar Ahora
             </button>
           )}
           {!isBusinessAdmin && (
-            <p className="mt-4 text-xs text-gray-500">
+            <p className={`mt-4 text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
               Contacta al administrador de tu negocio para renovar la suscripción.
             </p>
           )}
