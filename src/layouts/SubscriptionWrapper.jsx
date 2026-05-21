@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useSubscription } from '../context/SubscriptionContext'
-import { useTheme } from '../context/AppContext'
+import { useTheme, useAuth } from '../context/AppContext'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { AlertTriangle, Pause, X, Heart, Settings, CalendarX, CreditCard } from 'lucide-react'
+import { AlertTriangle, Pause, X, Heart, Settings, CalendarX, CreditCard, ShieldCheck } from 'lucide-react'
 
 export default function SubscriptionWrapper({ children }) {
   const { phase = 0, daysRemaining = 0 } = useSubscription() || {}
   const { theme } = useTheme() || {}
+  const { user } = useAuth() || {}
   const isDark = theme === 'dark'
 
   const location = useLocation()
@@ -15,10 +16,13 @@ export default function SubscriptionWrapper({ children }) {
   const [dismissPhase1, setDismissPhase1] = useState(false)
   const [showPhase2Modal, setShowPhase2Modal] = useState(false)
 
-  // Phase 2: Disparar modal cada 7 minutos
+  // Determinar si el usuario es admin del negocio
+  const isBusinessAdmin = user?.role === 'admin'
+
+  // Phase 2: Disparar modal cada 7 minutos (solo para admin)
   useEffect(() => {
     let interval
-    if (phase === 2) {
+    if (phase === 2 && isBusinessAdmin) {
       // Show immediately on first entry to Phase 2
       setShowPhase2Modal(true)
       interval = setInterval(() => {
@@ -28,9 +32,16 @@ export default function SubscriptionWrapper({ children }) {
       setShowPhase2Modal(false)
     }
     return () => clearInterval(interval)
-  }, [phase])
+  }, [phase, isBusinessAdmin])
 
-  // -- Fase 3: Bloqueo Total --
+  // Obtener nombre para mostrar
+  const getDisplayName = () => {
+    if (user?.name) return user.name.split(' ')[0]
+    if (user?.username) return user.username.split(' ')[0]
+    return 'Administrador'
+  }
+
+  // -- Fase 3: Bloqueo Total (aplica a TODOS los usuarios) --
   if (phase === 3 && location.pathname !== '/payments') {
     return (
       <div className={`h-screen w-screen flex flex-col items-center justify-center relative overflow-hidden ${isDark ? 'bg-dark-bg' : 'bg-light-bg'}`}>
@@ -42,13 +53,20 @@ export default function SubscriptionWrapper({ children }) {
           <p className="text-sm font-medium leading-relaxed text-gray-300">
             ¡Upps! Olvidaste pagar. Regulariza tu suscripción para continuar usando ORDENPOS.
           </p>
-          <button 
-            onClick={() => navigate('/payments')}
-            className="mt-6 w-full py-4 rounded-xl font-bold uppercase tracking-wider bg-red-500 text-white shadow-lg shadow-red-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-          >
-            <CreditCard size={20} />
-            Ir a Pagar Ahora
-          </button>
+          {isBusinessAdmin && (
+            <button 
+              onClick={() => navigate('/payments')}
+              className="mt-6 w-full py-4 rounded-xl font-bold uppercase tracking-wider bg-red-500 text-white shadow-lg shadow-red-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            >
+              <CreditCard size={20} />
+              Ir a Pagar Ahora
+            </button>
+          )}
+          {!isBusinessAdmin && (
+            <p className="mt-4 text-xs text-gray-500">
+              Contacta al administrador de tu negocio para renovar la suscripción.
+            </p>
+          )}
         </div>
       </div>
     )
@@ -57,13 +75,16 @@ export default function SubscriptionWrapper({ children }) {
   return (
     <div className="relative h-screen flex flex-col overflow-hidden">
       
-      {/* Fase 1: Banner Sigiloso (Día 3 a -2) */}
-      {phase === 1 && !dismissPhase1 && (
+      {/* Fase 1: Banner Sigiloso (Día 3 a -2) — Solo visible para admin */}
+      {phase === 1 && !dismissPhase1 && isBusinessAdmin && (
         <div className="bg-gold-gradient text-black px-4 py-2 flex items-center justify-between z-50 shrink-0">
           <div className="flex items-center gap-2 text-sm font-medium">
             <Heart size={16} className="fill-black/20" />
             Parece que tu suscripción está por vencer o venció hace poco. 
-            <span className="font-bold underline cursor-pointer hover:text-white transition-colors ml-1">
+            <span 
+              onClick={() => navigate('/payments')}
+              className="font-bold underline cursor-pointer hover:text-white transition-colors ml-1"
+            >
               Mantén tu negocio al día aquí.
             </span>
           </div>
@@ -77,21 +98,33 @@ export default function SubscriptionWrapper({ children }) {
       <div className="flex-1 overflow-hidden relative">
         {children}
 
-        {/* Fase 2: Modal Automático (Día -3 a -5) */}
-        {phase === 2 && showPhase2Modal && (
+        {/* Fase 2: Modal Automático (Día -3 a -5) — Solo visible para admin */}
+        {phase === 2 && showPhase2Modal && isBusinessAdmin && (
           <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
             <div className={`relative w-full max-w-md p-8 rounded-3xl shadow-2xl animate-slide-in-up border
               ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
-              <div className="w-16 h-16 rounded-full bg-gold-500/10 border border-gold-500/30 flex items-center justify-center mb-6 mx-auto">
-                <AlertTriangle size={32} className="text-gold-500" />
+              
+              {/* Imagen de confianza */}
+              <div className="flex justify-center mb-6">
+                <img src="/trust_payment.png" alt="Pago seguro" className="w-28 h-28 object-contain rounded-2xl" />
               </div>
-              <h2 className={`font-display font-bold text-2xl text-center mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                ¡Hola de nuevo!
+
+              <h2 className={`font-display font-bold text-2xl text-center mb-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                ¡Hola de nuevo, <span className="text-transparent bg-clip-text bg-gold-gradient">{getDisplayName()}</span>!
               </h2>
-              <p className={`text-center text-sm font-medium mb-8 leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                No queremos que pierdas el acceso a tus herramientas vitales. 
-                Por favor, regulariza tu pago para continuar usando ORDENPOS sin interrupciones.
+              <p className={`text-center text-sm font-medium mb-6 leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                Parece que olvidaste pagar tu suscripción. 
+                No queremos que pierdas el acceso a tus herramientas vitales.
               </p>
+
+              {/* Info de seguridad */}
+              <div className={`flex items-center gap-3 p-3 rounded-xl mb-6 ${isDark ? 'bg-dark-card border border-dark-border' : 'bg-gray-50 border border-gray-200'}`}>
+                <ShieldCheck size={20} className="text-green-500 shrink-0" />
+                <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Tu pago es procesado de forma segura por Mercado Pago. Aceptamos Nequi, Daviplata, PSE y tarjetas.
+                </span>
+              </div>
+
               <div className="flex flex-col gap-3">
                 <button onClick={() => navigate('/payments')} className="w-full py-3.5 rounded-2xl font-bold uppercase tracking-widest bg-gold-gradient text-black shadow-gold-md hover:scale-105 transition-transform">
                   Proceder al Pago
