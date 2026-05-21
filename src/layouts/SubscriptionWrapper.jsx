@@ -48,11 +48,12 @@ export default function SubscriptionWrapper({ children }) {
         <div className={`flex flex-col items-center w-full max-w-md text-center shadow-2xl animate-slide-in-up border rounded-3xl overflow-hidden ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
           
           {/* Header Image Section */}
-          <div className="w-full relative h-64 bg-black/5">
+          <div className={`w-full relative h-64 ${isDark ? 'bg-[#1a1a1a]' : 'bg-[#f0f0f0]'}`}>
             <img 
               src={isDark ? '/monster-dark.png' : '/monster-light.png'} 
               alt="Suscripción Vencida" 
-              className="absolute inset-0 w-full h-full object-cover" 
+              className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700 opacity-0"
+              onLoad={(e) => e.currentTarget.classList.remove('opacity-0')}
               loading="eager"
             />
             {/* Subtle gradient to blend the image into the background card color */}

@@ -16,11 +16,17 @@
     (function () {
       try {
         var theme = localStorage.getItem('ordenpos_theme');
+        var preloadLink = document.createElement('link');
+        preloadLink.rel = 'preload';
+        preloadLink.as = 'image';
         if (theme === 'light') {
           document.documentElement.classList.remove('dark');
+          preloadLink.href = '/monster-light.png';
         } else {
           document.documentElement.classList.add('dark');
+          preloadLink.href = '/monster-dark.png';
         }
+        document.head.appendChild(preloadLink);
       } catch (e) { }
     })();
   </script>
