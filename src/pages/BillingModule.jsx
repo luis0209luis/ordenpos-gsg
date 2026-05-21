@@ -55,16 +55,21 @@ export default function BillingModule() {
       const data = await res.json()
       console.log("Preferencia creada con éxito:", data)
       if (data.init_point) {
-        console.log("Redirigiendo a Mercado Pago Checkout Pro...")
-        window.location.href = data.init_point
+        // Abrir en ventana emergente en vez de redirigir
+        const width = 600
+        const height = 700
+        const left = (window.screen.width - width) / 2
+        const top = (window.screen.height - height) / 2
+        window.open(
+          data.init_point,
+          'MercadoPagoCheckout',
+          `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
+        )
+        setPaymentStep('options')
+        setShowModal(false)
       } else if (data.id) {
-        const publicKey = import.meta.env.VITE_MP_PUBLIC_KEY || 'APP_USR-9e03c408-7634-48fc-975b-6ab52d6f8b44'
-        console.log("Inicializando Mercado Pago SDK v2 con public key:", publicKey)
-        if (!window.MercadoPago) {
-          throw new Error('El script del SDK de Mercado Pago no está disponible. Reinténtalo.')
-        }
-        const mp = new window.MercadoPago(publicKey, { locale: 'es-CO' })
-        mp.checkout({ preference: { id: data.id }, autoOpen: true })
+        // Fallback: abrir con init_point generado manualmente
+        throw new Error(data.error || 'No se pudo obtener el link de pago.')
       } else {
         throw new Error(data.error || 'No se pudo obtener el ID de la preferencia.')
       }
@@ -264,45 +269,22 @@ export default function BillingModule() {
 
             {/* STEP: Options */}
             {paymentStep === 'options' && (
-              <div className="animate-fade-in">
-                <h2 className="text-2xl font-display font-black mb-2">Elige tu método de pago</h2>
+              <div className="animate-fade-in text-center">
+                <div className="w-20 h-20 rounded-full bg-gold-500/10 flex items-center justify-center mx-auto mb-6">
+                  <CreditCard size={40} className="text-gold-500" />
+                </div>
+                <h2 className="text-2xl font-display font-black mb-2">Renovar Suscripción</h2>
                 <p className={`text-sm mb-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                   Renueva 30 días de ORDENPOS por solo <strong>${planPrice.toLocaleString('es-CO')} COP</strong> (IVA incluido).
+                  <br />
+                  <span className="text-xs mt-1 block opacity-70">Acepta Nequi, Daviplata, PSE, tarjetas de crédito y débito.</span>
                 </p>
 
-                <div className="space-y-4">
-                  <button
-                    onClick={handleMercadoPagoCheckout}
-                    className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all hover:border-gold-500 hover:bg-gold-500/5 group
-                      ${isDark ? 'border-dark-border bg-dark-card' : 'border-light-border bg-light-surface'}`}>
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-[#1A1A1A] flex items-center justify-center">
-                        <QrCode className="text-[#DA0081]" size={24} /> {/* Nequi pinkish color idea */}
-                      </div>
-                      <div className="text-left">
-                        <h4 className="font-bold">Nequi / Daviplata</h4>
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Paga con tu billetera digital segura</p>
-                      </div>
-                    </div>
-                    <ArrowRight size={20} className="text-gray-400 group-hover:text-gold-500 transition-colors" />
-                  </button>
-
-                  <button
-                    onClick={handleMercadoPagoCheckout}
-                    className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all hover:border-gold-500 hover:bg-gold-500/5 group
-                      ${isDark ? 'border-dark-border bg-dark-card' : 'border-light-border bg-light-surface'}`}>
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-[#009EE3]/10 flex items-center justify-center">
-                        <CreditCard className="text-[#009EE3]" size={24} /> {/* MercadoPago blueish color idea */}
-                      </div>
-                      <div className="text-left">
-                        <h4 className="font-bold">PSE / Tarjeta</h4>
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Débito o crédito vía pasarela segura</p>
-                      </div>
-                    </div>
-                    <ArrowRight size={20} className="text-gray-400 group-hover:text-gold-500 transition-colors" />
-                  </button>
-                </div>
+                <button
+                  onClick={handleMercadoPagoCheckout}
+                  className="w-full py-4 rounded-xl font-bold uppercase tracking-widest bg-gold-gradient text-black shadow-gold-md hover:scale-105 transition-transform">
+                  Pagar Aquí
+                </button>
               </div>
             )}
 
