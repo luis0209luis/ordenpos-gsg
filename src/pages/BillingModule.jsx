@@ -3,17 +3,22 @@ import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useSubscription } from '../context/SubscriptionContext'
 import { useTheme, useAuth } from '../context/AppContext'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { CreditCard, QrCode, CheckCircle, X, ShieldCheck, Crown, ArrowRight, Zap, Bell } from 'lucide-react'
 import { insertLog } from '../utils/logger'
 
 export default function BillingModule() {
   const { fechaVencimiento, daysRemaining, phase, addMonth } = useSubscription()
-  const { theme } = useTheme()
-  const { user } = useAuth()
+  const { theme, user } = useTheme() ? { theme: useTheme().theme, user: useAuth().user } : { theme: 'dark', user: useAuth().user }
   const isDark = theme === 'dark'
+
+  const navigate = useNavigate()
+  const location = useLocation()
 
   const [showModal, setShowModal] = useState(false)
   const [paymentStep, setPaymentStep] = useState('options') // 'options', 'qr', 'card', 'processing', 'success'
+  const [loadingMP, setLoadingMP] = useState(false)
+  const [errorMessage, setErrorMessage] = useState(null)
 
   const [planPrice, setPlanPrice] = useState(() => {
     const saved = localStorage.getItem('ordenpos_subscription_price')
@@ -26,82 +31,133 @@ export default function BillingModule() {
     : 'Fecha no disponible'
 
   const handleRenewClick = () => {
+    setErrorMessage(null)
     setPaymentStep('options')
     setShowModal(true)
   }
 
-  const simulatePaymentSuccess = () => {
-    setPaymentStep('processing')
-
-    // Simulate API delay
-    setTimeout(() => {
-      // Execute the addMonth to automatically add 30 days
-      addMonth()
-      setPaymentStep('success')
-
-      const savedMaster = localStorage.getItem('ordenpos_settings_master')
-      const settingsMaster = savedMaster ? JSON.parse(savedMaster) : { enablePanel: true, enableEmail: false, enableWhatsApp: false }
-      const businessName = user?.businessName || user?.username || 'Local'
-
-      // Registrar pago real en la base de datos para que sume a ingresos del Superadmin
-      insertLog({
-        type: 'success',
-        action: 'add_month',
-        business_id: user?.businessId || 'desconocido',
-        username: user?.username || 'Cliente',
-        message: `Renovación automática pagada (${paymentStep === 'qr' ? 'QR/Nequi' : 'Tarjeta'})`
+  const handleMercadoPagoCheckout = async () => {
+    console.log("Iniciando handleMercadoPagoCheckout...")
+    setPaymentStep('card')
+    setLoadingMP(true)
+    setErrorMessage(null)
+    try {
+      const apiBase = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
+      console.log("Llamando a create-preference en base:", apiBase)
+      const res = await fetch(`${apiBase}/api/create-preference`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          price: planPrice || 50000, 
+          businessId: user?.businessId || 'desconocido' 
+        })
       })
-
-      // 1. Alertas de Panel
-      if (settingsMaster.enablePanel) {
-        // Sonido sutil de moneda/caja registradora usando Web Audio API
-        try {
-          const AudioContext = window.AudioContext || window.webkitAudioContext
-          const ctx = new AudioContext()
-          const osc = ctx.createOscillator()
-          const gainNode = ctx.createGain()
-          osc.type = 'sine'
-          osc.frequency.setValueAtTime(987.77, ctx.currentTime) // B5
-          osc.frequency.exponentialRampToValueAtTime(1318.51, ctx.currentTime + 0.1) // E6
-          gainNode.gain.setValueAtTime(0, ctx.currentTime)
-          gainNode.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05)
-          gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5)
-          osc.connect(gainNode)
-          gainNode.connect(ctx.destination)
-          osc.start()
-          osc.stop(ctx.currentTime + 0.5)
-        } catch (e) { console.log('Audio no soportado') }
-
-        const notificationMsg = `¡Ingreso recibido! ${businessName} renovó su suscripción por $${planPrice}`
-        const existingNotifications = JSON.parse(localStorage.getItem('ordenpos_master_notifications') || '[]')
-        localStorage.setItem('ordenpos_master_notifications', JSON.stringify([{ id: Date.now(), text: notificationMsg, date: new Date().toISOString() }, ...existingNotifications]))
-      }
-
-      // 2. Integración con Gmail (Nodemailer)
-      if (settingsMaster.enableEmail && settingsMaster.email_notificaciones) {
-        fetch('http://localhost:3001/api/send-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: settingsMaster.email_notificaciones,
-            businessName: businessName,
-            amount: planPrice,
-            days: 30
-          })
-        }).catch(err => console.error("Error enviando email al backend", err))
-      }
-
-      // 3. Estructura de WhatsApp (Placeholder)
-      if (settingsMaster.enableWhatsApp && settingsMaster.whatsapp_notificaciones) {
-        const sendWhatsAppNotification = async () => {
-          console.log(`[WhatsApp Placeholder] Enviando mensaje a ${settingsMaster.whatsapp_notificaciones}: ${businessName} pagó $${planPrice}`)
-          // TODO: Implementar API de Meta WhatsApp o Twilio
-          // fetch('https://api.whatsapp.com/v1/messages', { ... })
+      const data = await res.json()
+      console.log("Preferencia creada con éxito:", data)
+      if (data.id) {
+        const publicKey = import.meta.env.VITE_MP_PUBLIC_KEY || 'APP_USR-9e03c408-7634-48fc-975b-6ab52d6f8b44'
+        console.log("Inicializando Mercado Pago SDK v2 con public key:", publicKey)
+        if (!window.MercadoPago) {
+          throw new Error('El script del SDK de Mercado Pago no está disponible. Reinténtalo.')
         }
-        sendWhatsAppNotification()
+        const mp = new window.MercadoPago(publicKey, { locale: 'es-CO' })
+        mp.checkout({ preference: { id: data.id }, autoOpen: true })
+      } else {
+        throw new Error(data.error || 'No se pudo obtener el ID de la preferencia.')
+      }
+    } catch (err) {
+      console.error("Error iniciando Mercado Pago", err)
+      setErrorMessage(err.message || 'Error de conexión con la pasarela')
+    } finally {
+      setLoadingMP(false)
+    }
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const status = params.get('status')
+    const paymentId = params.get('payment_id') || params.get('payment.id')
+    const extRef = params.get('external_reference')
+
+    // Esperar a que el usuario esté cargado para evitar condiciones de carrera en el primer render
+    if (status && user && user.businessId) {
+      const processedKey = `mp_processed_${paymentId || 'default'}`
+      const isAlreadyProcessed = sessionStorage.getItem(processedKey)
+      
+      if (status === 'success') {
+        if (!isAlreadyProcessed) {
+          sessionStorage.setItem(processedKey, 'true')
+          
+          // Sumar 30 días de suscripción en Supabase
+          addMonth(30)
+
+          const businessName = user?.businessName || user?.username || 'Local'
+          
+          // Registrar log
+          insertLog({
+            type: 'success',
+            action: 'add_month',
+            business_id: user?.businessId || extRef || 'desconocido',
+            username: user?.username || 'Cliente',
+            message: `Renovación exitosa con Mercado Pago (ID Transacción: ${paymentId})`
+          })
+
+          // Sonido de caja registradora
+          try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext
+            const ctx = new AudioContext()
+            const osc = ctx.createOscillator()
+            const gainNode = ctx.createGain()
+            osc.type = 'sine'
+            osc.frequency.setValueAtTime(987.77, ctx.currentTime) // B5
+            osc.frequency.exponentialRampToValueAtTime(1318.51, ctx.currentTime + 0.1) // E6
+            gainNode.gain.setValueAtTime(0, ctx.currentTime)
+            gainNode.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05)
+            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5)
+            osc.connect(gainNode)
+            gainNode.connect(ctx.destination)
+            osc.start()
+            osc.stop(ctx.currentTime + 0.5)
+          } catch (e) { console.log('Audio no soportado', e) }
+
+          // Alertas de Panel Master y Nodemailer
+          const savedMaster = localStorage.getItem('ordenpos_settings_master')
+          const settingsMaster = savedMaster ? JSON.parse(savedMaster) : { enablePanel: true, enableEmail: false, enableWhatsApp: false }
+
+          if (settingsMaster.enablePanel) {
+            const notificationMsg = `¡Ingreso recibido! ${businessName} renovó su suscripción por $${planPrice} (Mercado Pago)`
+            const existingNotifications = JSON.parse(localStorage.getItem('ordenpos_master_notifications') || '[]')
+            localStorage.setItem('ordenpos_master_notifications', JSON.stringify([{ id: Date.now(), text: notificationMsg, date: new Date().toISOString() }, ...existingNotifications]))
+          }
+
+          if (settingsMaster.enableEmail && settingsMaster.email_notificaciones) {
+            fetch('/api/send-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                to: settingsMaster.email_notificaciones,
+                businessName: businessName,
+                amount: planPrice,
+                days: 30
+              })
+            }).catch(err => console.error("Error enviando email", err))
+          }
+        }
+
+        setPaymentStep('success')
+        setShowModal(true)
+      } else if (status === 'failure' || status === 'pending') {
+        setPaymentStep(status)
+        setShowModal(true)
       }
 
-    }, 2000)
+      // Limpiar los query params para que no se reprocesen al recargar
+      navigate('/payments', { replace: true })
+    }
+  }, [location.search, navigate, user, planPrice, addMonth])
+
+  const simulatePaymentSuccess = () => {
+    // Retained for backward compatibility if needed elsewhere, or removed. Let's just remove it and use Mercado Pago.
   }
 
   return (
@@ -192,10 +248,13 @@ export default function BillingModule() {
             ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
 
             {/* Modal Close Button */}
-            {paymentStep !== 'processing' && paymentStep !== 'success' && (
+            {paymentStep !== 'processing' && (
               <button
-                onClick={() => setShowModal(false)}
-                className="absolute top-6 right-6 p-2 rounded-full hover:bg-gray-500/20 transition-colors">
+                onClick={() => {
+                  setShowModal(false)
+                  setPaymentStep('options')
+                }}
+                className="absolute top-6 right-6 p-2 rounded-full hover:bg-gray-500/20 transition-colors z-10">
                 <X size={20} className={isDark ? 'text-gray-400' : 'text-gray-600'} />
               </button>
             )}
@@ -210,7 +269,7 @@ export default function BillingModule() {
 
                 <div className="space-y-4">
                   <button
-                    onClick={() => setPaymentStep('qr')}
+                    onClick={handleMercadoPagoCheckout}
                     className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all hover:border-gold-500 hover:bg-gold-500/5 group
                       ${isDark ? 'border-dark-border bg-dark-card' : 'border-light-border bg-light-surface'}`}>
                     <div className="flex items-center gap-4">
@@ -218,15 +277,15 @@ export default function BillingModule() {
                         <QrCode className="text-[#DA0081]" size={24} /> {/* Nequi pinkish color idea */}
                       </div>
                       <div className="text-left">
-                        <h4 className="font-bold">Transferencia con QR</h4>
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Nequi, Daviplata o Bancolombia</p>
+                        <h4 className="font-bold">Nequi / Daviplata</h4>
+                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Paga con tu billetera digital segura</p>
                       </div>
                     </div>
                     <ArrowRight size={20} className="text-gray-400 group-hover:text-gold-500 transition-colors" />
                   </button>
 
                   <button
-                    onClick={() => setPaymentStep('card')}
+                    onClick={handleMercadoPagoCheckout}
                     className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all hover:border-gold-500 hover:bg-gold-500/5 group
                       ${isDark ? 'border-dark-border bg-dark-card' : 'border-light-border bg-light-surface'}`}>
                     <div className="flex items-center gap-4">
@@ -244,56 +303,65 @@ export default function BillingModule() {
               </div>
             )}
 
-            {/* STEP: QR Payment */}
-            {paymentStep === 'qr' && (
-              <div className="animate-fade-in text-center">
-                <button
-                  onClick={() => setPaymentStep('options')}
-                  className="mb-6 text-sm text-gold-500 hover:underline flex items-center gap-1 mx-auto">
-                  <X size={14} /> Cancelar y volver
-                </button>
 
-                <h2 className="text-xl font-display font-bold mb-2">Escanea para Pagar</h2>
-                <p className={`text-sm mb-6 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Abre tu app de Nequi o Daviplata y escanea el código. Valor: <strong>${planPrice.toLocaleString('es-CO')} COP</strong>
-                </p>
-
-                <div className="bg-white p-4 rounded-2xl inline-block mb-6 border-4 border-gold-500">
-                  {/* Placeholder for real QR code */}
-                  <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=ORDENPOS_RENEW_50000" alt="QR de Pago" className="w-48 h-48" />
-                </div>
-
-                <button
-                  onClick={simulatePaymentSuccess}
-                  className="w-full py-4 rounded-xl font-bold uppercase tracking-widest bg-gold-gradient text-black shadow-gold-md hover:scale-105 transition-transform">
-                  Simular Pago Exitoso
-                </button>
-              </div>
-            )}
 
             {/* STEP: Card/PSE Payment */}
             {paymentStep === 'card' && (
               <div className="animate-fade-in text-center">
                 <button
-                  onClick={() => setPaymentStep('options')}
-                  className="mb-6 text-sm text-gold-500 hover:underline flex items-center gap-1 mx-auto">
+                  onClick={() => {
+                    setPaymentStep('options')
+                    setErrorMessage(null)
+                  }}
+                  className="mb-6 text-sm text-gold-500 hover:underline flex items-center gap-1 mx-auto"
+                  disabled={loadingMP}
+                >
                   <X size={14} /> Cancelar y volver
                 </button>
 
-                <div className="w-20 h-20 rounded-full bg-[#009EE3]/10 flex items-center justify-center mx-auto mb-6">
-                  <CreditCard size={40} className="text-[#009EE3]" />
+                <div className="w-16 h-16 rounded-full bg-[#009EE3]/10 flex items-center justify-center mx-auto mb-4 animate-pulse">
+                  <CreditCard size={32} className="text-[#009EE3]" />
                 </div>
 
-                <h2 className="text-xl font-display font-bold mb-2">Pago Seguro</h2>
-                <p className={`text-sm mb-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Serás redirigido a nuestra pasarela de pago para procesar la transacción con tu tarjeta de crédito o cuenta PSE de forma encriptada.
+                <h2 className="text-xl font-display font-bold mb-2">Conectando con Mercado Pago</h2>
+                <p className={`text-sm mb-6 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Estamos generando tu orden de pago segura. Por favor, mantén esta ventana abierta.
                 </p>
 
-                <button
-                  onClick={simulatePaymentSuccess}
-                  className="w-full py-4 rounded-xl font-bold uppercase tracking-widest bg-[#009EE3] text-white hover:bg-[#007EB5] transition-colors shadow-lg">
-                  Ir a la Pasarela (Simular)
-                </button>
+                <div className={`p-6 rounded-2xl border mb-6 text-left space-y-3
+                  ${isDark ? 'bg-dark-card border-dark-border' : 'bg-light-surface border-light-border'}`}>
+                  <div className="flex justify-between items-center pb-2 border-b border-gray-500/10">
+                    <span className="text-xs text-gray-400 uppercase tracking-wider font-bold">Concepto</span>
+                    <span className="font-bold text-sm">Mensualidad Sistema ORDENPOS</span>
+                  </div>
+                  <div className="flex justify-between items-center pb-2 border-b border-gray-500/10">
+                    <span className="text-xs text-gray-400 uppercase tracking-wider font-bold">Monto a pagar</span>
+                    <span className="font-bold text-lg text-gold-500">${planPrice.toLocaleString('es-CO')} COP</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-400 uppercase tracking-wider font-bold">Estado</span>
+                    <span className="text-xs px-2.5 py-1 rounded-full font-bold bg-[#009EE3]/15 text-[#009EE3] animate-pulse">Iniciando pasarela...</span>
+                  </div>
+                </div>
+
+                {errorMessage ? (
+                  <div className="space-y-4">
+                    <div className="p-4 rounded-xl border border-red-500/20 bg-red-500/10 text-red-500 text-sm font-semibold text-left">
+                      ⚠️ {errorMessage}
+                    </div>
+                    <button
+                      onClick={handleMercadoPagoCheckout}
+                      className="w-full py-4 rounded-xl font-bold uppercase tracking-widest bg-gold-gradient text-black hover:scale-[1.02] transition-transform shadow-gold-md"
+                    >
+                      Reintentar Pago
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-3 py-4">
+                    <div className="w-10 h-10 border-4 border-gold-500/30 border-t-gold-500 rounded-full animate-spin" />
+                    <span className="text-xs uppercase tracking-wider font-bold text-gold-500 animate-pulse">Generando link seguro...</span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -322,6 +390,58 @@ export default function BillingModule() {
                   <br />
                   <span className="text-sm mt-2 block opacity-70">Nueva fecha de vencimiento:</span>
                   <strong className="text-gold-500 block text-xl mt-1">{formattedDate}</strong>
+                </p>
+
+                <button
+                  onClick={() => {
+                    setShowModal(false)
+                    setPaymentStep('options')
+                  }}
+                  className="w-full py-4 rounded-xl font-bold uppercase tracking-widest bg-dark-bg text-white border border-dark-border hover:bg-gray-800 transition-colors">
+                  Volver al Panel
+                </button>
+              </div>
+            )}
+
+            {/* STEP: Failure */}
+            {paymentStep === 'failure' && (
+              <div className="animate-fade-in text-center py-4">
+                <div className="w-24 h-24 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-6 relative">
+                  <div className="absolute inset-0 rounded-full bg-red-500/20 animate-ping" />
+                  <X size={48} className="text-red-500 relative z-10" />
+                </div>
+
+                <h2 className="text-3xl font-display font-black text-red-500 mb-4">Pago Rechazado</h2>
+                <p className={`text-lg mb-8 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Upps, la transacción no pudo completarse.
+                  <br />
+                  <span className="text-sm mt-2 block opacity-70">Por favor, verifica tus fondos o método de pago e inténtalo de nuevo.</span>
+                </p>
+
+                <button
+                  onClick={() => {
+                    setShowModal(false)
+                    setPaymentStep('options')
+                  }}
+                  className="w-full py-4 rounded-xl font-bold uppercase tracking-widest bg-red-500 text-white hover:bg-red-600 transition-colors shadow-lg">
+                  Reintentar Pago
+                </button>
+              </div>
+            )}
+
+            {/* STEP: Pending */}
+            {paymentStep === 'pending' && (
+              <div className="animate-fade-in text-center py-4">
+                <div className="w-24 h-24 rounded-full bg-yellow-500/20 flex items-center justify-center mx-auto mb-6 relative">
+                  <div className="absolute inset-0 rounded-full bg-yellow-500/20 animate-ping" />
+                  <Bell size={48} className="text-yellow-500 relative z-10" />
+                </div>
+
+                <h2 className="text-3xl font-display font-black text-yellow-500 mb-4">Pago Pendiente</h2>
+                <p className={`text-lg mb-8 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Tu transacción está en verificación.
+                  <br />
+                  <span className="text-sm mt-2 block opacity-70">Mercado Pago está procesando tu pago. Tan pronto como sea aprobado, tu suscripción se renovará de forma automática.</span>
                 </p>
 
                 <button
