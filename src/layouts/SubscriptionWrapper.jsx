@@ -5,8 +5,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { AlertTriangle, Pause, X, Heart, Settings, CalendarX, CreditCard } from 'lucide-react'
 
 export default function SubscriptionWrapper({ children }) {
-  const { phase, daysRemaining } = useSubscription()
-  const { theme } = useTheme()
+  const { phase = 0, daysRemaining = 0 } = useSubscription() || {}
+  const { theme } = useTheme() || {}
   const isDark = theme === 'dark'
 
   const location = useLocation()
@@ -57,7 +57,7 @@ export default function SubscriptionWrapper({ children }) {
   return (
     <div className="relative h-screen flex flex-col overflow-hidden">
       
-      {/* Fase 1: Banner Sigiloso (Día -1 a +4) */}
+      {/* Fase 1: Banner Sigiloso (Día 3 a -2) */}
       {phase === 1 && !dismissPhase1 && (
         <div className="bg-gold-gradient text-black px-4 py-2 flex items-center justify-between z-50 shrink-0">
           <div className="flex items-center gap-2 text-sm font-medium">
@@ -77,7 +77,7 @@ export default function SubscriptionWrapper({ children }) {
       <div className="flex-1 overflow-hidden relative">
         {children}
 
-        {/* Fase 2: Modal Automático (Día +5 a +14) */}
+        {/* Fase 2: Modal Automático (Día -3 a -5) */}
         {phase === 2 && showPhase2Modal && (
           <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
             <div className={`relative w-full max-w-md p-8 rounded-3xl shadow-2xl animate-slide-in-up border
@@ -93,7 +93,7 @@ export default function SubscriptionWrapper({ children }) {
                 Por favor, regulariza tu pago para continuar usando ORDENPOS sin interrupciones.
               </p>
               <div className="flex flex-col gap-3">
-                <button className="w-full py-3.5 rounded-2xl font-bold uppercase tracking-widest bg-gold-gradient text-black shadow-gold-md hover:scale-105 transition-transform">
+                <button onClick={() => navigate('/payments')} className="w-full py-3.5 rounded-2xl font-bold uppercase tracking-widest bg-gold-gradient text-black shadow-gold-md hover:scale-105 transition-transform">
                   Proceder al Pago
                 </button>
                 <button onClick={() => setShowPhase2Modal(false)} className={`w-full py-3.5 rounded-2xl font-bold uppercase tracking-widest border transition-colors
