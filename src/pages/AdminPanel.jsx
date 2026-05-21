@@ -218,10 +218,14 @@ export default function AdminPanel() {
 
   const getBizPhase = (biz) => {
     if (biz.forcePhase !== undefined && biz.forcePhase !== null) return biz.forcePhase;
-    // Align with SubscriptionContext thresholds
-    if (biz.daysRemaining <= -6) return 3; // Suspendido
-    if (biz.daysRemaining <= -3) return 2; // Atraso
-    if (biz.daysRemaining <= 3) return 1; // Por Vencer
+    const startDate = new Date(biz.start_date || biz.startDate);
+    const diffTime = new Date().getTime() - startDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const daysRemaining = (biz.days_remaining ?? biz.daysRemaining ?? 30) - diffDays;
+    
+    if (daysRemaining <= -6) return 3; // Suspendido
+    if (daysRemaining <= -3) return 2; // Atraso
+    if (daysRemaining <= 3) return 1; // Por Vencer
     return 0; // Activo y al día
   }
 
@@ -313,7 +317,13 @@ export default function AdminPanel() {
                   <tbody className="divide-y divide-dark-border/50">
                     {businesses.map(biz => {
                       const computedPhase = getBizPhase(biz)
-                      const computedDate = new Date(new Date(biz.start_date || biz.startDate).getTime() + ((biz.days_remaining || biz.daysRemaining)*24*60*60*1000)).toLocaleDateString()
+                      let startDateRaw = biz.start_date || biz.startDate;
+    let baseDate = new Date(startDateRaw);
+    let computedDate = 'Invalid Date';
+    if (!isNaN(baseDate)) {
+      const offset = (biz.days_remaining ?? biz.daysRemaining ?? 0) * 24 * 60 * 60 * 1000;
+      computedDate = new Date(baseDate.getTime() + offset).toLocaleDateString();
+    }
                       return (
                         <tr key={biz.id} className={`transition-colors ${isDark ? 'hover:bg-dark-bg/30' : 'hover:bg-gray-50'}`}>
                           <td className="px-6 py-4">
