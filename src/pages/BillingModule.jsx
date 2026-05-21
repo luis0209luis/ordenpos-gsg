@@ -54,7 +54,10 @@ export default function BillingModule() {
       })
       const data = await res.json()
       console.log("Preferencia creada con éxito:", data)
-      if (data.id) {
+      if (data.init_point) {
+        console.log("Redirigiendo a Mercado Pago Checkout Pro...")
+        window.location.href = data.init_point
+      } else if (data.id) {
         const publicKey = import.meta.env.VITE_MP_PUBLIC_KEY || 'APP_USR-9e03c408-7634-48fc-975b-6ab52d6f8b44'
         console.log("Inicializando Mercado Pago SDK v2 con public key:", publicKey)
         if (!window.MercadoPago) {
@@ -312,9 +315,9 @@ export default function BillingModule() {
                   onClick={() => {
                     setPaymentStep('options')
                     setErrorMessage(null)
+                    setLoadingMP(false)
                   }}
                   className="mb-6 text-sm text-gold-500 hover:underline flex items-center gap-1 mx-auto"
-                  disabled={loadingMP}
                 >
                   <X size={14} /> Cancelar y volver
                 </button>
@@ -420,7 +423,6 @@ export default function BillingModule() {
 
                 <button
                   onClick={() => {
-                    setShowModal(false)
                     setPaymentStep('options')
                   }}
                   className="w-full py-4 rounded-xl font-bold uppercase tracking-widest bg-red-500 text-white hover:bg-red-600 transition-colors shadow-lg">

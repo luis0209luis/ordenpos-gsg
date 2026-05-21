@@ -32,7 +32,7 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json();
-    return res.status(200).json({ id: data.id });
+    return res.status(200).json({ id: data.id, init_point: data.init_point, sandbox_init_point: data.sandbox_init_point });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
