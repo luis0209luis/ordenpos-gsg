@@ -45,32 +45,43 @@ export default function SubscriptionWrapper({ children }) {
   if (phase === 3 && location.pathname !== '/payments') {
     return (
       <div className={`h-screen w-screen flex flex-col items-center justify-center relative overflow-hidden ${isDark ? 'bg-dark-bg' : 'bg-light-bg'}`}>
-        <div className={`flex flex-col items-center gap-4 p-8 rounded-3xl max-w-md text-center shadow-2xl animate-slide-in-up border ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
-          <img 
-            src={isDark ? '/monster-dark.png' : '/monster-light.png'} 
-            alt="Suscripción Vencida" 
-            className="w-56 h-56 object-contain mb-2 drop-shadow-2xl" 
-          />
-          <h1 className="font-display font-bold text-3xl">
-            ¡Ups, Pago Vencido!
-          </h1>
-          <p className={`text-sm font-medium leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            Tu suscripción llegó a su fin y el acceso se ha pausado. Regulariza tu cuenta para seguir usando ORDENPOS sin interrupciones.
-          </p>
-          {isBusinessAdmin && (
-            <button 
-              onClick={() => navigate('/payments')}
-              className="mt-4 w-full py-4 rounded-2xl font-bold uppercase tracking-widest bg-gold-gradient text-black shadow-gold-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-            >
-              <CreditCard size={20} />
-              Ir a Pagar Ahora
-            </button>
-          )}
-          {!isBusinessAdmin && (
-            <p className={`mt-4 text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-              Contacta al administrador de tu negocio para renovar la suscripción.
+        <div className={`flex flex-col items-center w-full max-w-md text-center shadow-2xl animate-slide-in-up border rounded-3xl overflow-hidden ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
+          
+          {/* Header Image Section */}
+          <div className="w-full relative h-64 bg-black/5">
+            <img 
+              src={isDark ? '/monster-dark.png' : '/monster-light.png'} 
+              alt="Suscripción Vencida" 
+              className="absolute inset-0 w-full h-full object-cover" 
+              loading="eager"
+            />
+            {/* Subtle gradient to blend the image into the background card color */}
+            <div className={`absolute inset-0 bg-gradient-to-t ${isDark ? 'from-dark-surface' : 'from-white'} via-transparent to-transparent opacity-80`}></div>
+          </div>
+
+          {/* Content Section */}
+          <div className="flex flex-col items-center gap-4 p-8 pt-4 w-full">
+            <h1 className="font-display font-bold text-3xl">
+              ¡Ups, Pago Vencido!
+            </h1>
+            <p className={`text-sm font-medium leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              Tu suscripción llegó a su fin y el acceso se ha pausado. Regulariza tu cuenta para seguir usando ORDENPOS sin interrupciones.
             </p>
-          )}
+            {isBusinessAdmin && (
+              <button 
+                onClick={() => navigate('/payments')}
+                className="mt-4 w-full py-4 rounded-2xl font-bold uppercase tracking-widest bg-gold-gradient text-black shadow-gold-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              >
+                <CreditCard size={20} />
+                Ir a Pagar Ahora
+              </button>
+            )}
+            {!isBusinessAdmin && (
+              <p className={`mt-4 text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                Contacta al administrador de tu negocio para renovar la suscripción.
+              </p>
+            )}
+          </div>
         </div>
       </div>
     )
