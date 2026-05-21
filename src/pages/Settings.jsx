@@ -24,11 +24,16 @@ export default function Settings() {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
   const { user, changePassword } = useAuth()
-  const { settings, updateSettings, staff, addStaff, deleteStaff, changeStaffPassword, updateStaffPermissions } = useSettings()
+  const { settings, updateSettings, staff, addStaff, deleteStaff, changeStaffPassword, updateStaffPermissions, isConfigured } = useSettings()
 
   const [formData, setFormData] = useState(settings)
   const [isSaved, setIsSaved] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [settingsError, setSettingsError] = useState('')
   const [newStaff, setNewStaff] = useState({ name: '', username: '', password: '', role: 'CAJERO', permissions: defaultPermissions.CAJERO })
+  const [isAddingStaff, setIsAddingStaff] = useState(false)
+  const [staffError, setStaffError] = useState('')
+  const [staffSuccess, setStaffSuccess] = useState('')
 
   // Admin password state
   const [adminPass, setAdminPass] = useState({ newPass: '', confirmPass: '' })
@@ -53,28 +58,45 @@ export default function Settings() {
       [name]: type === 'number' ? Number(value) : value
     }))
     setIsSaved(false)
+    setSettingsError('')
   }
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault()
-    updateSettings(formData)
-    setIsSaved(true)
-    setTimeout(() => setIsSaved(false), 3000)
+    setIsSaving(true)
+    setSettingsError('')
+    setIsSaved(false)
+    const res = await updateSettings(formData)
+    setIsSaving(false)
+    if (res?.success) {
+      setIsSaved(true)
+      setTimeout(() => setIsSaved(false), 3000)
+    } else {
+      setSettingsError(res?.error || 'Error al guardar los cambios.')
+    }
   }
 
-  const handleAddStaff = (e) => {
+  const handleAddStaff = async (e) => {
     e.preventDefault()
     if (!newStaff.username || !newStaff.password || !newStaff.name) return
-    addStaff({
-      id: Date.now().toString(),
-      businessId: user?.businessId,
+    setIsAddingStaff(true)
+    setStaffError('')
+    setStaffSuccess('')
+    const res = await addStaff({
       name: newStaff.name,
       username: newStaff.username,
       password: newStaff.password,
       role: newStaff.role,
       permissions: newStaff.permissions
     })
-    setNewStaff({ name: '', username: '', password: '', role: 'CAJERO', permissions: defaultPermissions.CAJERO })
+    setIsAddingStaff(false)
+    if (res?.success) {
+      setStaffSuccess('¡Miembro creado con éxito!')
+      setNewStaff({ name: '', username: '', password: '', role: 'CAJERO', permissions: defaultPermissions.CAJERO })
+      setTimeout(() => setStaffSuccess(''), 3000)
+    } else {
+      setStaffError(res?.error || 'Error al registrar al miembro.')
+    }
   }
 
   const handleRoleChange = (e) => {
@@ -113,24 +135,42 @@ export default function Settings() {
     }, 2000)
   }
 
-  const handleStaffUpdate = (id) => {
+  const handleStaffUpdate = async (id) => {
     let hasPassUpdate = false;
+    setStaffPassMessage('')
     if (staffPass.newPass || staffPass.confirmPass) {
       if (staffPass.newPass !== staffPass.confirmPass) {
         setStaffPassMessage('Las contraseñas no coinciden.')
         return
       }
-      changeStaffPassword(id, staffPass.newPass)
+      const resPass = await changeStaffPassword(id, staffPass.newPass)
+      if (resPass && !resPass.success) {
+        setStaffPassMessage(resPass.error || 'Error al cambiar contraseña.')
+        return
+      }
       hasPassUpdate = true;
     }
     
-    updateStaffPermissions(id, editStaffPermissions);
+    const resPerm = await updateStaffPermissions(id, editStaffPermissions);
+    if (resPerm && !resPerm.success) {
+      setStaffPassMessage(resPerm.error || 'Error al actualizar permisos.')
+      return
+    }
     
     setStaffPassMessage(hasPassUpdate ? '¡Contraseña y permisos actualizados!' : '¡Permisos actualizados!')
     setTimeout(() => {
       setStaffPassMessage('')
       setEditingStaffId(null)
     }, 2000)
+  }
+
+  const handleDeleteStaff = async (id) => {
+    if (window.confirm('¿Está seguro de que desea eliminar a este miembro de personal?')) {
+      const res = await deleteStaff(id)
+      if (res && !res.success) {
+        alert(res.error || 'Error al eliminar el miembro de personal.')
+      }
+    }
   }
 
   // Filter staff for this business
@@ -155,6 +195,30 @@ export default function Settings() {
         </div>
       </div>
 
+      {!isConfigured && (
+        <div className="p-5 rounded-3xl bg-amber-500/10 border border-amber-500/30 text-amber-500 animate-pulse flex flex-col gap-1">
+          <span className="font-bold text-base flex items-center gap-2">⚠️ Configuración Inicial Requerida</span>
+          <span className="text-sm opacity-90">
+            Para activar todas las funciones del sistema, primero debe ingresar la información de su negocio.
+            Los campos <strong>Nombre del Negocio</strong>, <strong>Propietario o Dueño</strong> y <strong>Dirección</strong> son obligatorios para habilitar el resto de módulos.
+          </span>
+        </div>
+      )}
+
+      {settingsError && (
+        <div className="p-5 rounded-3xl bg-red-500/10 border border-red-500/30 text-red-500 flex flex-col gap-1">
+          <span className="font-bold text-base flex items-center gap-2">❌ Error al Guardar</span>
+          <span className="text-sm opacity-90">{settingsError}</span>
+        </div>
+      )}
+
+      {isSaved && (
+        <div className="p-5 rounded-3xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 flex flex-col gap-1">
+          <span className="font-bold text-base flex items-center gap-2">✅ Cambios Guardados</span>
+          <span className="text-sm opacity-90">Los detalles del negocio y ajustes del sistema se han guardado correctamente en la base de datos.</span>
+        </div>
+      )}
+
       <form onSubmit={handleSave} className="space-y-6">
         {/* Bloque: Datos del Negocio (Facturación) */}
         <div className={`p-8 rounded-3xl shadow-soft-lg border
@@ -174,6 +238,7 @@ export default function Settings() {
                 name="businessName"
                 value={formData.businessName}
                 onChange={handleChange}
+                required
                 placeholder="Ej. Mi Cafetería Premium"
                 className={`w-full px-4 py-3 rounded-xl outline-none border-2 transition-all focus:border-gold-500
                   ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
@@ -189,6 +254,7 @@ export default function Settings() {
                 name="ownerName"
                 value={formData.ownerName || ''}
                 onChange={handleChange}
+                required
                 placeholder="Nombre del titular"
                 className={`w-full px-4 py-3 rounded-xl outline-none border-2 transition-all focus:border-gold-500
                   ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
@@ -219,6 +285,7 @@ export default function Settings() {
                 name="address"
                 value={formData.address}
                 onChange={handleChange}
+                required
                 placeholder="Ej. Av. Principal 123, Ciudad"
                 className={`w-full px-4 py-3 rounded-xl outline-none border-2 transition-all focus:border-gold-500
                   ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
@@ -418,9 +485,24 @@ export default function Settings() {
                     })}
                   </div>
                 </div>
-                <button type="button" onClick={handleAddStaff} disabled={!newStaff.username || !newStaff.password || !newStaff.name}
+                {staffError && (
+                  <p className="text-[11px] font-semibold text-red-500 bg-red-500/10 border border-red-500/20 p-2 rounded-lg">
+                    ⚠️ {staffError}
+                  </p>
+                )}
+                {staffSuccess && (
+                  <p className="text-[11px] font-semibold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-lg">
+                    ✅ {staffSuccess}
+                  </p>
+                )}
+                <button type="button" onClick={handleAddStaff} disabled={isAddingStaff || !newStaff.username || !newStaff.password || !newStaff.name}
                   className="w-full py-2.5 mt-2 rounded-xl text-xs font-bold uppercase flex items-center justify-center gap-2 bg-gold-gradient text-dark-bg disabled:opacity-50 transition-all hover:scale-[1.02]">
-                  <UserPlus size={16} /> Crear Miembro
+                  {isAddingStaff ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-black"></div>
+                  ) : (
+                    <UserPlus size={16} />
+                  )}
+                  {isAddingStaff ? 'Creando...' : 'Crear Miembro'}
                 </button>
               </div>
 
@@ -479,7 +561,7 @@ export default function Settings() {
                               }} className="p-1.5 rounded-lg text-gold-500 hover:bg-gold-500/10 transition-colors" title="Editar Cajero">
                                 <KeyRound size={16} />
                               </button>
-                              <button type="button" onClick={() => deleteStaff(s.id)} className="p-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors" title="Eliminar Cajero">
+                              <button type="button" onClick={() => handleDeleteStaff(s.id)} className="p-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors" title="Eliminar Cajero">
                                 <Trash2 size={16} />
                               </button>
                             </td>
@@ -543,10 +625,15 @@ export default function Settings() {
         <div className="flex justify-end pt-4">
           <button
             type="submit"
-            className="flex items-center gap-2 px-8 py-4 rounded-2xl font-bold uppercase tracking-widest bg-gold-gradient text-black shadow-gold-md hover:scale-105 transition-transform"
+            disabled={isSaving}
+            className="flex items-center gap-2 px-8 py-4 rounded-2xl font-bold uppercase tracking-widest bg-gold-gradient text-black shadow-gold-md hover:scale-105 transition-transform disabled:opacity-50"
           >
-            <Save size={20} />
-            {isSaved ? 'Guardado Exitosamente' : 'Guardar Cambios'}
+            {isSaving ? (
+              <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-black"></div>
+            ) : (
+              <Save size={20} />
+            )}
+            {isSaving ? 'Guardando...' : isSaved ? 'Guardado Exitosamente' : 'Guardar Cambios'}
           </button>
         </div>
       </form>

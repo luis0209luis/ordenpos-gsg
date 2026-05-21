@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useTheme, useAuth } from '../context/AppContext'
 import { useInventory } from '../context/InventoryContext'
+import { getPaddedTurnNumber } from '../utils/turnHelper'
 import { isToday, isThisWeek, isThisMonth, isThisYear, parseISO, format } from 'date-fns'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -9,10 +10,10 @@ import {
 import { TrendingUp, Package, DollarSign } from 'lucide-react'
 
 export default function Reports() {
-  const { theme } = useTheme()
-  const { user } = useAuth()
+  const { theme } = useTheme() || {}
+  const { user } = useAuth() || {}
   const isDark = theme === 'dark'
-  const { products, salesHistory, deleteSale } = useInventory()
+  const { products = [], salesHistory = [], deleteSale } = useInventory() || {}
   const [timeFilter, setTimeFilter] = useState('Mes')
 
   const handleDeleteSale = (id) => {
@@ -23,8 +24,8 @@ export default function Reports() {
 
   // Filter logic
   const filteredSales = useMemo(() => {
-    return salesHistory.filter(sale => {
-      const date = parseISO(sale.date)
+    return (salesHistory || []).filter(sale => {
+      const date = parseISO(sale?.date || new Date().toISOString())
       if (timeFilter === 'Hoy') return isToday(date)
       if (timeFilter === 'Semana') return isThisWeek(date)
       if (timeFilter === 'Mes') return isThisMonth(date)
@@ -159,7 +160,7 @@ export default function Reports() {
             </div>
             <div>
               <p className={`text-sm font-semibold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Total en Inventario</p>
-              <h3 className={`font-display font-bold text-2xl ${isDark ? 'text-white' : 'text-gray-900'}`}>{products.length} Items</h3>
+              <h3 className={`font-display font-bold text-2xl ${isDark ? 'text-white' : 'text-gray-900'}`}>{(products || []).length} Items</h3>
             </div>
           </div>
         </div>
@@ -245,16 +246,17 @@ export default function Reports() {
               </tr>
             </thead>
             <tbody>
-              {filteredSales.slice().reverse().map(sale => (
-                <tr key={sale.id} className={`border-b last:border-0 transition-colors duration-200
+              {(filteredSales || []).slice().reverse().map(sale => (
+                <tr key={sale?.id} className={`border-b last:border-0 transition-colors duration-200
                   ${isDark ? 'border-dark-border text-gray-300 hover:bg-dark-card' : 'border-light-border text-gray-700 hover:bg-gray-50'}`}>
                   <td className="px-6 py-4">
-                    <p className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>#{sale.id.slice(-6)}</p>
-                    <p className="text-xs text-gray-500">{new Date(sale.date).toLocaleString()}</p>
+                    <p className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Orden #{getPaddedTurnNumber(sale, salesHistory)}</p>
+                    <p className="text-[10px] text-gray-500 font-mono">Ref: #{String(sale?.id || '').slice(-6)}</p>
+                    <p className="text-xs text-gray-500">{new Date(sale?.date).toLocaleString()}</p>
 
                   </td>
                   <td className="px-6 py-4 text-sm">
-                    {sale.items.map(item => (
+                    {(sale?.items || []).map(item => (
                       <div key={item.id}>{item.quantity}x {item.nombre}</div>
                     ))}
                   </td>

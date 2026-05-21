@@ -218,10 +218,11 @@ export default function AdminPanel() {
 
   const getBizPhase = (biz) => {
     if (biz.forcePhase !== undefined && biz.forcePhase !== null) return biz.forcePhase;
-    if (biz.daysRemaining <= 0) return 3;
-    if (biz.daysRemaining <= 5) return 2;
-    if (biz.daysRemaining <= 15) return 1;
-    return 0;
+    // Align with SubscriptionContext thresholds
+    if (biz.daysRemaining <= -6) return 3; // Suspendido
+    if (biz.daysRemaining <= -3) return 2; // Atraso
+    if (biz.daysRemaining <= 3) return 1; // Por Vencer
+    return 0; // Activo y al día
   }
 
   if (!isAuthenticated) {
@@ -340,7 +341,7 @@ export default function AdminPanel() {
                                     computedPhase === 1 ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' : 
                                     computedPhase === 2 ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' : 
                                     'bg-red-500/10 text-red-500 border-red-500/20'}`}>
-                                  {computedPhase === 0 ? 'Al Día' : `Fase ${computedPhase}`}
+                                  {computedPhase === 0 ? 'Activo y al día' : computedPhase === 1 ? 'Por Vencer' : computedPhase === 2 ? 'Atraso' : 'Suspendido'}
                                 </span>
                                 {biz.forcePhase === 3 && (
                                   <span className="text-[10px] text-red-500 font-bold uppercase flex items-center gap-1">

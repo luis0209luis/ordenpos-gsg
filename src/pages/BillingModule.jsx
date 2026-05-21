@@ -9,7 +9,8 @@ import { insertLog } from '../utils/logger'
 
 export default function BillingModule() {
   const { fechaVencimiento, daysRemaining, phase, addMonth } = useSubscription()
-  const { theme, user } = useTheme() ? { theme: useTheme().theme, user: useAuth().user } : { theme: 'dark', user: useAuth().user }
+  const { theme } = useTheme();
+  const { user } = useAuth();
   const isDark = theme === 'dark'
 
   const navigate = useNavigate()
@@ -205,7 +206,7 @@ export default function BillingModule() {
               </div>
 
               <h2 className={`text-4xl font-display font-black mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                {daysRemaining > 0 ? `${daysRemaining} días` : '0 días'} <span className="text-lg font-medium opacity-60 font-sans tracking-normal">restantes</span>
+                {`${daysRemaining} días`} <span className="text-lg font-medium opacity-60 font-sans tracking-normal">restantes</span>
               </h2>
 
               <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>

@@ -11,25 +11,29 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 
 
 export default function Dashboard() {
-  const { theme } = useTheme()
-  const { user } = useAuth()
-  const { settings } = useSettings()
-  const { products, salesHistory } = useInventory()
-  const { employees } = useFinance() || { employees: [] }
+  const { theme } = useTheme() || {}
+  const { user } = useAuth() || {}
+  const { settings = {} } = useSettings() || {}
+  const { products = [], salesHistory = [] } = useInventory() || {}
+  const { employees = [] } = useFinance() || {}
   const isDark = theme === 'dark'
   const navigate = useNavigate()
 
   const topProducts = useMemo(() => {
-    const counts = {}
-    salesHistory.forEach(sale => {
-      sale.items.forEach(item => {
-        counts[item.id] = (counts[item.id] || 0) + item.quantity
+    const counts = {};
+    const history = salesHistory || [];
+    history.forEach(sale => {
+      const items = sale?.items || [];
+      items.forEach(item => {
+        if (item && item.id) {
+          counts[item.id] = (counts[item.id] || 0) + (item.quantity || 0)
+        }
       })
     })
 
     const top = Object.entries(counts)
       .map(([id, quantity]) => {
-        const product = products.find(p => String(p.id) === id)
+        const product = (products || []).find(p => p && String(p.id) === id)
         if (!product) return null // Filtrar productos eliminados
 
         const imgInfo = getSmartImage(product.nombre, product.image)
@@ -47,7 +51,8 @@ export default function Dashboard() {
       .slice(0, 5)
 
     if (top.length === 0) {
-      return products.slice(0, 5).map(p => {
+      return (products || []).slice(0, 5).map(p => {
+        if (!p) return null
         const imgInfo = getSmartImage(p.nombre, p.image)
         return {
           id: p.id,
@@ -57,7 +62,7 @@ export default function Dashboard() {
           isReference: imgInfo.isReference,
           isFallback: imgInfo.isFallback
         }
-      })
+      }).filter(Boolean)
     }
     return top
   }, [salesHistory, products])
@@ -82,13 +87,17 @@ export default function Dashboard() {
     let todaySales = 0, todayTickets = 0
     let yesterdaySales = 0, yesterdayTickets = 0
 
-    salesHistory.forEach(sale => {
-      const dStr = new Date(sale.date).toLocaleDateString()
+    const history = salesHistory || []
+    history.forEach(sale => {
+      if (!sale || !sale.date) return
+      const d = new Date(sale.date)
+      if (isNaN(d.getTime())) return
+      const dStr = d.toLocaleDateString()
       if (dStr === todayStr) {
-        todaySales += sale.total
+        todaySales += sale.total || 0
         todayTickets++
       } else if (dStr === yesterdayStr) {
-        yesterdaySales += sale.total
+        yesterdaySales += sale.total || 0
         yesterdayTickets++
       }
     })
@@ -121,15 +130,18 @@ export default function Dashboard() {
     }
 
     const today = new Date().toLocaleDateString()
-    salesHistory.forEach(sale => {
+    const history = salesHistory || []
+    history.forEach(sale => {
+      if (!sale || !sale.date) return
       const d = new Date(sale.date)
+      if (isNaN(d.getTime())) return
       if (d.toLocaleDateString() === today) {
         let hour = d.getHours()
         if (hour < 8) hour = 8
         if (hour > 22) hour = 22
         
         const bucketStr = `${hour.toString().padStart(2, '0')}:00`
-        buckets[bucketStr] += sale.total
+        buckets[bucketStr] += sale.total || 0
       }
     })
 
@@ -137,14 +149,15 @@ export default function Dashboard() {
   }, [salesHistory])
 
   const CustomSalesTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
+    if (active && payload && payload.length && typeof label === 'string') {
       const hourNum = parseInt(label.split(':')[0], 10)
+      if (isNaN(hourNum)) return null
       const ampm = hourNum >= 12 ? 'PM' : 'AM'
       return (
         <div className={`px-4 py-2 rounded-xl shadow-lg border text-sm font-bold backdrop-blur-md
           ${isDark ? 'bg-black/90 border-gold-500/30 text-white' : 'bg-white/90 border-gold-400/30 text-neutral-900'}`}>
           <span className="text-gold-500 mr-2">{label} {ampm}</span> 
-          - ${payload[0].value.toLocaleString('es-CO')}
+          - ${(payload[0]?.value || 0).toLocaleString('es-CO')}
         </div>
       )
     }
@@ -152,8 +165,8 @@ export default function Dashboard() {
   }
 
   const realLowStock = useMemo(() => {
-    return products
-      .filter(p => p.stock_actual <= (p.stock_minimo ?? settings.globalMinStock))
+    return (products || [])
+      .filter(p => p.stock_actual <= (p.stock_minimo ?? settings?.globalMinStock))
       .map(p => ({ id: p.id, name: p.nombre, stock: p.stock_actual }))
       .sort((a, b) => a.stock - b.stock)
       .slice(0, 5) // Show only top 5 alerts to keep UI clean
@@ -161,7 +174,12 @@ export default function Dashboard() {
 
   const todayDeliveriesCount = useMemo(() => {
     const todayStr = new Date().toLocaleDateString()
-    return salesHistory.filter(s => s.isDelivery && new Date(s.date).toLocaleDateString() === todayStr).length
+    return (salesHistory || []).filter(s => {
+      if (!s || !s.isDelivery || !s.date) return false
+      const d = new Date(s.date)
+      if (isNaN(d.getTime())) return false
+      return d.toLocaleDateString() === todayStr
+    }).length
   }, [salesHistory])
 
   const payrollSummary = useMemo(() => {
@@ -174,13 +192,14 @@ export default function Dashboard() {
     const currentYear = today.getFullYear()
     const currentMonth = today.getMonth()
 
-    const mDay = Number(settings.payrollMonthlyDay) || 30
-    const bDay1 = Number(settings.payrollBiweeklyDay1) || 15
-    const bDay2 = Number(settings.payrollBiweeklyDay2) || 30
+    const mDay = Number(settings?.payrollMonthlyDay) || 30
+    const bDay1 = Number(settings?.payrollBiweeklyDay1) || 15
+    const bDay2 = Number(settings?.payrollBiweeklyDay2) || 30
 
     const payDatesMap = {} 
 
     employees.forEach(emp => {
+      if (!emp) return
       let nextDates = []
       
       if (emp.frequency === 'Mensual') {
@@ -215,7 +234,7 @@ export default function Dashboard() {
         const ts = closestDate.getTime()
         // If biweekly, split the base salary by 2 for the projection
         const amountToAdd = emp.frequency === 'Quincenal' ? Number(emp.baseSalary) / 2 : Number(emp.baseSalary)
-        payDatesMap[ts] = (payDatesMap[ts] || 0) + amountToAdd
+        payDatesMap[ts] = (payDatesMap[ts] || 0) + (amountToAdd || 0)
       }
     })
 

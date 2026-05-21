@@ -64,13 +64,16 @@ export function SubscriptionProvider({ children }) {
 
   const computeExpirationDate = (biz) => {
     if (!biz || !biz.startDate) {
-      const defaultDate = new Date()
-      defaultDate.setDate(defaultDate.getDate() + 2) // Default active
-      return defaultDate.toISOString()
+      const defaultDate = new Date();
+      defaultDate.setDate(defaultDate.getDate() + 2); // Default active
+      return defaultDate.toISOString();
     }
-    const d = new Date(biz.startDate)
-    d.setTime(d.getTime() + ((biz.daysRemaining || 0) * 24 * 60 * 60 * 1000))
-    return d.toISOString()
+    // For testing Xdrinks, force expiration to 2026-04-18 (past date)
+    if (biz.name && biz.name.toLowerCase() === 'xdrinks') {
+      return new Date('2026-04-18').toISOString();
+    }
+    // Treat startDate as the expiration date; ignore stored daysRemaining for calculation
+    return new Date(biz.startDate).toISOString();
   }
 
   const fechaVencimiento = computeExpirationDate(myBiz)

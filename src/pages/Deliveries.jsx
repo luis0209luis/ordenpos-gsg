@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useTheme, useAuth } from '../context/AppContext'
 import { useInventory } from '../context/InventoryContext'
+import { getPaddedTurnNumber } from '../utils/turnHelper'
 import { createPortal } from 'react-dom'
 import {
   Truck, Package, CheckCircle2, Clock, MapPin, User,
@@ -98,9 +99,9 @@ export default function Deliveries() {
 
   // Solo ventas con domicilio, más recientes primero
   const deliveries = useMemo(() =>
-    salesHistory
-      .filter(s => s.isDelivery)
-      .sort((a, b) => new Date(b.date) - new Date(a.date)),
+    (salesHistory || [])
+      .filter(s => s?.isDelivery)
+      .sort((a, b) => new Date(b?.date || new Date()) - new Date(a?.date || new Date())),
     [salesHistory]
   )
 
@@ -189,7 +190,7 @@ export default function Deliveries() {
                       Orden
                     </span>
                     <p className={`font-display font-bold text-lg leading-none ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      #{delivery.id.slice(-6)}
+                      #{getPaddedTurnNumber(delivery, salesHistory)}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -271,7 +272,7 @@ export default function Deliveries() {
                     <ReceiptText size={12} className="text-gold-500" />
                     <span className="font-semibold uppercase tracking-wider">Pedido</span>
                   </div>
-                  {delivery.items.map(item => (
+                  {(delivery.items || []).map(item => (
                     <div key={item.id} className="flex justify-between">
                       <span>{item.quantity}× {item.nombre}</span>
                       <span className="font-semibold">${formatCOP(item.precio * item.quantity)}</span>

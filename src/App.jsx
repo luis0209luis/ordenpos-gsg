@@ -5,14 +5,11 @@ import { SubscriptionProvider } from './context/SubscriptionContext'
 import { FinanceProvider } from './context/FinanceContext'
 
 function GlobalProviders({ children }) {
-  const { user } = useAuth()
-  const bid = user?.businessId || 'default'
-  
   return (
-    <SettingsProvider key={`settings-${bid}`}>
-      <InventoryProvider key={`inv-${bid}`}>
-        <SubscriptionProvider key={`sub-${bid}`}>
-          <FinanceProvider key={`fin-${bid}`}>
+    <SettingsProvider>
+      <InventoryProvider>
+        <SubscriptionProvider>
+          <FinanceProvider>
             {children}
           </FinanceProvider>
         </SubscriptionProvider>

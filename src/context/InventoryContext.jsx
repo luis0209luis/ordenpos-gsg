@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './AppContext'
+import { isValidUUID } from '../utils/uuid'
 
 const InventoryContext = createContext()
 
@@ -16,9 +17,10 @@ export function InventoryProvider({ children }) {
     let isMounted = true
     let productsChannel
     let salesChannel
+    let pollingInterval
 
     async function loadData() {
-      if (bid === 'default' || bid === 'master') {
+      if (!isValidUUID(bid)) {
         if (isMounted) setLoading(false)
         return
       }
@@ -36,6 +38,9 @@ export function InventoryProvider({ children }) {
         if (salesRes.data) {
           const mappedSales = salesRes.data.map(sale => ({
             ...sale,
+            date: sale.created_at || sale.date,
+            isDelivery: sale.is_delivery,
+            deliveryData: sale.delivery_data,
             deliveryStatus: sale.delivery_status || sale.deliveryStatus,
             kitchenStatus: sale.kitchen_status || sale.kitchenStatus
           }))
@@ -62,6 +67,9 @@ export function InventoryProvider({ children }) {
             if (!isMounted) return
             const mapSale = sale => ({
               ...sale,
+              date: sale.created_at || sale.date,
+              isDelivery: sale.is_delivery,
+              deliveryData: sale.delivery_data,
               deliveryStatus: sale.delivery_status || sale.deliveryStatus,
               kitchenStatus: sale.kitchen_status || sale.kitchenStatus
             })
@@ -78,6 +86,37 @@ export function InventoryProvider({ children }) {
           })
           .subscribe()
 
+        // Set up the polling interval every 8 seconds as robust fallback for sales
+        pollingInterval = setInterval(async () => {
+          try {
+            const { data, error } = await supabase.from('sales').select('*').eq('business_id', bid).order('created_at', { ascending: false })
+            if (error) {
+              console.error("Error polling sales:", error)
+              return
+            }
+            if (data && isMounted) {
+              const mappedSales = data.map(sale => ({
+                ...sale,
+                date: sale.created_at || sale.date,
+                isDelivery: sale.is_delivery,
+                deliveryData: sale.delivery_data,
+                deliveryStatus: sale.delivery_status || sale.deliveryStatus,
+                kitchenStatus: sale.kitchen_status || sale.kitchenStatus
+              }))
+              setSalesHistory(prev => {
+                const hasDifferences = prev.length !== mappedSales.length ||
+                  prev.some((s, idx) => {
+                    const m = mappedSales[idx];
+                    return !m || s.id !== m.id || s.kitchenStatus !== m.kitchenStatus || s.deliveryStatus !== m.deliveryStatus;
+                  });
+                return hasDifferences ? mappedSales : prev;
+              });
+            }
+          } catch (err) {
+            console.error("Error inside sales polling interval:", err)
+          }
+        }, 8000)
+
       } catch (e) {
         console.error("Error loading inventory data from Supabase:", e)
       } finally {
@@ -91,19 +130,19 @@ export function InventoryProvider({ children }) {
       isMounted = false
       if (productsChannel) supabase.removeChannel(productsChannel)
       if (salesChannel) supabase.removeChannel(salesChannel)
+      if (pollingInterval) clearInterval(pollingInterval)
     }
   }, [bid])
 
   const addProduct = async (product) => {
     try {
-      if (bid === 'default' || bid === 'master') {
+      if (!isValidUUID(bid)) {
         const mockProduct = { ...product, id: `mock-${Date.now()}` }
         setProducts(prev => [...prev, mockProduct])
         return mockProduct
       }
 
-      const { image, ...dbProduct } = product
-      const { data, error } = await supabase.from('products').insert({ ...dbProduct, business_id: bid }).select().single()
+      const { data, error } = await supabase.from('products').insert({ ...product, business_id: bid }).select().single()
       if (error) {
         console.error("Supabase Error en addProduct:", error)
         throw error
@@ -120,13 +159,12 @@ export function InventoryProvider({ children }) {
 
   const updateProduct = async (id, updatedProduct) => {
     try {
-      if (bid === 'default' || bid === 'master') {
+      if (!isValidUUID(bid)) {
         setProducts(prev => prev.map(p => p.id === id ? { ...p, ...updatedProduct } : p))
         return updatedProduct
       }
 
-      const { image, ...dbProduct } = updatedProduct
-      const { data, error } = await supabase.from('products').update(dbProduct).eq('id', id).select().single()
+      const { data, error } = await supabase.from('products').update(updatedProduct).eq('id', id).select().single()
       if (error) {
         console.error("Supabase Error en updateProduct:", error)
         throw error
@@ -143,7 +181,7 @@ export function InventoryProvider({ children }) {
 
   const deleteProduct = async (id) => {
     try {
-      if (bid === 'default' || bid === 'master') {
+      if (!isValidUUID(bid)) {
         setProducts(prev => prev.filter(p => p.id !== id))
         return
       }
@@ -158,6 +196,7 @@ export function InventoryProvider({ children }) {
   }
 
   const processSale = async (cartItems, total, deliveryData = null, kitchenStatus = null) => {
+    // Optimistic UI: update stock locally right away
     setProducts(prev => prev.map(product => {
       const cartItem = cartItems.find(item => item.id === product.id)
       if (cartItem) {
@@ -166,39 +205,106 @@ export function InventoryProvider({ children }) {
       return product
     }))
 
-    const saleRecord = {
+    // Build the record — do NOT include created_at, Supabase generates it automatically
+    const dbSaleRecord = {
       business_id: bid,
-      date: new Date().toISOString(),
       items: cartItems,
       total,
-      isDelivery: !!deliveryData,
-      deliveryData,
-      kitchen_status: kitchenStatus
+      is_delivery: !!deliveryData,
+      delivery_data: deliveryData || null,
+      delivery_status: deliveryData ? 'Pendiente' : null,
+      kitchen_status: kitchenStatus || null
     }
 
-    try {
-      const { data } = await supabase.from('sales').insert(saleRecord).select().single()
-      if (data) {
-        const mappedData = { ...data, deliveryStatus: data.delivery_status, kitchenStatus: data.kitchen_status }
-        setSalesHistory(prev => [mappedData, ...prev])
+    const nowISO = new Date().toISOString()
 
-        for (const item of cartItems) {
-          const product = products.find(p => p.id === item.id)
-          if (product) {
-            await supabase
-              .from('products')
-              .update({ stock_actual: Math.max(0, product.stock_actual - item.quantity) })
-              .eq('id', item.id)
+    try {
+      const { data, error } = await supabase
+        .from('sales')
+        .insert(dbSaleRecord)
+        .select()
+        .single()
+
+      if (error) {
+        console.error("Supabase INSERT error en sales:", error.message, error.details, error.hint)
+        throw error
+      }
+
+      if (!data) throw new Error("Supabase no retornó datos tras el INSERT")
+
+      const mappedData = {
+        ...data,
+        date: data.created_at || nowISO,
+        isDelivery: data.is_delivery,
+        deliveryData: data.delivery_data,
+        deliveryStatus: data.delivery_status,
+        kitchenStatus: data.kitchen_status
+      }
+
+      // Save turn number locally under ordenpos_orders in localStorage
+      try {
+        const storedStr = localStorage.getItem('ordenpos_orders') || '[]'
+        let stored = []
+        try {
+          stored = JSON.parse(storedStr)
+          if (!Array.isArray(stored)) stored = []
+        } catch {
+          stored = []
+        }
+        
+        let nextNumber = 1
+        if (stored.length > 0) {
+          const lastOrder = stored[stored.length - 1]
+          const lastNum = lastOrder && typeof lastOrder.number === 'number' ? lastOrder.number : 0
+          if (lastNum < 50) {
+            nextNumber = lastNum + 1
+          } else {
+            nextNumber = 1
           }
         }
-
-        return mappedData
+        
+        stored.push({ id: data.id, number: nextNumber })
+        if (stored.length > 100) {
+          stored.shift()
+        }
+        localStorage.setItem('ordenpos_orders', JSON.stringify(stored))
+      } catch (e) {
+        console.error("Error updating localStorage ordenpos_orders:", e)
       }
+
+      setSalesHistory(prev => [mappedData, ...prev])
+
+      // Update stock in DB for each sold item
+      for (const item of cartItems) {
+        const product = products.find(p => p.id === item.id)
+        if (product) {
+          await supabase
+            .from('products')
+            .update({ stock_actual: Math.max(0, product.stock_actual - item.quantity) })
+            .eq('id', item.id)
+        }
+      }
+
+      return mappedData
+
     } catch (e) {
-      console.error(e)
-      const tempSale = { ...saleRecord, id: Date.now().toString(), deliveryStatus: saleRecord.delivery_status, kitchenStatus: saleRecord.kitchen_status }
+      console.error("Error saving sale to Supabase:", e)
+
+      // Fallback: create a temporary local sale so the ticket always shows
+      const tempSale = {
+        id: `temp-${Date.now()}`,
+        business_id: bid,
+        date: nowISO,
+        created_at: nowISO,
+        items: cartItems,
+        total,
+        isDelivery: !!deliveryData,
+        deliveryData: deliveryData || null,
+        deliveryStatus: deliveryData ? 'Pendiente' : null,
+        kitchenStatus: kitchenStatus || null
+      }
       setSalesHistory(prev => [tempSale, ...prev])
-      return tempSale
+      return tempSale  // Always return something so the ticket modal works
     }
   }
 
@@ -214,6 +320,8 @@ export function InventoryProvider({ children }) {
       return product
     }))
     setSalesHistory(prev => prev.filter(s => s.id !== saleId))
+
+    if (!isValidUUID(bid)) return
 
     try {
       await supabase.from('sales').delete().eq('id', saleId)
@@ -235,6 +343,7 @@ export function InventoryProvider({ children }) {
     setSalesHistory(prev => prev.map(sale =>
       sale.id === saleId ? { ...sale, deliveryStatus: newStatus } : sale
     ))
+    if (!isValidUUID(bid)) return
     try {
       await supabase.from('sales').update({ delivery_status: newStatus }).eq('id', saleId)
     } catch (e) {
@@ -246,6 +355,7 @@ export function InventoryProvider({ children }) {
     setSalesHistory(prev => prev.map(sale =>
       sale.id === saleId ? { ...sale, kitchenStatus: newStatus } : sale
     ))
+    if (!isValidUUID(bid)) return
     try {
       await supabase.from('sales').update({ kitchen_status: newStatus }).eq('id', saleId)
     } catch (e) {

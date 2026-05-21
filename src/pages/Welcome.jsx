@@ -6,18 +6,31 @@ import OrdenposLogo from '../components/OrdenposLogo'
 import { Clock } from 'lucide-react'
 
 export default function Welcome() {
-  const { user } = useAuth()
-  const { theme } = useTheme()
-  const { staff, settings } = useSettings()
+  const { user } = useAuth() || {}
+  const { theme } = useTheme() || {}
+  const { staff = [], settings = {} } = useSettings() || {}
   const navigate = useNavigate()
   const isDark = theme === 'dark'
   
   const [currentTime, setCurrentTime] = useState(new Date())
+  const [isFirstTime, setIsFirstTime] = useState(false)
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    if (user) {
+      const userKey = user.id || user.username || 'default_user';
+      const welcomedKey = `ordenpos_welcomed_${userKey}`;
+      const hasBeenWelcomed = localStorage.getItem(welcomedKey);
+      if (!hasBeenWelcomed) {
+        setIsFirstTime(true);
+        localStorage.setItem(welcomedKey, 'true');
+      }
+    }
+  }, [user])
 
   const getDisplayName = () => {
     if (user?.role === 'admin' || user?.role === 'Superadmin') {
@@ -84,7 +97,7 @@ export default function Welcome() {
         
         {/* Dynamic Greeting */}
         <h1 className={`font-display font-black text-4xl md:text-5xl lg:text-6xl mb-4 tracking-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>
-          ¡Hola de nuevo, <span className="text-transparent bg-clip-text bg-gold-gradient">{displayName}</span>!
+          {isFirstTime ? '¡Bienvenido,' : '¡Hola de nuevo,'} <span className="text-transparent bg-clip-text bg-gold-gradient">{displayName}</span>!
         </h1>
         
         {/* Motivational Message */}

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { isValidUUID } from '../utils/uuid'
 
 /* ── Auth Context ────────────────────────────────────────────── */
 const AuthContext = createContext(null)
@@ -46,6 +47,9 @@ export function AuthProvider({ children }) {
     }
 
     if (username === 'admin') {
+      if (!isValidUUID(businessId)) {
+        return { success: false, error: 'Credenciales incorrectas. Verifique usuario y contraseña.' }
+      }
       try {
         const { data: staffMatch } = await supabase
           .from('staff')
@@ -85,6 +89,10 @@ export function AuthProvider({ children }) {
       } catch (e) {
         console.error(e)
       }
+    }
+
+    if (!isValidUUID(businessId)) {
+      return { success: false, error: 'Credenciales incorrectas. Verifique usuario y contraseña.' }
     }
 
     try {
@@ -133,6 +141,7 @@ export function AuthProvider({ children }) {
   }
 
   const changePassword = async (tempUser, newPassword) => {
+    if (!isValidUUID(tempUser?.businessId)) return false
     try {
       await supabase
         .from('businesses')
@@ -217,7 +226,7 @@ export function SettingsProvider({ children }) {
 
   useEffect(() => {
     async function loadData() {
-      if (bid === 'default' || bid === 'master') {
+      if (!isValidUUID(bid)) {
         setLoading(false)
         return
       }
@@ -225,19 +234,43 @@ export function SettingsProvider({ children }) {
       setLoading(true)
       try {
         const [settingsRes, feedbacksRes, staffRes] = await Promise.all([
-          supabase.from('settings').select('*').eq('business_id', bid).single(),
+          supabase.from('settings').select('*').eq('business_id', bid).maybeSingle(),
           supabase.from('feedbacks').select('*').eq('business_id', bid).order('created_at', { ascending: false }),
           supabase.from('staff').select('*').eq('business_id', bid)
         ])
 
         if (settingsRes.data) {
-          setSettings({ ...defaultSettings, ...settingsRes.data })
+          const db = settingsRes.data
+          setSettings({
+            businessName: db.business_name || defaultSettings.businessName,
+            ownerName: db.owner_name || defaultSettings.ownerName,
+            taxId: db.tax_id || defaultSettings.taxId,
+            address: db.address || defaultSettings.address,
+            footerMessage: db.footer_message || defaultSettings.footerMessage,
+            globalMinStock: db.global_min_stock !== null && db.global_min_stock !== undefined ? db.global_min_stock : defaultSettings.globalMinStock,
+            currency: db.currency || defaultSettings.currency,
+            deliveryCostPerKm: db.delivery_cost_per_km !== null && db.delivery_cost_per_km !== undefined ? db.delivery_cost_per_km : defaultSettings.deliveryCostPerKm,
+            payrollMonthlyDay: db.payroll_monthly_day || defaultSettings.payrollMonthlyDay,
+            payrollBiweeklyDay1: db.payroll_biweekly_day1 || defaultSettings.payrollBiweeklyDay1,
+            payrollBiweeklyDay2: db.payroll_biweekly_day2 || defaultSettings.payrollBiweeklyDay2
+          })
         } else {
           setSettings({ ...defaultSettings, businessName: user?.businessName || 'Mi Negocio' })
         }
         
         if (feedbacksRes.data) setFeedbacks(feedbacksRes.data)
-        if (staffRes.data) setStaff(staffRes.data)
+        if (staffRes.data) {
+          setStaff(staffRes.data.map(s => ({
+            id: s.id,
+            businessId: s.business_id,
+            name: s.name,
+            username: s.username,
+            password: s.password,
+            role: s.role,
+            permissions: s.permissions || [],
+            createdAt: s.created_at
+          })))
+        }
       } catch (e) {
         console.error("Error loading settings data from Supabase:", e)
       } finally {
@@ -250,17 +283,39 @@ export function SettingsProvider({ children }) {
 
   const updateSettings = async (newSettings) => {
     const updated = { ...settings, ...newSettings }
-    setSettings(updated)
-    if (bid !== 'default' && bid !== 'master') {
+    if (isValidUUID(bid)) {
       try {
-        await supabase.from('settings').upsert({ business_id: bid, ...updated })
+        const dbPayload = {
+          business_id: bid,
+          business_name: updated.businessName,
+          owner_name: updated.ownerName || null,
+          tax_id: updated.taxId || null,
+          address: updated.address || null,
+          footer_message: updated.footerMessage,
+          global_min_stock: updated.globalMinStock,
+          currency: updated.currency,
+          delivery_cost_per_km: updated.deliveryCostPerKm,
+          payroll_monthly_day: updated.payrollMonthlyDay,
+          payroll_biweekly_day1: updated.payrollBiweeklyDay1,
+          payroll_biweekly_day2: updated.payrollBiweeklyDay2
+        }
+        const { error } = await supabase.from('settings').upsert(dbPayload, { onConflict: 'business_id' })
+        if (error) {
+          console.error("Error updating settings in DB:", error)
+          return { success: false, error: error.message }
+        }
+        setSettings(updated)
+        return { success: true }
       } catch (e) {
-        console.error(e)
+        console.error("Error in updateSettings:", e)
+        return { success: false, error: e.message || "Error de red o conexión" }
       }
     }
+    return { success: false, error: "ID de negocio no válido" }
   }
 
   const addFeedback = async (text) => {
+    if (!isValidUUID(bid)) return
     const newFb = { date: new Date().toISOString(), text, status: 'pending', business_id: bid }
     try {
       const { data } = await supabase.from('feedbacks').insert(newFb).select().single()
@@ -294,46 +349,103 @@ export function SettingsProvider({ children }) {
   }
 
   const addStaff = async (newStaff) => {
+    if (!isValidUUID(bid)) return { success: false, error: "ID de negocio no válido" }
     try {
-      const { data } = await supabase.from('staff').insert({ ...newStaff, business_id: bid }).select().single()
-      if (data) setStaff(prev => [...prev, data])
+      const dbPayload = {
+        business_id: bid,
+        name: newStaff.name,
+        username: newStaff.username,
+        password: newStaff.password,
+        role: newStaff.role,
+        permissions: newStaff.permissions || []
+      }
+      const { data, error } = await supabase.from('staff').insert(dbPayload).select().single()
+      if (error) {
+        console.error("Error inserting staff:", error)
+        let friendlyMsg = error.message
+        if (error.code === '23505') {
+          friendlyMsg = "El nombre de usuario ya está registrado. Por favor, elige otro."
+        }
+        return { success: false, error: friendlyMsg }
+      }
+      if (data) {
+        const mapped = {
+          id: data.id,
+          businessId: data.business_id,
+          name: data.name,
+          username: data.username,
+          password: data.password,
+          role: data.role,
+          permissions: data.permissions || [],
+          createdAt: data.created_at
+        }
+        setStaff(prev => [...prev, mapped])
+        return { success: true, data: mapped }
+      }
+      return { success: false, error: "No se pudieron obtener los datos insertados" }
     } catch (e) {
       console.error(e)
+      return { success: false, error: e.message || "Error al registrar personal" }
     }
   }
   
   const deleteStaff = async (id) => {
-    setStaff(prev => prev.filter(s => s.id !== id))
     try {
-      await supabase.from('staff').delete().eq('id', id)
+      const { error } = await supabase.from('staff').delete().eq('id', id)
+      if (error) {
+        console.error("Error deleting staff:", error)
+        return { success: false, error: error.message }
+      }
+      setStaff(prev => prev.filter(s => s.id !== id))
+      return { success: true }
     } catch (e) {
       console.error(e)
+      return { success: false, error: e.message || "Error de red al eliminar" }
     }
   }
   
   const changeStaffPassword = async (id, newPassword) => {
-    setStaff(prev => prev.map(s => s.id === id ? { ...s, password: newPassword } : s))
     try {
-      await supabase.from('staff').update({ password: newPassword }).eq('id', id)
+      const { error } = await supabase.from('staff').update({ password: newPassword }).eq('id', id)
+      if (error) {
+        console.error("Error updating staff password:", error)
+        return { success: false, error: error.message }
+      }
+      setStaff(prev => prev.map(s => s.id === id ? { ...s, password: newPassword } : s))
+      return { success: true }
     } catch (e) {
       console.error(e)
+      return { success: false, error: e.message || "Error de red al cambiar contraseña" }
     }
   }
   
   const updateStaffPermissions = async (id, permissions) => {
-    setStaff(prev => prev.map(s => s.id === id ? { ...s, permissions } : s))
     try {
-      await supabase.from('staff').update({ permissions }).eq('id', id)
+      const { error } = await supabase.from('staff').update({ permissions }).eq('id', id)
+      if (error) {
+        console.error("Error updating staff permissions:", error)
+        return { success: false, error: error.message }
+      }
+      setStaff(prev => prev.map(s => s.id === id ? { ...s, permissions } : s))
+      return { success: true }
     } catch (e) {
       console.error(e)
+      return { success: false, error: e.message || "Error de red al actualizar permisos" }
     }
   }
+
+  const isConfigured = !!(
+    settings?.ownerName &&
+    settings?.ownerName.trim() !== '' &&
+    settings?.address &&
+    settings?.address.trim() !== ''
+  )
 
   return (
     <SettingsContext.Provider value={{ 
       settings, updateSettings, feedbacks, addFeedback, deleteFeedback, 
       toggleFeedbackStatus, staff, addStaff, deleteStaff, changeStaffPassword, 
-      updateStaffPermissions, loading 
+      updateStaffPermissions, loading, isConfigured
     }}>
       {children}
     </SettingsContext.Provider>

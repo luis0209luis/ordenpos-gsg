@@ -67,7 +67,7 @@ export default function Login() {
       if (result.requiresPasswordChange) {
         setTempUser(result.tempUser)
       } else {
-        navigate('/dashboard')
+        navigate('/')
       }
     } else {
       setError(result.error)
@@ -98,7 +98,7 @@ export default function Login() {
 
     await changePassword(tempUser, newPassword)
     setLoading(false)
-    navigate('/dashboard')
+    navigate('/')
   }
 
   const handleForgotPassword = () => {

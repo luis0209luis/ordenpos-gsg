@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './AppContext'
+import { isValidUUID } from '../utils/uuid'
 
 const FinanceContext = createContext()
 
@@ -19,7 +20,7 @@ export function FinanceProvider({ children }) {
     let employeesChannel
 
     async function loadData() {
-      if (bid === 'default' || bid === 'master') {
+      if (!isValidUUID(bid)) {
         if (isMounted) setLoading(false)
         return
       }
@@ -84,6 +85,7 @@ export function FinanceProvider({ children }) {
   }, [bid])
 
   const addExpense = async (expense) => {
+    if (!isValidUUID(bid)) return
     try {
       const { data } = await supabase.from('expenses').insert({ ...expense, business_id: bid, date: expense.date || new Date().toISOString() }).select().single()
       if (data) setExpenses(prev => [data, ...prev])
@@ -94,6 +96,7 @@ export function FinanceProvider({ children }) {
 
   const deleteExpense = async (id) => {
     setExpenses(prev => prev.filter(e => e.id !== id))
+    if (!isValidUUID(bid)) return
     try {
       await supabase.from('expenses').delete().eq('id', id)
     } catch (e) {
@@ -103,6 +106,7 @@ export function FinanceProvider({ children }) {
 
   const updateExpense = async (id, updatedData) => {
     setExpenses(prev => prev.map(e => e.id === id ? { ...e, ...updatedData } : e))
+    if (!isValidUUID(bid)) return
     try {
       await supabase.from('expenses').update(updatedData).eq('id', id)
     } catch (e) {
@@ -111,6 +115,7 @@ export function FinanceProvider({ children }) {
   }
 
   const addEmployee = async (employee) => {
+    if (!isValidUUID(bid)) return
     try {
       const { data } = await supabase.from('employees').insert({ ...employee, business_id: bid }).select().single()
       if (data) setEmployees(prev => [data, ...prev])
@@ -121,6 +126,7 @@ export function FinanceProvider({ children }) {
 
   const updateEmployee = async (id, updatedData) => {
     setEmployees(prev => prev.map(e => e.id === id ? { ...e, ...updatedData } : e))
+    if (!isValidUUID(bid)) return
     try {
       await supabase.from('employees').update(updatedData).eq('id', id)
     } catch (e) {
@@ -130,6 +136,7 @@ export function FinanceProvider({ children }) {
 
   const deleteEmployee = async (id) => {
     setEmployees(prev => prev.filter(e => e.id !== id))
+    if (!isValidUUID(bid)) return
     try {
       await supabase.from('employees').delete().eq('id', id)
     } catch (e) {
@@ -138,6 +145,7 @@ export function FinanceProvider({ children }) {
   }
 
   const addPayrollRecord = async (record) => {
+    if (!isValidUUID(bid)) return
     try {
       const { data } = await supabase.from('payroll_history').insert({ ...record, business_id: bid, date: new Date().toISOString() }).select().single()
       if (data) setPayrollHistory(prev => [data, ...prev])

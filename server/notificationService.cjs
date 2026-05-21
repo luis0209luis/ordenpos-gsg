@@ -1,6 +1,7 @@
 const express = require('express');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env.local') });
 
 const app = express();
 app.use(cors());
@@ -84,6 +85,68 @@ app.post('/api/send-registration', async (req, res) => {
     res.status(200).json({ success: true, messageId: info.messageId });
   } catch (error) {
     console.error('Error al enviar el correo de registro:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/create-preference', async (req, res) => {
+  const { price, businessId } = req.body;
+
+  if (!price || !businessId) {
+    return res.status(400).json({ success: false, error: 'Missing price or businessId' });
+  }
+
+  try {
+    const mpAccessToken = process.env.MP_ACCESS_TOKEN;
+
+    if (!mpAccessToken) {
+      console.error('Error: MP_ACCESS_TOKEN is not defined in the local environment variables.');
+      return res.status(500).json({ success: false, error: 'Mercado Pago credentials not configured on the local server.' });
+    }
+
+    const preferenceBody = {
+      items: [
+        {
+          title: "Mensualidad Sistema ORDENPOS",
+          quantity: 1,
+          unit_price: parseFloat(price),
+          currency_id: "COP"
+        }
+      ],
+      back_urls: {
+        // En local, redirigimos a localhost:5173
+        success: `http://localhost:5173/payments?status=success`,
+        failure: `http://localhost:5173/payments?status=failure`,
+        pending: `http://localhost:5173/payments?status=pending`
+      },
+      external_reference: businessId
+    };
+
+    // Petición HTTP nativa al API de Mercado Pago
+    const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${mpAccessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(preferenceBody)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Mercado Pago API returned an error:', errorData);
+      return res.status(response.status).json({ success: false, error: errorData });
+    }
+
+    const data = await response.json();
+    return res.status(200).json({ 
+      id: data.id,
+      init_point: data.init_point,
+      sandbox_init_point: data.sandbox_init_point
+    });
+
+  } catch (error) {
+    console.error('Exception in local create-preference:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

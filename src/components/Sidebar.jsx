@@ -39,15 +39,15 @@ export const NAV_ITEMS = [
 
 
 export default function Sidebar({ mobileOpen, setMobileOpen }) {
-  const { user, logout } = useAuth()
-  const { theme }        = useTheme()
-  const { staff }        = useSettings()
+  const { user, logout } = useAuth() || {}
+  const { theme }        = useTheme() || {}
+  const { staff = [], isConfigured } = useSettings() || {}
   const location         = useLocation()
   const [collapsed, setCollapsed] = useState(false)
 
   const isDark = theme === 'dark'
   
-  const hasPreparador = staff.some(s => s.role === 'PREPARADOR')
+  const hasPreparador = (staff || []).some(s => s.role === 'PREPARADOR')
 
   return (
     <>
@@ -97,6 +97,12 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
       <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 space-y-0.5">
         {NAV_ITEMS.filter(item => {
           if (user?.role === 'Superadmin') return true;
+          
+          // Force admin to configure first
+          if (!isConfigured && user?.role === 'admin') {
+            return item.path === '/settings';
+          }
+          
           if (user?.role === 'admin') return item.path !== '/admin'; // Local admin can't see Admin Master
           
           if (!user?.permissions?.includes(item.path)) return false;

@@ -1,16 +1,48 @@
 import { useState, useEffect, useRef } from 'react'
-import { useTheme, useSettings } from '../context/AppContext'
+import { useTheme, useSettings, useAuth } from '../context/AppContext'
 import { useInventory } from '../context/InventoryContext'
 import { getSmartImage } from '../utils/imageHelper'
 import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle2, Receipt, X, Printer, Edit2, Truck, Smartphone } from 'lucide-react'
 import DeliveryModule from '../components/DeliveryModule'
 import TicketGenerator, { generateRawTicket } from '../components/TicketGenerator'
+import { getPaddedTurnNumber } from '../utils/turnHelper'
 
 export default function POS() {
-  const { theme } = useTheme()
+  const { theme } = useTheme() || {}
   const isDark = theme === 'dark'
-  const { products, processSale } = useInventory()
-  const { settings, staff } = useSettings()
+  const { products = [], processSale, salesHistory = [] } = useInventory() || {}
+  const { settings = {}, staff = [] } = useSettings() || {}
+  const { user } = useAuth() || {}
+
+  const getDynamicBusinessName = () => {
+    let name = settings?.businessName;
+    if (!name || name === 'Mi Negocio') {
+      name = user?.businessName || user?.business_name;
+    }
+    if (!name || name === 'Mi Negocio') {
+      try {
+        const storedUser = JSON.parse(sessionStorage.getItem('ordenpos_user') || localStorage.getItem('ordenpos_user'));
+        name = storedUser?.businessName || storedUser?.business_name;
+      } catch (e) {}
+    }
+    return name || 'MI NEGOCIO';
+  }
+
+  const formatTicketDate = (dateString) => {
+    const d = dateString ? new Date(dateString) : new Date()
+    const day = String(d.getDate()).padStart(2, '0')
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const year = d.getFullYear()
+    
+    let hours = d.getHours()
+    const minutes = String(d.getMinutes()).padStart(2, '0')
+    const ampm = hours >= 12 ? 'PM' : 'AM'
+    hours = hours % 12
+    hours = hours ? hours : 12
+    const strTime = String(hours).padStart(2, '0') + ':' + minutes + ' ' + ampm
+    
+    return `Fecha: ${day}/${month}/${year} | Hora: ${strTime}`
+  }
 
   const [searchTerm, setSearchTerm] = useState('')
   const [cart, setCart] = useState([])
@@ -25,9 +57,9 @@ export default function POS() {
   const [finishedSale, setFinishedSale] = useState(null)
   const [mobileCartOpen, setMobileCartOpen] = useState(false)
 
-  const categories = ['Todas', ...new Set(products.map(p => p.categoria))]
+  const categories = ['Todas', ...new Set((products || []).map(p => p.categoria))]
 
-  const filteredProducts = products.filter(p => {
+  const filteredProducts = (products || []).filter(p => {
     const matchesSearch = p.nombre.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesCategory = selectedCategory === 'Todas' || p.categoria === selectedCategory
     return matchesSearch && matchesCategory
@@ -49,8 +81,8 @@ export default function POS() {
     setCart(prev => prev.map(item => {
       if (item.id === id) {
         const newQ = item.quantity + delta
-        const product = products.find(p => p.id === id)
-        if (newQ > 0 && newQ <= product.stock_actual) {
+        const product = (products || []).find(p => p.id === id)
+        if (newQ > 0 && product && newQ <= product.stock_actual) {
           return { ...item, quantity: newQ }
         }
         if (newQ <= 0) return { ...item, quantity: 0 }
@@ -68,31 +100,35 @@ export default function POS() {
   const deliveryFee = isDelivery && deliveryData.confirmed ? Math.round(deliveryData.fee) : 0
   const total       = Math.round(subtotal + deliveryFee)
 
-  const hasPreparador = staff.some(s => s.role === 'PREPARADOR')
+  const hasPreparador = (staff || []).some(s => s.role === 'PREPARADOR')
 
-  const handleProcessSale = () => {
+  const handleProcessSale = async () => {
     if (cart.length === 0) return
     if (isDelivery && (!deliveryData.confirmed || !deliveryData.address)) return
     
-    // If there is a Preparador, we send it to kitchen as 'pending'. Otherwise, null.
-    const kitchenStatus = hasPreparador ? 'pending' : null
+    // Send every sale to the kitchen as 'pending' automatically
+    const kitchenStatus = 'pending'
     
-    // Process sale and get the record for tickets
-    const saleRecord = processSale(cart, total, isDelivery ? deliveryData : null, kitchenStatus)
-    
-    // Show tickets modal
-    setFinishedSale(saleRecord)
-    
-    // Clear cart
-    setCart([])
-    setIsDelivery(false)
-    setDeliveryData({ name: '', address: '', distance: null, fee: 0, suggestedFee: 0, confirmed: false })
-    setMobileCartOpen(false)
+    try {
+      // Process sale and get the record for tickets
+      const saleRecord = await processSale(cart, total, isDelivery ? deliveryData : null, kitchenStatus)
+      
+      // Show tickets modal
+      setFinishedSale(saleRecord)
+      
+      // Clear cart
+      setCart([])
+      setIsDelivery(false)
+      setDeliveryData({ name: '', address: '', distance: null, fee: 0, suggestedFee: 0, confirmed: false })
+      setMobileCartOpen(false)
+    } catch (e) {
+      console.error("Error processing sale:", e)
+    }
   }
 
   const handleBluetoothPrint = () => {
     if (!finishedSale) return
-    const rawText = generateRawTicket(finishedSale, settings)
+    const rawText = generateRawTicket(finishedSale, settings, salesHistory)
     const base64Data = btoa(unescape(encodeURIComponent(rawText)))
     window.location.href = `rawbt:data:text/plain;base64,${base64Data}`
   }
@@ -170,7 +206,7 @@ export default function POS() {
                 ? product.stock_minimo : settings.globalMinStock
               const outOfStock = product.stock_actual <= 0
               const isLowStock = product.stock_actual <= currentMinStock && !outOfStock
-              const imgInfo = getSmartImage(product.nombre, product.image)
+              const imgInfo = getSmartImage(product.nombre, product.image_url)
 
               return (
                 <button
@@ -367,14 +403,7 @@ export default function POS() {
           
           <div className="relative z-10 w-full max-w-md mx-auto flex flex-col gap-6 animate-slide-in-up">
             
-            {/* Auto-print logic */}
-            {(() => {
-              if (finishedSale && !hasPreparador && !finishedSale.autoPrinted) {
-                finishedSale.autoPrinted = true;
-                setTimeout(() => window.print(), 300);
-              }
-              return null;
-            })()}
+            {/* Auto-print removido: el usuario elige Normal o Bluetooth */}
 
             {/* Botón de cerrar */}
             <button onClick={() => setFinishedSale(null)} className="absolute -top-12 right-0 p-2 text-white hover:text-gold-400 transition-colors">
@@ -382,55 +411,61 @@ export default function POS() {
             </button>
 
             {/* TICKET CLIENTE */}
-            <div className="flex-1 bg-white p-6 rounded-sm shadow-2xl relative font-mono text-black">
-              <div className="absolute top-0 left-0 right-0 h-2 bg-ticket-edge" />
-              
-              <div className="text-center mb-6 pt-4 border-b-2 border-dashed border-gray-300 pb-4">
-                <h2 className="text-xl font-bold uppercase">{settings.businessName}</h2>
+            <div className="flex-1 bg-white p-6 rounded-sm border border-black font-mono text-black select-none max-h-[70vh] overflow-y-auto">
+              <div className="text-center mb-4 border-b border-dashed border-black pb-2">
+                <h2 className="text-lg font-bold uppercase tracking-wide text-black">
+                  {getDynamicBusinessName()}
+                </h2>
                 
-                <p className="text-xs text-gray-500 mt-1">{settings.address}</p>
-                {settings.taxId && <p className="text-xs text-gray-500">ID: {settings.taxId}</p>}
+                {settings?.address && <p className="text-xs text-black">{settings.address}</p>}
+                {settings?.taxId && <p className="text-xs text-black">ID: {settings.taxId}</p>}
                 
-                {finishedSale.isDelivery ? (
-                  <div className="my-3 py-2 bg-black text-white rounded font-bold uppercase tracking-widest">
-                    ORDEN DE DOMICILIO
-                  </div>
-                ) : (
-                  <p className="text-sm font-bold mt-3 uppercase">TICKET DE COMPRA</p>
-                )}
-                <p className="text-xs mt-1">Orden #{finishedSale.id.slice(-6)}</p>
+                <p className="text-xs text-black mt-1">
+                  {formatTicketDate(finishedSale?.created_at || finishedSale?.date || finishedSale?.timestamp)}
+                </p>
+                
+                <p className="text-xs font-bold uppercase mt-2 text-black">
+                  {finishedSale?.isDelivery ? 'ORDEN DE DOMICILIO' : 'TICKET DE COMPRA'}
+                </p>
+                
+                {/* Centered Order #02 with large size, bold, and NO heavy box/borders */}
+                <p className="font-bold text-2xl text-black mt-1">
+                  Orden #{getPaddedTurnNumber(finishedSale, salesHistory)}
+                </p>
               </div>
 
-              {finishedSale.isDelivery && (
-                <div className="mb-6 p-3 border-2 border-black rounded-md text-sm">
-                  <p className="font-bold mb-2 border-b border-gray-300 pb-1">DATOS DE ENTREGA</p>
-                  <p className="uppercase"><span className="font-bold">Cliente:</span> {finishedSale.deliveryData.name}</p>
-                  <p className="uppercase"><span className="font-bold">Dirección:</span> {finishedSale.deliveryData.address}</p>
+              {finishedSale?.isDelivery && (
+                <div className="mb-4 p-3 border border-black text-xs text-black">
+                  <p className="font-bold mb-1 border-b border-black pb-1 uppercase">DATOS DE ENTREGA</p>
+                  <p className="uppercase"><span className="font-bold">Cliente:</span> {finishedSale?.deliveryData?.name}</p>
+                  <p className="uppercase"><span className="font-bold">Dirección:</span> {finishedSale?.deliveryData?.address}</p>
                 </div>
               )}
 
-              <div className="space-y-2 mb-6 border-b-2 border-dashed border-gray-300 pb-4">
-                {finishedSale.items.map(item => (
-                  <div key={item.id} className="flex justify-between text-sm">
+              <div className="space-y-1 mb-4 border-b border-dashed border-black pb-2 text-xs text-black">
+                {(finishedSale?.items || []).map(item => (
+                  <div key={item.id} className="flex justify-between">
                     <span>{item.quantity}x {item.nombre}</span>
-                    <span>${(item.precio * item.quantity).toLocaleString('es-CO')}</span>
+                    <span>${((item.precio || 0) * (item.quantity || 0)).toLocaleString('es-CO')}</span>
                   </div>
                 ))}
-                {finishedSale.isDelivery && (
-                  <div className="flex justify-between text-sm font-bold mt-2 pt-2 border-t border-gray-200">
+                {finishedSale?.isDelivery && (
+                  <div className="flex justify-between font-bold pt-1 border-t border-black">
                     <span>Servicio de Domicilio</span>
-                    <span>${finishedSale.deliveryData.fee.toLocaleString('es-CO')}</span>
+                    <span>${(finishedSale?.deliveryData?.fee || 0).toLocaleString('es-CO')}</span>
                   </div>
                 )}
               </div>
 
-              <div className="flex justify-between items-center text-lg font-bold mb-8">
+              {/* TOTAL highlighted with double line border above it */}
+              <div className="flex justify-between items-center text-base font-bold mb-6 pt-1 border-t-4 border-double border-black text-black">
                 <span>TOTAL</span>
-                <span>${finishedSale.total.toLocaleString('es-CO')}</span>
+                <span>${(finishedSale?.total || 0).toLocaleString('es-CO')}</span>
               </div>
 
-              <div className="text-center text-xs text-gray-500">
-                <p>{settings.footerMessage}</p>
+              <div className="text-center text-xs text-black border-t border-dashed border-black pt-2">
+                <p className="whitespace-pre-line">{settings?.footerMessage || '¡Gracias por su compra! / Vuelva pronto.'}</p>
+                <p className="text-[10px] mt-1">Ref: #{String(finishedSale?.id ?? '------').slice(-6)}</p>
               </div>
             </div>
 

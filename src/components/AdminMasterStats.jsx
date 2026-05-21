@@ -38,7 +38,7 @@ export default function AdminMasterStats() {
             }
           })
         }
-        const topCategories = Object.entries(catCount).sort((a, b) => b[1] - a[1]).slice(0, 3)
+        const topCategories = Object.entries(catCount || {}).sort((a, b) => b[1] - a[1]).slice(0, 3)
 
         const sumSales = salesData ? salesData.reduce((sum, s) => sum + (Number(s.total) || 0), 0) : 0
         

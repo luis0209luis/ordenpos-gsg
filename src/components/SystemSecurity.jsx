@@ -79,21 +79,21 @@ export default function SystemSecurity({ businesses }) {
           <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-3">
             {loadingLogs ? (
               <p className="text-center text-gray-500 mt-10">Cargando logs...</p>
-            ) : logs.length === 0 ? (
+            ) : (logs || []).length === 0 ? (
               <p className="text-center text-gray-500 mt-10">No hay registros en system_logs.</p>
             ) : (
-              logs.map(log => (
-                <div key={log.id} className={`p-3 rounded-xl border text-sm flex gap-3 ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-gray-50 border-gray-200'}`}>
-                  <div className="mt-0.5">{getLogIcon(log.type)}</div>
+              (logs || []).map(log => (
+                <div key={log?.id} className={`p-3 rounded-xl border text-sm flex gap-3 ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-gray-50 border-gray-200'}`}>
+                  <div className="mt-0.5">{getLogIcon(log?.type)}</div>
                   <div className="flex-1">
                     <div className="flex justify-between items-start">
-                      <span className={`font-bold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{log.action}</span>
-                      <span className="text-[10px] text-gray-500">{new Date(log.created_at).toLocaleString()}</span>
+                      <span className={`font-bold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{log?.action}</span>
+                      <span className="text-[10px] text-gray-500">{new Date(log?.created_at).toLocaleString()}</span>
                     </div>
-                    <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{log.message}</p>
+                    <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{log?.message}</p>
                     <div className="flex gap-3 mt-2 text-[10px] font-mono text-gray-500">
-                      <span>USER: {log.username}</span>
-                      <span>BIZ: {log.business_id?.slice(0,8) || 'N/A'}</span>
+                      <span>USER: {log?.username}</span>
+                      <span>BIZ: {String(log?.business_id || '').slice(0,8) || 'N/A'}</span>
                     </div>
                   </div>
                 </div>

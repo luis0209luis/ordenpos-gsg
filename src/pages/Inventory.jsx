@@ -5,20 +5,20 @@ import { useInventory } from '../context/InventoryContext'
 import { Plus, Edit2, Trash2, AlertTriangle, Search, X, Check } from 'lucide-react'
 
 export default function Inventory() {
-  const { theme } = useTheme()
+  const { theme } = useTheme() || {}
   const isDark = theme === 'dark'
-  const { products, addProduct, updateProduct, deleteProduct } = useInventory()
-  const { settings } = useSettings()
+  const { products = [], addProduct, updateProduct, deleteProduct } = useInventory() || {}
+  const { settings = {} } = useSettings() || {}
 
   const [searchTerm, setSearchTerm] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
   const [errorMsg, setErrorMsg] = useState('')
-  
+
   const [formData, setFormData] = useState({
-    nombre: '', precio: '', stock_actual: '', stock_minimo: '', categoria: '', image: ''
+    nombre: '', precio: '', stock_actual: '', stock_minimo: '', categoria: '', image_url: ''
   })
-  
+
   const DEFAULT_CATEGORIES = ['Bebida', 'Comida Rápida', 'Repostería', 'Pan'];
   const [customCategories, setCustomCategories] = useState([]);
   const [deletedCategories, setDeletedCategories] = useState(() => {
@@ -27,9 +27,9 @@ export default function Inventory() {
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
 
-  const availableCategories = [...new Set([...DEFAULT_CATEGORIES, ...products.map(p => p?.categoria || 'Sin Categoría'), ...customCategories])]
+  const availableCategories = [...new Set([...DEFAULT_CATEGORIES, ...(products || []).map(p => p?.categoria || 'Sin Categoría'), ...customCategories])]
     .filter(c => !deletedCategories.includes(c) && c !== 'Sin Categoría');
-  
+
   const [autoImage, setAutoImage] = useState(null)
   const [customImage, setCustomImage] = useState(null)
 
@@ -37,7 +37,7 @@ export default function Inventory() {
     const handler = setTimeout(() => {
       const name = formData.nombre?.toLowerCase() || '';
       const cat = formData.categoria?.toLowerCase() || '';
-      
+
       let detectedImg = null;
       if (cat.includes('bebida')) {
         if (name.includes('coca') || name.includes('pepsi') || name.includes('gaseosa')) {
@@ -57,7 +57,7 @@ export default function Inventory() {
 
   useEffect(() => {
     if (!customImage) {
-      setFormData(prev => ({ ...prev, image: autoImage || '' }));
+      setFormData(prev => ({ ...prev, image_url: autoImage || '' }));
     }
   }, [autoImage, customImage])
 
@@ -89,12 +89,12 @@ export default function Inventory() {
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
-          
+
           // Comprimir la imagen a formato WebP con 80% de calidad
           const dataUrl = canvas.toDataURL('image/webp', 0.8);
-          
+
           setCustomImage(dataUrl);
-          setFormData(prev => ({...prev, image: dataUrl}));
+          setFormData(prev => ({ ...prev, image_url: dataUrl }));
         };
         img.src = reader.result;
       }
@@ -104,16 +104,16 @@ export default function Inventory() {
 
   const handleDeleteCategory = (catToDelete) => {
     // Update products
-    const productsToUpdate = products.filter(p => p.categoria === catToDelete);
+    const productsToUpdate = (products || []).filter(p => p.categoria === catToDelete);
     productsToUpdate.forEach(p => {
       updateProduct(p.id, { ...p, categoria: 'Sin Categoría' });
     });
-    
+
     // Save deletion
     const newDeleted = [...deletedCategories, catToDelete];
     setDeletedCategories(newDeleted);
     localStorage.setItem('ordenpos_deleted_categories', JSON.stringify(newDeleted));
-    
+
     setCustomCategories(prev => prev.filter(c => c !== catToDelete));
     if (formData.categoria === catToDelete) {
       setFormData({ ...formData, categoria: '' });
@@ -129,7 +129,7 @@ export default function Inventory() {
         setDeletedCategories(newDeleted);
         localStorage.setItem('ordenpos_deleted_categories', JSON.stringify(newDeleted));
       }
-      
+
       setCustomCategories(prev => {
         if (!prev.includes(newCat)) return [...prev, newCat];
         return prev;
@@ -140,22 +140,22 @@ export default function Inventory() {
     }
   };
 
-  const filteredProducts = products.filter(p => {
+  const filteredProducts = (products || []).filter(p => {
     const nombre = p?.nombre || ''
     const categoria = p?.categoria || ''
     return nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           categoria.toLowerCase().includes(searchTerm.toLowerCase())
+      categoria.toLowerCase().includes(searchTerm.toLowerCase())
   })
 
   const location = useLocation()
 
   useEffect(() => {
-    if (location.state?.editProductId && products.length > 0) {
-      const productToEdit = products.find(p => p.id === location.state.editProductId)
+    if (location.state?.editProductId && (products || []).length > 0) {
+      const productToEdit = (products || []).find(p => p.id === location.state.editProductId)
       if (productToEdit) {
         setEditingProduct(productToEdit)
         setFormData(productToEdit)
-        setCustomImage(productToEdit.image?.startsWith('data:image') ? productToEdit.image : null)
+        setCustomImage(productToEdit.image_url?.startsWith('data:image') ? productToEdit.image_url : null)
         setIsModalOpen(true)
         // Clear the state so it doesn't reopen on refresh
         window.history.replaceState({}, document.title)
@@ -171,18 +171,18 @@ export default function Inventory() {
         ...product,
         nombre: product.nombre || '',
         categoria: product.categoria || '',
-        image: product.image || ''
+        image_url: product.image_url || ''
       })
-      setCustomImage(product.image?.startsWith('data:image') ? product.image : null)
+      setCustomImage(product.image_url?.startsWith('data:image') ? product.image_url : null)
     } else {
       setEditingProduct(null)
-      setFormData({ 
-        nombre: '', 
-        precio: '', 
-        stock_actual: '', 
-        stock_minimo: settings?.globalMinStock || 10, 
-        categoria: availableCategories[0] || 'Sin Categoría', 
-        image: '' 
+      setFormData({
+        nombre: '',
+        precio: '',
+        stock_actual: '',
+        stock_minimo: settings?.globalMinStock || 10,
+        categoria: availableCategories[0] || 'Sin Categoría',
+        image_url: ''
       })
       setCustomImage(null)
     }
@@ -200,8 +200,8 @@ export default function Inventory() {
     e.preventDefault()
     try {
       setErrorMsg('')
-      
-      const finalImage = formData.image || autoImage || ''
+
+      const finalImage = formData.image_url || autoImage || ''
       const finalCategoria = formData.categoria || 'Sin Categoría'
       const finalNombre = formData.nombre || 'Producto'
 
@@ -209,12 +209,12 @@ export default function Inventory() {
         ...formData,
         nombre: finalNombre,
         categoria: finalCategoria,
-        image: finalImage,
+        image_url: finalImage,
         precio: parseFloat(formData.precio) || 0,
         stock_actual: parseInt(formData.stock_actual) || 0,
         stock_minimo: parseInt(formData.stock_minimo),
       }
-      
+
       if (isNaN(productData.stock_minimo)) {
         productData.stock_minimo = settings?.globalMinStock || 10
       }
@@ -224,7 +224,7 @@ export default function Inventory() {
       } else {
         await addProduct(productData)
       }
-      
+
       // Solo se cierra el modal si la promesa se resolvió correctamente sin arrojar error
       closeModal()
     } catch (error) {
@@ -238,7 +238,7 @@ export default function Inventory() {
       {/* Header Actions */}
       <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-6 rounded-3xl shadow-soft-lg
         ${isDark ? 'bg-dark-surface border border-dark-border' : 'bg-white border border-light-border'}`}>
-        
+
         <div className="relative w-full md:w-96">
           <span className={`absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none
             ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
@@ -251,12 +251,12 @@ export default function Inventory() {
             onChange={(e) => setSearchTerm(e.target.value)}
             className={`w-full pl-11 pr-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all duration-200
               focus:border-gold-500 focus:shadow-gold-sm
-              ${isDark ? 'bg-dark-card border-dark-border text-white placeholder-gray-600' 
-                       : 'bg-light-surface border-light-border text-gray-900 placeholder-gray-400'}`}
+              ${isDark ? 'bg-dark-card border-dark-border text-white placeholder-gray-600'
+                : 'bg-light-surface border-light-border text-gray-900 placeholder-gray-400'}`}
           />
         </div>
 
-        <button 
+        <button
           onClick={() => openModal()}
           className="px-6 py-3 rounded-2xl font-bold text-sm tracking-wider uppercase flex items-center gap-2
           bg-gold-gradient text-dark-bg shadow-gold-md hover:shadow-gold-lg
@@ -293,8 +293,8 @@ export default function Inventory() {
                 </tr>
               ) : (
                 filteredProducts.map((product) => {
-                  const currentMinStock = product.stock_minimo !== undefined && product.stock_minimo !== null 
-                    ? product.stock_minimo 
+                  const currentMinStock = product.stock_minimo !== undefined && product.stock_minimo !== null
+                    ? product.stock_minimo
                     : settings.globalMinStock
                   const isLowStock = product.stock_actual <= currentMinStock
                   return (
@@ -315,15 +315,15 @@ export default function Inventory() {
                         <div className="flex justify-center">
                           {isLowStock ? (
                             <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border
-                              ${isDark ? 'bg-gold-500/10 border-gold-500/30 text-gold-400' 
-                                       : 'bg-gold-50 border-gold-200 text-gold-700'}`}>
+                              ${isDark ? 'bg-gold-500/10 border-gold-500/30 text-gold-400'
+                                : 'bg-gold-50 border-gold-200 text-gold-700'}`}>
                               <AlertTriangle size={14} />
                               Stock Bajo
                             </span>
                           ) : (
                             <span className={`px-3 py-1 rounded-full text-xs font-bold border
-                              ${isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
-                                       : 'bg-emerald-50 border-emerald-200 text-emerald-600'}`}>
+                              ${isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                : 'bg-emerald-50 border-emerald-200 text-emerald-600'}`}>
                               Óptimo
                             </span>
                           )}
@@ -332,13 +332,13 @@ export default function Inventory() {
                       <td className="px-6 py-4">
                         <div className="flex justify-end gap-2">
                           <button onClick={() => openModal(product)} className={`p-2 rounded-xl transition-all
-                            ${isDark ? 'hover:bg-dark-card text-gray-400 hover:text-white' 
-                                     : 'hover:bg-light-surface text-gray-500 hover:text-gray-900'}`}>
+                            ${isDark ? 'hover:bg-dark-card text-gray-400 hover:text-white'
+                              : 'hover:bg-light-surface text-gray-500 hover:text-gray-900'}`}>
                             <Edit2 size={18} />
                           </button>
                           <button onClick={() => deleteProduct(product.id)} className={`p-2 rounded-xl transition-all
-                            ${isDark ? 'hover:bg-red-500/10 text-gray-400 hover:text-red-400' 
-                                     : 'hover:bg-red-50 text-gray-500 hover:text-red-500'}`}>
+                            ${isDark ? 'hover:bg-red-500/10 text-gray-400 hover:text-red-400'
+                              : 'hover:bg-red-50 text-gray-500 hover:text-red-500'}`}>
                             <Trash2 size={18} />
                           </button>
                         </div>
@@ -358,12 +358,12 @@ export default function Inventory() {
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeModal} />
           <div className={`relative w-full max-w-4xl p-8 rounded-3xl shadow-2xl animate-slide-in-up border
             ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
-            
+
             <button onClick={closeModal} className={`absolute top-6 right-6 p-2 rounded-full transition-colors z-10
               ${isDark ? 'hover:bg-dark-card text-gray-400' : 'hover:bg-light-surface text-gray-500'}`}>
               <X size={20} />
             </button>
-            
+
             <h2 className={`font-display font-bold text-2xl mb-6
               ${isDark ? 'text-white' : 'text-gray-900'}`}>
               {editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
@@ -381,15 +381,15 @@ export default function Inventory() {
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="space-y-1.5">
                     <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Nombre</label>
-                    <input required type="text" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})}
+                    <input required type="text" value={formData.nombre} onChange={e => setFormData({ ...formData, nombre: e.target.value })}
                       className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
                       ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`} />
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Precio ($)</label>
-                      <input required type="number" step="0.01" min="0" value={formData.precio} onChange={e => setFormData({...formData, precio: e.target.value})}
+                      <input required type="number" step="0.01" min="0" value={formData.precio} onChange={e => setFormData({ ...formData, precio: e.target.value })}
                         className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
                         ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`} />
                     </div>
@@ -397,11 +397,11 @@ export default function Inventory() {
                       <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Categoría</label>
                       {isCreatingCategory ? (
                         <div className="relative w-full">
-                          <input 
+                          <input
                             autoFocus
-                            type="text" 
+                            type="text"
                             placeholder="Nombre categoría..."
-                            value={newCategoryName} 
+                            value={newCategoryName}
                             onChange={e => setNewCategoryName(e.target.value)}
                             onKeyDown={e => {
                               if (e.key === 'Enter') {
@@ -409,15 +409,15 @@ export default function Inventory() {
                                 handleCreateCategory();
                               } else if (e.key === 'Escape') {
                                 setIsCreatingCategory(false);
-                                setFormData(prev => ({...prev, categoria: availableCategories[0] || 'Sin Categoría'}));
+                                setFormData(prev => ({ ...prev, categoria: availableCategories[0] || 'Sin Categoría' }));
                                 setNewCategoryName('');
                               }
                             }}
                             className={`w-full px-4 py-3 pr-12 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
-                            ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`} 
+                            ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
                           />
                           {newCategoryName.trim().length > 0 && (
-                            <button 
+                            <button
                               type="button"
                               onClick={handleCreateCategory}
                               className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-gold-gradient text-black rounded-lg hover:scale-105 active:scale-95 transition-all shadow-sm"
@@ -428,15 +428,15 @@ export default function Inventory() {
                         </div>
                       ) : (
                         <div className="flex gap-2 items-center w-full">
-                          <select 
-                            required 
-                            value={formData.categoria} 
+                          <select
+                            required
+                            value={formData.categoria}
                             onChange={e => {
                               if (e.target.value === '__NEW__') {
                                 setIsCreatingCategory(true);
-                                setFormData({...formData, categoria: ''});
+                                setFormData({ ...formData, categoria: '' });
                               } else {
-                                setFormData({...formData, categoria: e.target.value});
+                                setFormData({ ...formData, categoria: e.target.value });
                               }
                             }}
                             className={`flex-1 min-w-0 px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500 cursor-pointer appearance-none
@@ -448,14 +448,14 @@ export default function Inventory() {
                             ))}
                             <option value="__NEW__" className="font-bold text-gold-500">+ Crear nueva categoría</option>
                           </select>
-                          
+
                           {formData.categoria && (
-                            <button 
-                              type="button" 
+                            <button
+                              type="button"
                               onClick={(e) => {
                                 e.preventDefault();
                                 handleDeleteCategory(formData.categoria);
-                              }} 
+                              }}
                               className={`p-3 rounded-xl transition-colors shrink-0 flex items-center justify-center
                                 ${isDark ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-red-50 text-red-500 hover:bg-red-100'}`}
                               title="Eliminar categoría seleccionada"
@@ -471,13 +471,13 @@ export default function Inventory() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock Actual</label>
-                      <input required type="number" min="0" value={formData.stock_actual} onChange={e => setFormData({...formData, stock_actual: e.target.value})}
+                      <input required type="number" min="0" value={formData.stock_actual} onChange={e => setFormData({ ...formData, stock_actual: e.target.value })}
                         className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
                         ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`} />
                     </div>
                     <div className="space-y-1.5">
                       <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock Mínimo</label>
-                      <input required type="number" min="0" value={formData.stock_minimo} onChange={e => setFormData({...formData, stock_minimo: e.target.value})}
+                      <input required type="number" min="0" value={formData.stock_minimo} onChange={e => setFormData({ ...formData, stock_minimo: e.target.value })}
                         className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
                         ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`} />
                     </div>
@@ -493,7 +493,7 @@ export default function Inventory() {
               <div className="md:col-span-2 flex flex-col gap-4">
                 <div className={`flex flex-col items-center justify-center p-6 rounded-3xl border text-center relative overflow-hidden min-h-[250px]
                   ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-200'}`}>
-                  
+
                   {autoImage && !customImage && (
                     <span className="absolute top-3 right-3 text-[8px] sm:text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-gold-500/20 text-gold-500 border border-gold-500/30 shadow-sm">
                       Reconocimiento Automático: Activo
@@ -510,14 +510,14 @@ export default function Inventory() {
                   )}
 
                   <label className={`cursor-pointer px-4 py-3 rounded-xl text-xs font-bold uppercase transition-all flex items-center justify-center w-full gap-2
-                    ${isDark ? 'bg-dark-surface text-gray-300 hover:bg-gold-500/10 hover:text-gold-400 hover:border-gold-500/30 border border-dark-border' 
-                             : 'bg-white text-gray-700 hover:bg-gold-50 hover:text-gold-600 hover:border-gold-300 border border-gray-300 shadow-sm'}`}>
+                    ${isDark ? 'bg-dark-surface text-gray-300 hover:bg-gold-500/10 hover:text-gold-400 hover:border-gold-500/30 border border-dark-border'
+                      : 'bg-white text-gray-700 hover:bg-gold-50 hover:text-gold-600 hover:border-gold-300 border border-gray-300 shadow-sm'}`}>
                     <span>Cargar Imagen Personalizada</span>
                     <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
                   </label>
-                  
+
                   {customImage && (
-                    <button type="button" onClick={() => { setCustomImage(null); setFormData(p => ({...p, image: autoImage || ''})) }} 
+                    <button type="button" onClick={() => { setCustomImage(null); setFormData(p => ({ ...p, image_url: autoImage || '' })) }}
                       className="mt-3 text-[10px] uppercase font-bold text-red-500 hover:text-red-400 transition-colors">
                       Remover imagen manual
                     </button>

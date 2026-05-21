@@ -10,7 +10,17 @@ export default function FinanceManager() {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
   
-  const { expenses, addExpense, updateExpense, deleteExpense, employees, addEmployee, payrollHistory, addPayrollRecord, deleteEmployee } = useFinance()
+  const { 
+    expenses = [], 
+    addExpense, 
+    updateExpense, 
+    deleteExpense, 
+    employees = [], 
+    addEmployee, 
+    payrollHistory = [], 
+    addPayrollRecord, 
+    deleteEmployee 
+  } = useFinance() || {}
   const { salesHistory } = useInventory()
 
   const [activeTab, setActiveTab] = useState('resumen') // resumen, egresos, nomina
@@ -44,9 +54,9 @@ export default function FinanceManager() {
   const [exportYear, setExportYear] = useState(new Date().getFullYear())
 
   // Calcs
-  const totalSales = salesHistory.reduce((sum, sale) => sum + sale.total, 0)
-  const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0)
-  const totalPayroll = payrollHistory.reduce((sum, p) => sum + Number(p.totalPaid), 0)
+  const totalSales = (salesHistory || []).reduce((sum, sale) => sum + (Number(sale.total) || 0), 0)
+  const totalExpenses = (expenses || []).reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0)
+  const totalPayroll = (payrollHistory || []).reduce((sum, p) => sum + (Number(p.totalPaid) || 0), 0)
   const netProfit = totalSales - totalExpenses - totalPayroll
 
   const handleAddExpense = (e) => {
@@ -146,14 +156,14 @@ export default function FinanceManager() {
     XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen')
 
     // 2. Movimientos Tab (Ingresos + Egresos)
-    const ingresosData = salesHistory.map(s => ({
+    const ingresosData = (salesHistory || []).map(s => ({
       Fecha: format(parseISO(s.date), 'yyyy-MM-dd HH:mm'),
       Tipo: 'Ingreso (Venta)',
       Categoria: 'POS',
-      Descripcion: `Venta #${s.id.slice(-5)}`,
+      Descripcion: `Venta #${String(s?.id || '').slice(-5)}`,
       Monto: s.total
     }))
-    const egresosData = expenses.map(e => ({
+    const egresosData = (expenses || []).map(e => ({
       Fecha: format(parseISO(e.date), 'yyyy-MM-dd'),
       Tipo: 'Egreso (Gasto)',
       Categoria: e.category,
@@ -165,7 +175,7 @@ export default function FinanceManager() {
     XLSX.utils.book_append_sheet(wb, wsMovimientos, 'Movimientos')
 
     // 3. Nómina Tab
-    const nominaData = payrollHistory.map(p => ({
+    const nominaData = (payrollHistory || []).map(p => ({
       FechaPago: format(parseISO(p.date), 'yyyy-MM-dd HH:mm'),
       Empleado: p.employeeName,
       SalarioBase: p.baseSalary,
@@ -180,7 +190,7 @@ export default function FinanceManager() {
   }
 
   const exportPayrollToExcel = () => {
-    const filtered = payrollHistory.filter(p => {
+    const filtered = (payrollHistory || []).filter(p => {
       const pDate = new Date(p.date)
       if (exportType === 'Mensual') {
         return pDate.getFullYear() === Number(exportYear) && (pDate.getMonth() + 1) === Number(exportMonth)
@@ -226,7 +236,7 @@ export default function FinanceManager() {
 
   // Calculate next payment date
   const getNextPaymentDate = (emp) => {
-    const lastPayment = payrollHistory.find(p => p.employeeId === emp.id)
+    const lastPayment = (payrollHistory || []).find(p => p.employeeId === emp.id)
     const baseDate = lastPayment ? parseISO(lastPayment.date) : parseISO(emp.startDate)
     let nextDate;
     if (emp.frequency === 'Diario') nextDate = addDays(baseDate, 1)
@@ -314,20 +324,20 @@ export default function FinanceManager() {
           <div className={`p-6 rounded-2xl border ${isDark ? 'bg-dark-card border-dark-border' : 'bg-white border-light-border'}`}>
             <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><FileText size={18} className="text-gold-500"/> Últimos Movimientos</h3>
             <div className="space-y-3">
-              {salesHistory.slice(-5).map(sale => (
+              {(salesHistory || []).slice(-5).map(sale => (
                 <div key={sale.id} className="flex justify-between items-center p-3 rounded-lg bg-green-500/5 border border-green-500/10">
                   <div>
                     <p className="font-semibold text-sm text-green-500">Ingreso POS</p>
-                    <p className="text-xs text-gray-500">{format(parseISO(sale.date), 'dd/MM/yy HH:mm')}</p>
+                    <p className="text-xs text-gray-500">{format(parseISO(sale.date || new Date().toISOString()), 'dd/MM/yy HH:mm')}</p>
                   </div>
                   <p className="font-bold text-green-500">+${sale.total.toLocaleString()}</p>
                 </div>
               ))}
-              {expenses.slice(0, 5).map(exp => (
+              {(expenses || []).slice(0, 5).map(exp => (
                 <div key={exp.id} className="flex justify-between items-center p-3 rounded-lg bg-red-500/5 border border-red-500/10">
                   <div>
                     <p className="font-semibold text-sm text-red-500">{exp.category} - {exp.description}</p>
-                    <p className="text-xs text-gray-500">{format(parseISO(exp.date), 'dd/MM/yy')}</p>
+                    <p className="text-xs text-gray-500">{format(parseISO(exp.date || new Date().toISOString()), 'dd/MM/yy')}</p>
                   </div>
                   <p className="font-bold text-red-500">-${Number(exp.amount).toLocaleString()}</p>
                 </div>
@@ -341,7 +351,7 @@ export default function FinanceManager() {
               {['Arriendo', 'Servicios', 'Insumos', 'Nómina', 'Otros'].map(cat => {
                 let catTotal = 0;
                 if (cat === 'Nómina') catTotal = totalPayroll;
-                else catTotal = expenses.filter(e => e.category === cat).reduce((sum, e) => sum + Number(e.amount), 0);
+                else catTotal = (expenses || []).filter(e => e.category === cat).reduce((sum, e) => sum + Number(e.amount), 0);
                 
                 const allExp = totalExpenses + totalPayroll;
                 const percent = allExp === 0 ? 0 : Math.round((catTotal / allExp) * 100);
@@ -424,9 +434,9 @@ export default function FinanceManager() {
                    </tr>
                  </thead>
                  <tbody>
-                   {expenses.map(exp => (
+                   {(expenses || []).map(exp => (
                      <tr key={exp.id} className={`border-b ${isDark ? 'border-dark-border/50' : 'border-gray-100'} text-sm hover:${isDark ? 'bg-white/5' : 'bg-black/5'} transition-colors`}>
-                       <td className="py-3">{format(parseISO(exp.date), 'dd/MM/yyyy')}</td>
+                       <td className="py-3">{format(parseISO(exp.date || new Date().toISOString()), 'dd/MM/yyyy')}</td>
                        <td className="py-3 font-medium">{exp.description}</td>
                        <td className="py-3"><span className="px-2 py-1 bg-gray-500/10 rounded-md text-xs">{exp.category}</span></td>
                        <td className="py-3 font-bold text-red-500">-${Number(exp.amount).toLocaleString()}</td>
@@ -450,7 +460,7 @@ export default function FinanceManager() {
                        </td>
                      </tr>
                    ))}
-                   {expenses.length === 0 && <tr><td colSpan="5" className="py-6 text-center text-gray-500">No hay egresos registrados.</td></tr>}
+                   {(expenses || []).length === 0 && <tr><td colSpan="5" className="py-6 text-center text-gray-500">No hay egresos registrados.</td></tr>}
                  </tbody>
                </table>
              </div>
@@ -504,13 +514,13 @@ export default function FinanceManager() {
           <div className={`p-6 rounded-2xl border lg:col-span-2 ${isDark ? 'bg-dark-card border-dark-border' : 'bg-white border-light-border'}`}>
              <h3 className="text-lg font-bold mb-4">Plantilla de Empleados</h3>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-               {employees.map(emp => (
+               {(employees || []).map(emp => (
                  <div key={emp.id} className={`p-4 rounded-xl border ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-gray-50 border-gray-200'} relative flex flex-col justify-between`}>
                    <div>
                      <h4 className="font-bold text-lg">{emp.name}</h4>
                      <p className="text-sm text-gold-500 font-semibold">{emp.role}</p>
                      <div className="mt-3 space-y-1 text-xs text-gray-500">
-                       <p>Base: <strong className={isDark ? 'text-gray-300' : 'text-gray-700'}>${emp.baseSalary.toLocaleString()}</strong> ({emp.frequency})</p>
+                       <p>Base: <strong className={isDark ? 'text-gray-300' : 'text-gray-700'}>${(Number(emp.baseSalary) || 0).toLocaleString()}</strong> ({emp.frequency})</p>
                        <p className="flex items-center gap-1 text-blue-400"><Calendar size={12}/> Próx. Pago: {getNextPaymentDate(emp)}</p>
                      </div>
                    </div>
@@ -541,7 +551,7 @@ export default function FinanceManager() {
                    )}
                  </div>
                ))}
-               {employees.length === 0 && <p className="text-sm text-gray-500 col-span-2">No hay empleados registrados.</p>}
+               {(employees || []).length === 0 && <p className="text-sm text-gray-500 col-span-2">No hay empleados registrados.</p>}
              </div>
 
              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 mt-8">
@@ -565,17 +575,17 @@ export default function FinanceManager() {
                    </tr>
                  </thead>
                  <tbody>
-                   {payrollHistory.map(p => (
+                   {(payrollHistory || []).map(p => (
                      <tr key={p.id} className={`border-b ${isDark ? 'border-dark-border/50' : 'border-gray-100'} text-sm`}>
-                       <td className="py-3">{format(parseISO(p.date), 'dd/MM/yyyy')}</td>
+                       <td className="py-3">{format(parseISO(p.date || new Date().toISOString()), 'dd/MM/yyyy')}</td>
                        <td className="py-3 font-medium">{p.employeeName}</td>
                        <td className="py-3">
                          <span className="text-green-500 text-xs">+{p.bonus}</span> / <span className="text-red-500 text-xs">-{p.deduction}</span>
                        </td>
-                       <td className="py-3 font-bold text-blue-500">${p.totalPaid.toLocaleString()}</td>
+                       <td className="py-3 font-bold text-blue-500">${(Number(p.totalPaid) || 0).toLocaleString()}</td>
                      </tr>
                    ))}
-                   {payrollHistory.length === 0 && <tr><td colSpan="4" className="py-6 text-center text-gray-500">No hay pagos de nómina registrados.</td></tr>}
+                   {(payrollHistory || []).length === 0 && <tr><td colSpan="4" className="py-6 text-center text-gray-500">No hay pagos de nómina registrados.</td></tr>}
                  </tbody>
                </table>
              </div>

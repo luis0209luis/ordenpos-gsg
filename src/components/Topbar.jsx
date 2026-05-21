@@ -5,11 +5,11 @@ import { useInventory } from '../context/InventoryContext'
 import { Sun, Moon, Bell, Search, Menu, AlertTriangle, Package } from 'lucide-react'
 
 export default function Topbar({ title, onMenuClick }) {
-  const { theme, toggleTheme } = useTheme()
+  const { theme, toggleTheme } = useTheme() || {}
   const isDark = theme === 'dark'
   
-  const { products } = useInventory()
-  const { settings } = useSettings()
+  const { products = [] } = useInventory() || {}
+  const { settings = {} } = useSettings() || {}
   const navigate = useNavigate()
 
   // Notifications State
@@ -55,13 +55,13 @@ export default function Topbar({ title, onMenuClick }) {
   }, [showSearch])
 
   // Calculate notifications
-  const lowStockProducts = products.filter(p => p.stock_actual <= (p.stock_minimo ?? settings.globalMinStock))
+  const lowStockProducts = (products || []).filter(p => p.stock_actual <= (p.stock_minimo ?? settings?.globalMinStock))
   const notificationsCount = lowStockProducts.length
 
   // Calculate search results
-  const searchResults = searchQuery.trim() === '' ? [] : products.filter(p => 
-    p.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.categoria.toLowerCase().includes(searchQuery.toLowerCase())
+  const searchResults = searchQuery.trim() === '' ? [] : (products || []).filter(p => 
+    (p.nombre || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (p.categoria || '').toLowerCase().includes(searchQuery.toLowerCase())
   ).slice(0, 8)
 
   return (

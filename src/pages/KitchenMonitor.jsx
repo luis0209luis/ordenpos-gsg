@@ -2,13 +2,14 @@ import React from 'react'
 import { useInventory } from '../context/InventoryContext'
 import { useTheme } from '../context/AppContext'
 import { CheckCircle, Clock } from 'lucide-react'
+import { getPaddedTurnNumber } from '../utils/turnHelper'
 
 export default function KitchenMonitor() {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
   const { salesHistory, updateKitchenStatus } = useInventory()
 
-  const pendingOrders = salesHistory.filter(sale => sale.kitchenStatus === 'pending')
+  const pendingOrders = (salesHistory || []).filter(sale => sale?.kitchenStatus === 'pending')
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] animate-fade-in relative">
@@ -47,7 +48,7 @@ export default function KitchenMonitor() {
                 <div className={`p-4 border-b flex justify-between items-center
                   ${isDark ? 'border-dark-border bg-dark-surface' : 'border-light-border bg-gray-50'}`}>
                   <span className={`font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    Orden #{order.id.slice(-6)}
+                    Orden #{getPaddedTurnNumber(order, salesHistory)}
                   </span>
                   <span className={`text-xs px-2 py-1 rounded font-bold
                     ${isDark ? 'bg-orange-500/20 text-orange-400' : 'bg-orange-100 text-orange-600'}`}>
@@ -94,9 +95,9 @@ export default function KitchenMonitor() {
                 <div className="p-4 pt-0">
                   <button
                     onClick={() => {
-                      updateKitchenStatus(order.id, 'ready')
+                      updateKitchenStatus(order?.id, 'ready')
                       // Toast notification check could be added here
-                      alert(`Orden #${order.id.slice(-6)} marcada como LISTA.`)
+                      alert(`Orden #${getPaddedTurnNumber(order, salesHistory)} marcada como LISTA.`)
                     }}
                     className="w-full py-5 rounded-2xl font-black text-lg tracking-widest uppercase flex items-center justify-center gap-2 bg-emerald-500 text-white shadow-lg hover:bg-emerald-400 active:scale-95 transition-all"
                   >
