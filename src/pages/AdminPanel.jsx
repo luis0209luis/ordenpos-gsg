@@ -2,23 +2,24 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTheme } from '../context/AppContext'
 import { useSubscription } from '../context/SubscriptionContext'
-import { Lock, Unlock, Gift, ShieldAlert, Undo2, Plus, X, Building2, KeyRound, BellRing, LayoutDashboard, Users, CircleDollarSign, Settings, ShieldCheck, Activity, Trash2, Pencil } from 'lucide-react'
+import { Lock, Unlock, Gift, ShieldAlert, Undo2, Plus, X, Building2, KeyRound, BellRing, LayoutDashboard, Users, CircleDollarSign, Settings, ShieldCheck, Activity, Trash2, Pencil, Menu } from 'lucide-react'
 import AdminMasterStats from '../components/AdminMasterStats'
 import SystemSecurity from '../components/SystemSecurity'
 import AdminMasterFinance from '../components/AdminMasterFinance'
 import { sendWelcomeEmail } from '../utils/emailService'
 import { insertLog } from '../utils/logger'
-
+ 
 export default function AdminPanel() {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
   const { forceBlock, forceUnblock, addMonth, removeMonth, fechaVencimiento, daysRemaining, phase } = useSubscription()
-
+ 
   const [password, setPassword] = useState('')
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [error, setError] = useState(false)
   const [activeTab, setActiveTab] = useState('dashboard') // 'dashboard', 'clients', 'finance', 'settings', 'security'
-
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+ 
   // CRUD Negocios
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingBizId, setEditingBizId] = useState(null)
@@ -576,13 +577,37 @@ export default function AdminPanel() {
   }
 
   return (
-    <div className="h-full flex gap-6 p-4 lg:p-6 max-w-[1600px] mx-auto animate-fade-in">
+    <div className="h-full flex flex-col lg:flex-row gap-4 lg:gap-6 p-2 md:p-4 lg:p-6 max-w-[1600px] mx-auto animate-fade-in">
       
-      {/* Sidebar Navigation */}
+      {/* Mobile Top Bar */}
+      <div className={`lg:hidden flex items-center justify-between p-4 rounded-3xl border
+        ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
+        <div className="flex items-center gap-3">
+          <button 
+            type="button"
+            onClick={() => setIsMobileMenuOpen(true)}
+            className={`p-2 rounded-xl border transition-colors ${isDark ? 'border-dark-border bg-dark-card text-gold-500 hover:bg-dark-bg' : 'border-light-border bg-light-surface text-gold-600 hover:bg-gray-100'}`}
+          >
+            <Menu size={20} />
+          </button>
+          <span className="font-display font-black text-sm gold-text tracking-tight uppercase">Admin Master</span>
+        </div>
+        <button 
+          type="button"
+          onClick={() => setIsAuthenticated(false)}
+          className="px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 transition-colors"
+        >
+          Bloquear
+        </button>
+      </div>
+
+      {/* Sidebar Navigation (Collapsible drawer on mobile) */}
       <div className={`w-64 flex-shrink-0 flex flex-col rounded-3xl border shadow-soft-lg overflow-hidden
+        fixed inset-y-4 left-4 z-50 transform ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-[280px]'}
+        lg:relative lg:translate-x-0 lg:inset-y-0 lg:left-0 lg:z-auto transition-transform duration-300 ease-in-out
         ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
         
-        <div className={`p-6 border-b ${isDark ? 'border-dark-border' : 'border-light-border'}`}>
+        <div className={`p-6 border-b ${isDark ? 'border-dark-border' : 'border-light-border'} flex items-center justify-between`}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gold-gradient text-dark-bg flex items-center justify-center">
               <ShieldAlert size={20} />
@@ -592,6 +617,13 @@ export default function AdminPanel() {
               <p className={`text-[10px] uppercase tracking-widest font-bold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Admin Master</p>
             </div>
           </div>
+          <button 
+            type="button"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className={`lg:hidden p-1.5 rounded-lg border transition-colors ${isDark ? 'border-dark-border text-gray-400 hover:bg-white/5' : 'border-light-border text-gray-500 hover:bg-black/5'}`}
+          >
+            <X size={16} />
+          </button>
         </div>
 
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
@@ -607,7 +639,11 @@ export default function AdminPanel() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                type="button"
+                onClick={() => {
+                  setActiveTab(tab.id)
+                  setIsMobileMenuOpen(false)
+                }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all
                   ${isActive 
                     ? 'bg-gold-500/10 text-gold-500' 
@@ -625,7 +661,11 @@ export default function AdminPanel() {
 
         <div className={`p-4 border-t ${isDark ? 'border-dark-border' : 'border-light-border'}`}>
            <button 
-            onClick={() => setIsAuthenticated(false)}
+            type="button"
+            onClick={() => {
+              setIsAuthenticated(false)
+              setIsMobileMenuOpen(false)
+            }}
             className="w-full py-3 rounded-xl font-bold uppercase tracking-widest text-xs bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-colors"
           >
             Bloquear Panel
@@ -633,8 +673,16 @@ export default function AdminPanel() {
         </div>
       </div>
 
+      {/* Mobile Menu Backdrop */}
+      {isMobileMenuOpen && (
+        <div 
+          onClick={() => setIsMobileMenuOpen(false)}
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs lg:hidden"
+        />
+      )}
+
       {/* Main Content Area */}
-      <div className={`flex-1 rounded-3xl border shadow-soft-lg overflow-y-auto p-6 lg:p-8
+      <div className={`flex-1 rounded-3xl border shadow-soft-lg overflow-y-auto p-4 md:p-6 lg:p-8 min-w-0
         ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
         {renderTabContent()}
       </div>
