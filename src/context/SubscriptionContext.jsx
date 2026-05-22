@@ -72,8 +72,12 @@ export function SubscriptionProvider({ children }) {
     if (biz.name && biz.name.toLowerCase() === 'xdrinks') {
       return new Date('2026-04-18').toISOString();
     }
-    // Treat startDate as the expiration date; ignore stored daysRemaining for calculation
-    return new Date(biz.startDate).toISOString();
+    
+    // The true expiration date is the start_date plus the total accumulated days_remaining
+    const expiration = new Date(biz.startDate);
+    const storedDays = biz.daysRemaining || biz.days_remaining || 0;
+    expiration.setDate(expiration.getDate() + storedDays);
+    return expiration.toISOString();
   }
 
   const fechaVencimiento = computeExpirationDate(myBiz)
