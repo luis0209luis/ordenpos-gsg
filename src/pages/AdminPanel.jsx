@@ -31,10 +31,9 @@ export default function AdminPanel() {
     name: '', owner: '', cedula: '', email: '', phone: '', startDate: new Date().toISOString().split('T')[0] 
   })
 
-  const [planPrice, setPlanPrice] = useState(() => {
-    const saved = localStorage.getItem('ordenpos_subscription_price')
-    return saved ? Number(saved) : 50000
-  })
+  const [planPrice, setPlanPrice] = useState(50000)
+  const [savingPrice, setSavingPrice] = useState(false)
+  const [priceSaved, setPriceSaved] = useState(false)
 
   const [settingsMaster, setSettingsMaster] = useState(() => {
     const saved = localStorage.getItem('ordenpos_settings_master')
@@ -61,12 +60,42 @@ export default function AdminPanel() {
         }
       }
       loadBusinesses()
+
+      // Cargar precio global desde Supabase
+      const loadPrice = async () => {
+        try {
+          const { data } = await supabase
+            .from('system_settings')
+            .select('value')
+            .eq('key', 'subscription_price')
+            .single()
+          if (data?.value) setPlanPrice(Number(data.value))
+        } catch {
+          const saved = localStorage.getItem('ordenpos_subscription_price')
+          if (saved) setPlanPrice(Number(saved))
+        }
+      }
+      loadPrice()
     }
   }, [isAuthenticated])
 
-  useEffect(() => {
-    localStorage.setItem('ordenpos_subscription_price', planPrice)
-  }, [planPrice])
+  const handleSavePrice = async () => {
+    setSavingPrice(true)
+    try {
+      await supabase
+        .from('system_settings')
+        .upsert({ key: 'subscription_price', value: String(planPrice) }, { onConflict: 'key' })
+      // También guardar en localStorage como caché local
+      localStorage.setItem('ordenpos_subscription_price', planPrice)
+      setPriceSaved(true)
+      setTimeout(() => setPriceSaved(false), 3000)
+      insertLog({ type: 'success', action: 'update_price', business_id: 'master', username: 'Superadmin', message: `Precio de suscripción actualizado a $${planPrice} COP` })
+    } catch (e) {
+      console.error('Error guardando precio:', e)
+    } finally {
+      setSavingPrice(false)
+    }
+  }
 
   useEffect(() => {
     localStorage.setItem('ordenpos_settings_master', JSON.stringify(settingsMaster))
@@ -437,9 +466,24 @@ export default function AdminPanel() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-1.5">
                   <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Costo de Renovación (COP)</label>
-                  <input type="number" value={planPrice} onChange={e => setPlanPrice(Number(e.target.value))}
-                    className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
-                    ${isDark ? 'bg-dark-bg border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`} />
+                  <div className="flex gap-2">
+                    <input type="number" value={planPrice} onChange={e => setPlanPrice(Number(e.target.value))}
+                      className={`flex-1 px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
+                      ${isDark ? 'bg-dark-bg border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`} />
+                    <button
+                      onClick={handleSavePrice}
+                      disabled={savingPrice}
+                      className={`px-5 py-3 rounded-2xl font-bold text-sm uppercase tracking-wider transition-all
+                        ${priceSaved
+                          ? 'bg-green-500 text-white'
+                          : 'bg-gold-gradient text-black shadow-gold-md hover:scale-[1.02] active:scale-[0.98]'
+                        } disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap`}>
+                      {savingPrice ? '...' : priceSaved ? '✓ Guardado' : 'Guardar'}
+                    </button>
+                  </div>
+                  <p className={`text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
+                    Este precio se aplica globalmente a todos los equipos.
+                  </p>
                 </div>
               </div>
             </div>

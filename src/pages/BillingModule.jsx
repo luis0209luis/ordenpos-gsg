@@ -6,6 +6,7 @@ import { useTheme, useAuth } from '../context/AppContext'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CreditCard, QrCode, CheckCircle, X, ShieldCheck, Crown, ArrowRight, Zap, Bell } from 'lucide-react'
 import { insertLog } from '../utils/logger'
+import { supabase } from '../lib/supabase'
 
 export default function BillingModule() {
   const { fechaVencimiento, daysRemaining, phase, addMonth } = useSubscription()
@@ -21,10 +22,26 @@ export default function BillingModule() {
   const [loadingMP, setLoadingMP] = useState(false)
   const [errorMessage, setErrorMessage] = useState(null)
 
-  const [planPrice, setPlanPrice] = useState(() => {
-    const saved = localStorage.getItem('ordenpos_subscription_price')
-    return saved ? Number(saved) : 50000
-  })
+  const [planPrice, setPlanPrice] = useState(50000)
+
+  // Cargar precio global desde Supabase
+  useEffect(() => {
+    async function loadGlobalPrice() {
+      try {
+        const { data } = await supabase
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'subscription_price')
+          .single()
+        if (data?.value) setPlanPrice(Number(data.value))
+      } catch {
+        // Fallback a localStorage si Supabase falla
+        const saved = localStorage.getItem('ordenpos_subscription_price')
+        if (saved) setPlanPrice(Number(saved))
+      }
+    }
+    loadGlobalPrice()
+  }, [])
 
   // Format the date beautifully
   const formattedDate = fechaVencimiento
