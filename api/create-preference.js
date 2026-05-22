@@ -3,6 +3,12 @@ export default async function handler(req, res) {
   try {
     const { price, businessId } = req.body;
     const host = req.headers.host;
+
+    // Validate token
+    if (!process.env.MP_ACCESS_TOKEN) {
+      console.error('[create-preference] MP_ACCESS_TOKEN is not defined in environment!');
+      return res.status(500).json({ error: 'Configuración de pago incompleta. Contacta al soporte.' });
+    }
     const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
       method: 'POST',
       headers: {
