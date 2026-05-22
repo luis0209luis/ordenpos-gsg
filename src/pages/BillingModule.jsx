@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useSubscription } from '../context/SubscriptionContext'
@@ -18,9 +18,14 @@ export default function BillingModule() {
   const location = useLocation()
 
   const [showModal, setShowModal] = useState(false)
-  const [paymentStep, setPaymentStep] = useState('options') // 'options', 'qr', 'card', 'processing', 'success'
+  const [paymentStep, setPaymentStep] = useState('options') // 'options', 'qr', 'card', 'processing', 'success', 'verifying'
   const [loadingMP, setLoadingMP] = useState(false)
   const [errorMessage, setErrorMessage] = useState(null)
+
+  // Payment Verification States
+  const [activePaymentId, setActivePaymentId] = useState(null)
+  const [verifying, setVerifying] = useState(false)
+  const [lastPaymentId, setLastPaymentId] = useState(() => localStorage.getItem('ordenpos_last_payment_id') || null)
 
   const [planPrice, setPlanPrice] = useState(50000)
 
@@ -101,88 +106,154 @@ export default function BillingModule() {
     }
   }
 
+  const handleVerifyPayment = useCallback(async (idToVerify) => {
+    if (!idToVerify || !user || !user.businessId) return
+
+    setPaymentStep('verifying')
+    setVerifying(true)
+    setErrorMessage(null)
+
+    try {
+      // 1. Check in database if it was already processed
+      const { data: existingLogs, error: logError } = await supabase
+        .from('system_logs')
+        .select('id')
+        .eq('action', 'add_month')
+        .ilike('message', `%${idToVerify}%`)
+
+      if (logError) console.error("Error checking system_logs:", logError)
+
+      const processedKey = `mp_processed_${idToVerify}`
+      const isAlreadyProcessedLocal = sessionStorage.getItem(processedKey) === 'true'
+      const isAlreadyProcessedDB = existingLogs && existingLogs.length > 0
+
+      if (isAlreadyProcessedDB || isAlreadyProcessedLocal) {
+        // Already credited. Show success.
+        sessionStorage.setItem(processedKey, 'true')
+        setPaymentStep('success')
+        setShowModal(true)
+        return
+      }
+
+      // 2. Fetch status from Mercado Pago securely via serverless function
+      const apiBase = window.location.hostname === 'localhost' ? 'http://localhost:3001' : ''
+      const res = await fetch(`${apiBase}/api/verify-payment?id=${idToVerify}`)
+      if (!res.ok) throw new Error('Error al verificar el estado del pago')
+      
+      const data = await res.json()
+
+      // 3. Process status
+      if (data.status === 'approved') {
+        sessionStorage.setItem(processedKey, 'true')
+        
+        await addMonth(30)
+
+        const businessName = user?.businessName || user?.username || 'Local'
+        insertLog({
+          type: 'success',
+          action: 'add_month',
+          business_id: user?.businessId,
+          username: user?.username || 'Cliente',
+          message: `Renovación exitosa con Mercado Pago (ID Transacción: ${idToVerify})`
+        })
+
+        try {
+          const AudioContext = window.AudioContext || window.webkitAudioContext
+          const ctx = new AudioContext()
+          const osc = ctx.createOscillator()
+          const gainNode = ctx.createGain()
+          osc.type = 'sine'
+          osc.frequency.setValueAtTime(987.77, ctx.currentTime) // B5
+          osc.frequency.exponentialRampToValueAtTime(1318.51, ctx.currentTime + 0.1) // E6
+          gainNode.gain.setValueAtTime(0, ctx.currentTime)
+          gainNode.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05)
+          gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5)
+          osc.connect(gainNode)
+          gainNode.connect(ctx.destination)
+          osc.start()
+          osc.stop(ctx.currentTime + 0.5)
+        } catch (e) { console.log('Audio no soportado', e) }
+
+        const savedMaster = localStorage.getItem('ordenpos_settings_master')
+        const settingsMaster = savedMaster ? JSON.parse(savedMaster) : { enablePanel: true, enableEmail: false, enableWhatsApp: false }
+
+        if (settingsMaster.enablePanel) {
+          const notificationMsg = `¡Ingreso recibido! ${businessName} renovó su suscripción por $${planPrice} (Mercado Pago)`
+          const existingNotifications = JSON.parse(localStorage.getItem('ordenpos_master_notifications') || '[]')
+          localStorage.setItem('ordenpos_master_notifications', JSON.stringify([{ id: Date.now(), text: notificationMsg, date: new Date().toISOString() }, ...existingNotifications]))
+        }
+
+        if (settingsMaster.enableEmail && settingsMaster.email_notificaciones) {
+          fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: settingsMaster.email_notificaciones, businessName, amount: planPrice, days: 30 })
+          }).catch(err => console.error("Error enviando email", err))
+        }
+
+        setPaymentStep('success')
+        setShowModal(true)
+        
+        // Limpiar el localStorage ya que el pago fue procesado con éxito
+        if (localStorage.getItem('ordenpos_last_payment_id') === idToVerify) {
+          localStorage.removeItem('ordenpos_last_payment_id')
+          setLastPaymentId(null)
+        }
+
+      } else if (data.status === 'pending' || data.status === 'in_process') {
+        setPaymentStep('pending')
+        setShowModal(true)
+      } else if (data.status === 'rejected' || data.status === 'cancelled') {
+        setPaymentStep('failure')
+        setShowModal(true)
+      } else {
+        setPaymentStep('pending')
+        setShowModal(true)
+      }
+
+    } catch (err) {
+      console.error("Error verificando pago:", err)
+      setErrorMessage(err.message || 'Error de conexión al verificar')
+      setPaymentStep('pending')
+      setShowModal(true)
+    } finally {
+      setVerifying(false)
+    }
+  }, [addMonth, user, planPrice])
+
   useEffect(() => {
     const params = new URLSearchParams(location.search)
     const status = params.get('status')
     const paymentId = params.get('payment_id') || params.get('payment.id')
     const extRef = params.get('external_reference')
 
-    // Esperar a que el usuario esté cargado para evitar condiciones de carrera en el primer render
     if (status && user && user.businessId) {
-      const processedKey = `mp_processed_${paymentId || 'default'}`
-      const isAlreadyProcessed = sessionStorage.getItem(processedKey)
-      
+      if (paymentId) {
+        localStorage.setItem('ordenpos_last_payment_id', paymentId)
+        setLastPaymentId(paymentId)
+        setActivePaymentId(paymentId)
+      }
+
       if (status === 'success') {
-        if (!isAlreadyProcessed) {
-          sessionStorage.setItem(processedKey, 'true')
-          
-          // Sumar 30 días de suscripción en Supabase
-          addMonth(30)
-
-          const businessName = user?.businessName || user?.username || 'Local'
-          
-          // Registrar log
-          insertLog({
-            type: 'success',
-            action: 'add_month',
-            business_id: user?.businessId || extRef || 'desconocido',
-            username: user?.username || 'Cliente',
-            message: `Renovación exitosa con Mercado Pago (ID Transacción: ${paymentId})`
-          })
-
-          // Sonido de caja registradora
-          try {
-            const AudioContext = window.AudioContext || window.webkitAudioContext
-            const ctx = new AudioContext()
-            const osc = ctx.createOscillator()
-            const gainNode = ctx.createGain()
-            osc.type = 'sine'
-            osc.frequency.setValueAtTime(987.77, ctx.currentTime) // B5
-            osc.frequency.exponentialRampToValueAtTime(1318.51, ctx.currentTime + 0.1) // E6
-            gainNode.gain.setValueAtTime(0, ctx.currentTime)
-            gainNode.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05)
-            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5)
-            osc.connect(gainNode)
-            gainNode.connect(ctx.destination)
-            osc.start()
-            osc.stop(ctx.currentTime + 0.5)
-          } catch (e) { console.log('Audio no soportado', e) }
-
-          // Alertas de Panel Master y Nodemailer
-          const savedMaster = localStorage.getItem('ordenpos_settings_master')
-          const settingsMaster = savedMaster ? JSON.parse(savedMaster) : { enablePanel: true, enableEmail: false, enableWhatsApp: false }
-
-          if (settingsMaster.enablePanel) {
-            const notificationMsg = `¡Ingreso recibido! ${businessName} renovó su suscripción por $${planPrice} (Mercado Pago)`
-            const existingNotifications = JSON.parse(localStorage.getItem('ordenpos_master_notifications') || '[]')
-            localStorage.setItem('ordenpos_master_notifications', JSON.stringify([{ id: Date.now(), text: notificationMsg, date: new Date().toISOString() }, ...existingNotifications]))
-          }
-
-          if (settingsMaster.enableEmail && settingsMaster.email_notificaciones) {
-            fetch('/api/send-email', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                to: settingsMaster.email_notificaciones,
-                businessName: businessName,
-                amount: planPrice,
-                days: 30
-              })
-            }).catch(err => console.error("Error enviando email", err))
-          }
+        if (paymentId) {
+          // Verify on success as well to ensure robust validation & no double credits
+          handleVerifyPayment(paymentId)
         }
-
-        setPaymentStep('success')
-        setShowModal(true)
-      } else if (status === 'failure' || status === 'pending') {
-        setPaymentStep(status)
+      } else if (status === 'pending' || status === 'in_process') {
+        if (paymentId) {
+          handleVerifyPayment(paymentId)
+        } else {
+          setPaymentStep('pending')
+          setShowModal(true)
+        }
+      } else if (status === 'failure') {
+        setPaymentStep('failure')
         setShowModal(true)
       }
 
-      // Limpiar los query params para que no se reprocesen al recargar
       navigate('/payments', { replace: true })
     }
-  }, [location.search, navigate, user, planPrice, addMonth])
+  }, [location.search, navigate, user, handleVerifyPayment])
 
   const simulatePaymentSuccess = () => {
     // Retained for backward compatibility if needed elsewhere, or removed. Let's just remove it and use Mercado Pago.
@@ -244,6 +315,34 @@ export default function BillingModule() {
             </div>
           </div>
         </div>
+
+        {lastPaymentId && (
+          <div className={`mb-8 p-6 rounded-2xl border flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in
+            ${isDark ? 'bg-gold-500/10 border-gold-500/30' : 'bg-gold-50/80 border-gold-500/30'}`}>
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-gold-500/20 flex items-center justify-center shrink-0">
+                <Bell className="text-gold-500 animate-bounce" size={24} />
+              </div>
+              <div>
+                <h4 className={`font-bold font-display text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  ¿Tienes un pago reciente en verificación?
+                </h4>
+                <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Si pagaste por Nequi o PSE y tu suscripción aún no se activa, revisa su estado. (ID: {lastPaymentId})
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setActivePaymentId(lastPaymentId)
+                handleVerifyPayment(lastPaymentId)
+              }}
+              disabled={verifying}
+              className="w-full md:w-auto px-6 py-3 rounded-xl font-bold uppercase tracking-wider bg-gold-gradient text-black hover:scale-105 active:scale-95 transition-all shadow-gold-md shrink-0">
+              {verifying && activePaymentId === lastPaymentId ? 'Verificando...' : 'Verificar Pago'}
+            </button>
+          </div>
+        )}
 
         {/* Info Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -472,9 +571,31 @@ export default function BillingModule() {
               </div>
             )}
 
+            {/* STEP: Verifying */}
+            {paymentStep === 'verifying' && (
+              <div className="animate-fade-in text-center py-10 px-4">
+                <div className="w-20 h-20 mx-auto mb-6 relative">
+                  <div className="absolute inset-0 border-4 border-gold-500/30 border-t-gold-500 rounded-full animate-spin" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <ShieldCheck size={28} className="text-gold-500 animate-pulse" />
+                  </div>
+                </div>
+                <h2 className="text-2xl font-display font-black text-white mb-2">Verificando Pago</h2>
+                <p className="text-gray-400 text-sm">
+                  Consultando el estado de tu transacción de forma segura con Mercado Pago. Por favor, espera...
+                </p>
+              </div>
+            )}
+
             {/* STEP: Pending */}
             {paymentStep === 'pending' && (
               <div className="animate-fade-in text-center py-4">
+                {errorMessage && (
+                  <div className="mb-6 p-4 rounded-xl border border-red-500/20 bg-red-500/10 text-red-500 text-sm font-semibold text-left">
+                    ⚠️ {errorMessage}
+                  </div>
+                )}
+
                 <div className="w-24 h-24 rounded-full bg-yellow-500/20 flex items-center justify-center mx-auto mb-6 relative">
                   <div className="absolute inset-0 rounded-full bg-yellow-500/20 animate-ping" />
                   <Bell size={48} className="text-yellow-500 relative z-10" />
@@ -482,19 +603,34 @@ export default function BillingModule() {
 
                 <h2 className="text-3xl font-display font-black text-yellow-500 mb-4">Pago Pendiente</h2>
                 <p className={`text-lg mb-8 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Tu transacción está en verificación.
+                  Tu transacción aún está en proceso de verificación.
                   <br />
-                  <span className="text-sm mt-2 block opacity-70">Mercado Pago está procesando tu pago. Tan pronto como sea aprobado, tu suscripción se renovará de forma automática.</span>
+                  <span className="text-sm mt-2 block opacity-70">
+                    Los pagos con Nequi o PSE pueden tardar unos minutos en acreditarse en Mercado Pago.
+                  </span>
                 </p>
 
-                <button
-                  onClick={() => {
-                    setShowModal(false)
-                    setPaymentStep('options')
-                  }}
-                  className="w-full py-4 rounded-xl font-bold uppercase tracking-widest bg-dark-bg text-white border border-dark-border hover:bg-gray-800 transition-colors">
-                  Volver al Panel
-                </button>
+                <div className="space-y-3">
+                  <button
+                    onClick={() => handleVerifyPayment(activePaymentId || lastPaymentId)}
+                    disabled={verifying}
+                    className="w-full py-4 rounded-xl font-bold uppercase tracking-widest bg-gold-gradient text-black hover:scale-105 active:scale-95 transition-all shadow-gold-md flex items-center justify-center gap-2">
+                    {verifying ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                        Verificando...
+                      </>
+                    ) : 'Verificar Estado Nuevamente'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowModal(false)
+                      setPaymentStep('options')
+                    }}
+                    className="w-full py-4 rounded-xl font-bold uppercase tracking-widest bg-dark-bg text-white border border-dark-border hover:bg-gray-800 transition-colors">
+                    Cerrar y Volver al Panel
+                  </button>
+                </div>
               </div>
             )}
 
