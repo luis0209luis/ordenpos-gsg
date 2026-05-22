@@ -68,11 +68,6 @@ export function SubscriptionProvider({ children }) {
       defaultDate.setDate(defaultDate.getDate() + 2); // Default active
       return defaultDate.toISOString();
     }
-    // For testing Xdrinks, force expiration to 2026-04-18 (past date)
-    if (biz.name && biz.name.toLowerCase() === 'xdrinks') {
-      return new Date('2026-04-18').toISOString();
-    }
-    
     // The true expiration date is the start_date plus the total accumulated days_remaining
     const expiration = new Date(biz.startDate);
     const storedDays = biz.daysRemaining || biz.days_remaining || 0;
