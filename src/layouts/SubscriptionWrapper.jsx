@@ -116,39 +116,59 @@ export default function SubscriptionWrapper({ children }) {
 
         {/* Fase 2: Modal Automático (Día -3 a -5) — Solo visible para admin */}
         {phase === 2 && showPhase2Modal && isBusinessAdmin && (
-          <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div className={`relative w-full max-w-md p-8 rounded-3xl shadow-2xl animate-slide-in-up border
-              ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
-              
-              {/* Imagen de confianza */}
-              <div className="flex justify-center mb-6">
-                <img src="/trust_payment.png" alt="Pago seguro" className="w-28 h-28 object-contain rounded-2xl" />
-              </div>
+          <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+            <div className="relative w-full max-w-md rounded-3xl shadow-2xl animate-slide-in-up border border-white/10 bg-[#0f0f0f] overflow-hidden">
 
-              <h2 className={`font-display font-bold text-2xl text-center mb-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                ¡Hola de nuevo, <span className="text-transparent bg-clip-text bg-gold-gradient">{getDisplayName()}</span>!
-              </h2>
-              <p className={`text-center text-sm font-medium mb-6 leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                Parece que olvidaste pagar tu suscripción. 
-                No queremos que pierdas el acceso a tus herramientas vitales.
-              </p>
+              {/* Gold top accent line */}
+              <div className="absolute top-0 left-0 right-0 h-[2px] bg-gold-gradient" />
 
-              {/* Info de seguridad */}
-              <div className={`flex items-center gap-3 p-3 rounded-xl mb-6 ${isDark ? 'bg-dark-card border border-dark-border' : 'bg-gray-50 border border-gray-200'}`}>
-                <ShieldCheck size={20} className="text-green-500 shrink-0" />
-                <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Tu pago es procesado de forma segura por Mercado Pago. Aceptamos Nequi, Daviplata, PSE y tarjetas.
-                </span>
-              </div>
+              {/* Glow decoration */}
+              <div className="absolute -top-16 -right-16 w-56 h-56 bg-gold-500/8 rounded-full blur-3xl pointer-events-none" />
 
-              <div className="flex flex-col gap-3">
-                <button onClick={() => navigate('/payments')} className="w-full py-3.5 rounded-2xl font-bold uppercase tracking-widest bg-gold-gradient text-black shadow-gold-md hover:scale-105 transition-transform">
-                  Proceder al Pago
-                </button>
-                <button onClick={() => setShowPhase2Modal(false)} className={`w-full py-3.5 rounded-2xl font-bold uppercase tracking-widest border transition-colors
-                  ${isDark ? 'border-dark-border text-gray-400 hover:text-white' : 'border-light-border text-gray-500 hover:text-gray-900'}`}>
-                  Recordarme luego
-                </button>
+              <div className="relative z-10 p-8">
+
+                {/* Icon with pulse ring */}
+                <div className="relative w-20 h-20 mx-auto mb-6">
+                  <div className="absolute inset-0 rounded-full bg-gold-gradient opacity-10 animate-pulse" />
+                  <div className="w-20 h-20 rounded-full border border-gold-500/30 bg-[#1a1a1a] flex items-center justify-center">
+                    <CreditCard size={34} className="text-gold-500" />
+                  </div>
+                </div>
+
+                {/* Title */}
+                <h2 className="font-display font-bold text-2xl text-white text-center mb-1">
+                  ¡Hola, <span className="text-transparent bg-clip-text bg-gold-gradient">{getDisplayName()}</span>!
+                </h2>
+                <p className="text-center text-sm text-gray-500 mb-6 leading-relaxed">
+                  Tu suscripción está vencida. Renueva ahora para no perder el acceso a tus herramientas.
+                </p>
+
+                {/* Security badge */}
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-white/5 border border-white/8 mb-6">
+                  <ShieldCheck size={16} className="text-green-400 shrink-0" />
+                  <span className="text-xs text-gray-400">
+                    Pago seguro · <span className="text-white font-semibold">Nequi, Daviplata, PSE</span> y tarjetas de crédito/débito
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => navigate('/payments')}
+                    className="group relative w-full py-3.5 rounded-2xl font-bold uppercase tracking-widest bg-gold-gradient text-black shadow-gold-md hover:scale-[1.03] active:scale-[0.98] transition-all duration-200 overflow-hidden flex items-center justify-center gap-2">
+                    <CreditCard size={16} className="relative z-10" />
+                    <span className="relative z-10">Renovar Ahora</span>
+                    <div className="absolute inset-0 -translate-x-full bg-white/20 skew-x-[30deg] group-hover:translate-x-full transition-transform duration-700" />
+                  </button>
+                  <button
+                    onClick={() => setShowPhase2Modal(false)}
+                    className="w-full py-3.5 rounded-2xl font-bold uppercase tracking-widest border border-white/10 text-gray-500 hover:text-gray-300 hover:bg-white/5 transition-all">
+                    Recordarme luego
+                  </button>
+                </div>
+
+                <p className="text-center text-xs text-gray-700 mt-4">
+                  Procesado de forma segura por Mercado Pago
+                </p>
               </div>
             </div>
           </div>

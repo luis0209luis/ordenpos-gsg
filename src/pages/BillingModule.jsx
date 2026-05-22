@@ -252,9 +252,15 @@ export default function BillingModule() {
 
       {/* Payment Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-            <div className={`relative w-full max-w-2xl p-10 rounded-[2rem] shadow-2xl border bg-white/80 backdrop-blur-md overflow-hidden
-              ${isDark ? 'border-dark-border' : 'border-light-border'}`}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+            <div className="relative w-full max-w-md rounded-[2rem] shadow-2xl border border-white/10 bg-[#0f0f0f] overflow-hidden">
+
+              {/* Gold top accent line */}
+              <div className="absolute top-0 left-0 right-0 h-[2px] bg-gold-gradient" />
+
+              {/* Glow background decoration */}
+              <div className="absolute -top-20 -right-20 w-64 h-64 bg-gold-500/8 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-20 -left-20 w-48 h-48 bg-gold-500/5 rounded-full blur-3xl pointer-events-none" />
 
             {/* Modal Close Button */}
             {paymentStep !== 'processing' && (
@@ -263,29 +269,62 @@ export default function BillingModule() {
                   setShowModal(false)
                   setPaymentStep('options')
                 }}
-                className="absolute top-6 right-6 p-2 rounded-full hover:bg-gray-500/20 transition-colors z-10">
-                <X size={20} className={isDark ? 'text-gray-400' : 'text-gray-600'} />
+                className="absolute top-5 right-5 p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors z-10 border border-white/10">
+                <X size={16} className="text-gray-400" />
               </button>
             )}
 
             {/* STEP: Options */}
             {paymentStep === 'options' && (
-              <div className="animate-fade-in text-center">
-                <div className="w-20 h-20 rounded-full bg-gold-500/10 flex items-center justify-center mx-auto mb-6">
-                  <CreditCard size={40} className="text-gold-500" />
+              <div className="animate-fade-in p-8">
+
+                {/* Icon */}
+                <div className="relative w-20 h-20 mx-auto mb-6">
+                  <div className="absolute inset-0 rounded-full bg-gold-gradient opacity-15 animate-pulse" />
+                  <div className="w-20 h-20 rounded-full border border-gold-500/30 bg-[#1a1a1a] flex items-center justify-center">
+                    <CreditCard size={36} className="text-gold-500" />
+                  </div>
                 </div>
-                <h2 className="text-2xl font-display font-black mb-2">Renovar Suscripción</h2>
-                <p className={`text-sm mb-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Renueva 30 días de ORDENPOS por solo <strong>${planPrice.toLocaleString('es-CO')} COP</strong> (IVA incluido).
-                  <br />
-                  <span className="text-xs mt-1 block opacity-70">Acepta Nequi, Daviplata, PSE, tarjetas de crédito y débito.</span>
+
+                {/* Title */}
+                <h2 className="text-2xl font-display font-black text-white text-center mb-1">
+                  Renovar Suscripción
+                </h2>
+                <p className="text-gray-500 text-sm text-center mb-6">
+                  Extiende tu acceso a ORDENPOS por 30 días más
                 </p>
 
+                {/* Price pill */}
+                <div className="flex items-center justify-center mb-6">
+                  <div className="inline-flex items-baseline gap-1.5 px-6 py-3 rounded-2xl bg-gold-500/10 border border-gold-500/20">
+                    <span className="text-3xl font-display font-black text-transparent bg-clip-text bg-gold-gradient">
+                      ${planPrice.toLocaleString('es-CO')}
+                    </span>
+                    <span className="text-gold-500/70 font-bold text-sm">COP</span>
+                    <span className="text-gray-500 text-xs ml-1">/ mes · IVA incl.</span>
+                  </div>
+                </div>
+
+                {/* Payment methods */}
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-white/5 border border-white/8 mb-6">
+                  <ShieldCheck size={16} className="text-green-400 shrink-0" />
+                  <span className="text-xs text-gray-400">
+                    Pago seguro · Acepta <span className="text-white font-semibold">Nequi, Daviplata, PSE</span> y tarjetas de crédito/débito
+                  </span>
+                </div>
+
+                {/* CTA Button */}
                 <button
                   onClick={handleMercadoPagoCheckout}
-                  className="w-full py-4 rounded-xl font-bold uppercase tracking-widest bg-gold-gradient text-black shadow-gold-md hover:scale-105 transition-transform">
-                  Pagar Aquí
+                  className="group relative w-full py-4 rounded-2xl font-bold uppercase tracking-widest bg-gold-gradient text-black shadow-gold-md hover:scale-[1.03] active:scale-[0.98] transition-all duration-200 overflow-hidden flex items-center justify-center gap-2">
+                  <CreditCard size={18} className="relative z-10" />
+                  <span className="relative z-10">Pagar Ahora</span>
+                  <div className="absolute inset-0 -translate-x-full bg-white/20 skew-x-[30deg] group-hover:translate-x-full transition-transform duration-700" />
                 </button>
+
+                <p className="text-center text-xs text-gray-600 mt-4">
+                  Procesado de forma segura por Mercado Pago
+                </p>
               </div>
             )}
 
