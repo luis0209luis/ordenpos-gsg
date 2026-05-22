@@ -57,8 +57,8 @@ export default function BillingModule() {
       console.log("Preferencia creada con éxito:", data)
       if (data.init_point) {
         // Abrir en ventana emergente en vez de redirigir
-        const width = 600
-        const height = 700
+        const width = 800
+        const height = 900
         const left = (window.screen.width - width) / 2
         const top = (window.screen.height - height) / 2
         window.open(

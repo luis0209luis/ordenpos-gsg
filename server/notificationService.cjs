@@ -113,7 +113,10 @@ app.post('/api/create-preference', async (req, res) => {
           currency_id: "COP"
         }
       ],
-      back_urls: {
+      payment_methods: {
+        excluded_payment_methods: [],
+        excluded_payment_types: []
+      },
         // En local, redirigimos a localhost:5173
         success: `http://localhost:5173/payments?status=success`,
         failure: `http://localhost:5173/payments?status=failure`,
