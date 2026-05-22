@@ -1,7 +1,7 @@
 const express = require('express');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
-require('dotenv').config({ path: require('path').resolve(__dirname, '../.env.local') });
+const fetch = require('node-fetch');
 
 const app = express();
 app.use(cors());
@@ -117,6 +117,7 @@ app.post('/api/create-preference', async (req, res) => {
         excluded_payment_methods: [],
         excluded_payment_types: []
       },
+      back_urls: {
         // En local, redirigimos a localhost:5173
         success: `http://localhost:5173/payments?status=success`,
         failure: `http://localhost:5173/payments?status=failure`,

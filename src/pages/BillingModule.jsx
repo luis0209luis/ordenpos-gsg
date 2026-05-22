@@ -57,8 +57,8 @@ export default function BillingModule() {
       console.log("Preferencia creada con éxito:", data)
       if (data.init_point) {
         // Abrir en ventana emergente en vez de redirigir
-        const width = 800
-        const height = 900
+        const width = 1024
+        const height = 768
         const left = (window.screen.width - width) / 2
         const top = (window.screen.height - height) / 2
         window.open(
@@ -253,8 +253,8 @@ export default function BillingModule() {
       {/* Payment Modal */}
       {showModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className={`relative w-full max-w-lg p-8 rounded-[2rem] shadow-2xl border overflow-hidden
-            ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
+            <div className={`relative w-full max-w-2xl p-10 rounded-[2rem] shadow-2xl border bg-white/80 backdrop-blur-md overflow-hidden
+              ${isDark ? 'border-dark-border' : 'border-light-border'}`}>
 
             {/* Modal Close Button */}
             {paymentStep !== 'processing' && (
