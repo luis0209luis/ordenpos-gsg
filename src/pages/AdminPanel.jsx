@@ -64,13 +64,15 @@ export default function AdminPanel() {
       // Cargar precio global desde Supabase
       const loadPrice = async () => {
         try {
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from('system_settings')
             .select('value')
             .eq('key', 'subscription_price')
             .single()
+          if (error) throw error
           if (data?.value) setPlanPrice(Number(data.value))
-        } catch {
+        } catch (err) {
+          console.error("Error cargando precio de Supabase:", err)
           const saved = localStorage.getItem('ordenpos_subscription_price')
           if (saved) setPlanPrice(Number(saved))
         }
@@ -82,9 +84,11 @@ export default function AdminPanel() {
   const handleSavePrice = async () => {
     setSavingPrice(true)
     try {
-      await supabase
+      const { error } = await supabase
         .from('system_settings')
         .upsert({ key: 'subscription_price', value: String(planPrice) }, { onConflict: 'key' })
+      if (error) throw error
+      
       // También guardar en localStorage como caché local
       localStorage.setItem('ordenpos_subscription_price', planPrice)
       setPriceSaved(true)
@@ -92,6 +96,7 @@ export default function AdminPanel() {
       insertLog({ type: 'success', action: 'update_price', business_id: 'master', username: 'Superadmin', message: `Precio de suscripción actualizado a $${planPrice} COP` })
     } catch (e) {
       console.error('Error guardando precio:', e)
+      alert('Error guardando el precio en Supabase: ' + (e.message || e.code || 'Desconocido'))
     } finally {
       setSavingPrice(false)
     }

@@ -28,13 +28,15 @@ export default function BillingModule() {
   useEffect(() => {
     async function loadGlobalPrice() {
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('system_settings')
           .select('value')
           .eq('key', 'subscription_price')
           .single()
+        if (error) throw error
         if (data?.value) setPlanPrice(Number(data.value))
-      } catch {
+      } catch (err) {
+        console.error("Error cargando precio de Supabase:", err)
         // Fallback a localStorage si Supabase falla
         const saved = localStorage.getItem('ordenpos_subscription_price')
         if (saved) setPlanPrice(Number(saved))

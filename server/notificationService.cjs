@@ -104,6 +104,7 @@ app.post('/api/create-preference', async (req, res) => {
       return res.status(500).json({ success: false, error: 'Mercado Pago credentials not configured on the local server.' });
     }
 
+    const origin = process.env.NODE_ENV === 'production' ? 'https://ordenpos-gsg.vercel.app' : 'http://localhost:5173';
     const preferenceBody = {
       items: [
         {
@@ -118,10 +119,9 @@ app.post('/api/create-preference', async (req, res) => {
         excluded_payment_types: []
       },
       back_urls: {
-        // En local, redirigimos a localhost:5173
-        success: `http://localhost:5173/payments?status=success`,
-        failure: `http://localhost:5173/payments?status=failure`,
-        pending: `http://localhost:5173/payments?status=pending`
+        success: `${origin}/payments?status=success`,
+        failure: `${origin}/payments?status=failure`,
+        pending: `${origin}/payments?status=pending`
       },
       external_reference: businessId
     };
@@ -143,7 +143,7 @@ app.post('/api/create-preference', async (req, res) => {
     }
 
     const data = await response.json();
-    return res.status(200).json({ 
+    return res.status(200).json({
       id: data.id,
       init_point: data.init_point,
       sandbox_init_point: data.sandbox_init_point
