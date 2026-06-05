@@ -36,7 +36,7 @@ export default function Dashboard() {
         const product = (products || []).find(p => p && String(p.id) === id)
         if (!product) return null // Filtrar productos eliminados
 
-        const imgInfo = getSmartImage(product.nombre, product.image)
+        const imgInfo = getSmartImage(product.nombre, product.image_url)
         return {
           id,
           name: product.nombre,
@@ -53,7 +53,7 @@ export default function Dashboard() {
     if (top.length === 0) {
       return (products || []).slice(0, 5).map(p => {
         if (!p) return null
-        const imgInfo = getSmartImage(p.nombre, p.image)
+        const imgInfo = getSmartImage(p.nombre, p.image_url)
         return {
           id: p.id,
           name: p.nombre,

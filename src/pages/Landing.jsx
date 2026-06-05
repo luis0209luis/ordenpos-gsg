@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Building2, User, Phone, CheckCircle2, MessageCircle, X, ChevronRight, ShoppingCart, Package, Bike, ChefHat, BarChart3, Users, ClipboardList, Headphones, Zap, Sun, Moon, Mail, Croissant, GlassWater, UtensilsCrossed, TrendingUp, Clock, ShieldCheck, Wallet } from 'lucide-react'
+import { Search, Building2, User, Phone, CheckCircle2, MessageCircle, X, ChevronRight, ShoppingCart, Package, Bike, ChefHat, BarChart3, Users, ClipboardList, Headphones, Zap, Sun, Moon, Mail, Croissant, GlassWater, UtensilsCrossed, TrendingUp, Clock, ShieldCheck, Wallet, ArrowUpRight, Globe } from 'lucide-react'
 import OrdenposLogo from '../components/OrdenposLogo'
 import { useTheme } from '../context/AppContext'
 
@@ -118,6 +118,7 @@ export default function Landing() {
   const [showPrivacy, setShowPrivacy] = useState(false)
   const [showTerms, setShowTerms] = useState(false)
   const [showContact, setShowContact] = useState(false)
+  const [logoError, setLogoError] = useState(false)
 
   const handleRegisterSubmit = async (e) => {
     e.preventDefault()
@@ -125,7 +126,8 @@ export default function Landing() {
 
     // 1. Enviar correo silenciosamente a través del backend
     try {
-      await fetch('http://localhost:3001/api/send-registration', {
+      const apiBase = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
+      await fetch(`${apiBase}/api/send-registration`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
@@ -172,11 +174,40 @@ export default function Landing() {
         className={`fixed top-0 left-0 w-full z-50 px-6 py-4 flex items-center justify-between border-b ${isDark ? 'border-white/10' : 'border-gray-200'}`}
         style={{ backgroundColor: isDark ? 'rgba(10, 10, 15, 0.92)' : 'rgba(255, 255, 255, 0.97)', backdropFilter: 'blur(0px)' }}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
           <OrdenposLogo size={36} className={isDark ? "text-white" : "text-gray-900"} />
           <span className={`font-display font-black text-2xl tracking-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>ORDENPOS</span>
         </div>
+
+        {/* Navigation Links */}
+        <div className="hidden md:flex items-center gap-8 text-sm font-semibold">
+          <button
+            onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
+            className={`transition-colors ${isDark ? 'text-gray-300 hover:text-[#FFD700]' : 'text-gray-600 hover:text-[#B8860B]'}`}
+          >
+            Funcionalidades
+          </button>
+          <button
+            onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
+            className={`transition-colors ${isDark ? 'text-gray-300 hover:text-[#FFD700]' : 'text-gray-600 hover:text-[#B8860B]'}`}
+          >
+            ¿Cómo empiezo?
+          </button>
+          <button
+            onClick={() => document.getElementById('about-us')?.scrollIntoView({ behavior: 'smooth' })}
+            className={`transition-colors ${isDark ? 'text-gray-300 hover:text-[#FFD700]' : 'text-gray-600 hover:text-[#B8860B]'}`}
+          >
+            Sobre Nosotros
+          </button>
+        </div>
+
         <div className="flex items-center gap-4">
+          <button
+            onClick={() => document.getElementById('about-us')?.scrollIntoView({ behavior: 'smooth' })}
+            className={`md:hidden text-xs font-bold px-3 py-1.5 rounded-full border transition-all ${isDark ? 'border-white/10 text-gray-300 hover:border-[#FFD700]/30 hover:text-white' : 'border-gray-200 text-gray-600 hover:border-yellow-400 hover:text-gray-900'}`}
+          >
+            Sobre Nosotros
+          </button>
           <button onClick={toggleTheme} className={`p-3 md:p-2 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center ${isDark ? 'text-white hover:bg-white/10' : 'text-gray-600 hover:bg-gray-100'}`}>
             {isDark ? <Sun size={24} className="md:w-5 md:h-5" /> : <Moon size={24} className="md:w-5 md:h-5" />}
           </button>
@@ -544,7 +575,7 @@ export default function Landing() {
 
       {/* ── SECCIÓN B: Features ── */}
       <div className={`h-px bg-gradient-to-r from-transparent ${isDark ? 'via-[#1E1E2E]' : 'via-gray-200'} to-transparent`} />
-      <section className={`py-24 px-6 ${isDark ? 'bg-[#080810]' : 'bg-gray-50'}`}>
+      <section id="features" className={`py-24 px-6 ${isDark ? 'bg-[#080810]' : 'bg-gray-50'}`}>
         <div className="max-w-6xl mx-auto">
           <div className={`h-px bg-gradient-to-r from-transparent ${isDark ? 'via-[#FFD700]/20' : 'via-gray-300'} to-transparent mb-16`} />
           <div className="text-center mb-16">
@@ -599,7 +630,7 @@ export default function Landing() {
 
       {/* ── SECCIÓN C: How It Works ── */}
       <div className={`h-px bg-gradient-to-r from-transparent ${isDark ? 'via-[#1E1E2E]' : 'via-gray-200'} to-transparent`} />
-      <section className={`py-24 px-6 ${isDark ? 'bg-[#0A0A0F]' : 'bg-white'}`}>
+      <section id="how-it-works" className={`py-24 px-6 ${isDark ? 'bg-[#0A0A0F]' : 'bg-white'}`}>
         <div className="max-w-6xl mx-auto text-center">
           <div className={`h-px bg-gradient-to-r from-transparent ${isDark ? 'via-[#FFD700]/20' : 'via-gray-300'} to-transparent mb-16`} />
           <h2 className={`font-display font-bold text-3xl md:text-4xl mb-20 ${isDark ? 'text-white' : 'text-gray-900'}`}>
@@ -639,6 +670,115 @@ export default function Landing() {
                 <div className={`mt-6 h-0.5 w-8 rounded-full ${isDark ? 'bg-[#FFD700]' : 'bg-[#D4A800]'}`} />
               </motion.div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── SECCIÓN C2: Sobre Nosotros ── */}
+      <div className={`h-px bg-gradient-to-r from-transparent ${isDark ? 'via-[#1E1E2E]' : 'via-gray-200'} to-transparent`} />
+      <section id="about-us" className={`py-24 px-6 relative overflow-hidden ${isDark ? 'bg-[#08080C]' : 'bg-[#FAFAFA]'}`}>
+        {/* Glow effects for dark mode */}
+        {isDark && (
+          <>
+            <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[300px] rounded-full blur-[120px] pointer-events-none opacity-30 bg-gradient-to-r from-yellow-600/30 via-indigo-600/20 to-purple-600/30" />
+            <div className="absolute bottom-0 right-10 w-72 h-72 rounded-full blur-[100px] pointer-events-none opacity-20 bg-yellow-500/10" />
+          </>
+        )}
+
+        <div className="max-w-6xl mx-auto relative z-10">
+          <div className="text-center mb-16">
+            <h2 className={`font-display font-black text-3xl md:text-5xl ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              Sobre Nosotros
+            </h2>
+            <div className="h-1 w-20 bg-[#FFD700] rounded-full mx-auto mt-4"></div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+            {/* Text description */}
+            <div className="lg:col-span-7 space-y-6">
+              <h3 className={`font-display font-bold text-2xl md:text-3xl leading-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Respaldo Corporativo y Solidez Tecnológica
+              </h3>
+              <p className={`text-base md:text-lg leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                <strong>ORDENPOS</strong> es una plataforma SaaS de última generación diseñada para transformar la gestión operativa y financiera de negocios gastronómicos, cafeterías y reposterías.
+              </p>
+              <p className={`text-base md:text-lg leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                Desarrollado y administrado por <strong>GEMA SYSTEMS GROUP</strong>, firma especializada en el diseño de interfaces (UI/UX) y sistemas robustos a medida. Nuestro compromiso es entregar herramientas veloces, intuitivas y con soporte preferencial para potenciar el crecimiento de tu empresa.
+              </p>
+            </div>
+
+            {/* Gema Systems Group Card / Cobranding */}
+            <div className="lg:col-span-5">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6 }}
+                className={`p-8 rounded-3xl relative overflow-hidden border-2 transition-all group ${
+                  isDark 
+                    ? 'bg-[#11111A] border-[#1E1E2E] hover:border-[#FFD700]/30 shadow-[0_10px_30px_rgba(0,0,0,0.5)]' 
+                    : 'bg-white border-gray-200 hover:border-yellow-400 shadow-lg'
+                }`}
+              >
+                <div className="absolute top-0 right-0 w-32 h-32 bg-[#FFD700]/5 rounded-bl-full pointer-events-none group-hover:bg-[#FFD700]/10 transition-colors" />
+                
+                <div className="flex items-center gap-4 mb-6">
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden ${
+                    isDark ? 'bg-gradient-to-br from-yellow-400/10 to-yellow-600/20 text-[#FFD700]' : 'bg-yellow-50 text-[#B8860B] border border-yellow-200'
+                  }`}>
+                    {logoError ? (
+                      <Building2 size={28} />
+                    ) : (
+                      <img 
+                        src={isDark ? "/gema_logo_black.png" : "/gema_logo.png"} 
+                        alt="Gema Systems Group Logo" 
+                        onError={() => setLogoError(true)} 
+                        className="w-full h-full object-contain p-1"
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-xs uppercase tracking-widest font-black text-[#FFD700]">CASA DESARROLLADORA</span>
+                    <h4 className={`font-display font-black text-xl leading-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>GEMA SYSTEMS GROUP</h4>
+                  </div>
+                </div>
+
+                <div className={`space-y-4 text-sm mb-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-[#FFD700]" />
+                    <span>Diseño de Interfaces UI/UX Premium</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-[#FFD700]" />
+                    <span>Sistemas Robustos & Escalabilidad SaaS</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-[#FFD700]" />
+                    <span>Soporte Técnico de Nivel Preferencial</span>
+                  </div>
+                </div>
+
+                {/* Lead Gen Button */}
+                <div className="space-y-3">
+                  <span className={`block text-xs font-semibold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                    ¿Necesitas un sistema a medida para tu empresa?
+                  </span>
+                  
+                  <a
+                    href="https://gemasystemsgroup.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full py-4 px-6 rounded-2xl bg-[#FFD700] text-gray-900 font-extrabold text-sm hover:scale-[1.02] active:scale-[0.98] transition-all text-center"
+                    style={{ boxShadow: '0 4px 15px rgba(255,215,0,0.2)' }}
+                  >
+                    <Globe size={18} />
+                    Visitar sitio web
+                    <ArrowUpRight size={16} />
+                  </a>
+                </div>
+
+              </motion.div>
+            </div>
           </div>
         </div>
       </section>
@@ -740,7 +880,7 @@ export default function Landing() {
         </div>
 
         <div className={`pt-8 border-t text-center text-sm ${isDark ? 'border-[#1E1E2E] text-gray-600' : 'border-gray-200 text-gray-400'}`}>
-          © {new Date().getFullYear()} ORDENPOS. Todos los derechos reservados.
+          © 2026 ORDENPOS. Desarrollado y administrado por GEMA SYSTEMS GROUP.
         </div>
       </footer>
 

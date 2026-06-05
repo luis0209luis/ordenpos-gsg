@@ -80,7 +80,7 @@ export default function Reports() {
           {payload.map((entry, index) => (
             <p key={index} className="flex items-center gap-2" style={{ color: entry.color }}>
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-              {entry.name}: {entry.name === 'Ventas' || entry.name === 'Ingresos' ? '$' : ''}{entry.value.toFixed(2)}
+              {entry.name}: {entry.name === 'Ventas' || entry.name === 'Ingresos' ? '$' : ''}{Math.round(entry.value).toLocaleString('es-CO')}
             </p>
           ))}
         </div>
@@ -132,7 +132,7 @@ export default function Reports() {
             </div>
             <div>
               <p className={`text-sm font-semibold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Ingresos Totales</p>
-              <h3 className={`font-display font-bold text-2xl ${isDark ? 'text-white' : 'text-gray-900'}`}>${totalIngresos.toFixed(2)}</h3>
+              <h3 className={`font-display font-bold text-2xl ${isDark ? 'text-white' : 'text-gray-900'}`}>${Math.round(totalIngresos).toLocaleString('es-CO')}</h3>
             </div>
           </div>
         </div>

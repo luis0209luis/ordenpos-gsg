@@ -5,9 +5,11 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const { businessName, ownerName, phone } = req.body
   try {
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'ORDENPOS <onboarding@resend.dev>'
+    const adminEmail = process.env.ADMIN_EMAIL || 'gemasystemgroup@gmail.com'
     await resend.emails.send({
-      from: 'ORDENPOS <no-reply@tudominio.com>',
-      to: 'tu_correo_admin@tudominio.com',
+      from: fromEmail,
+      to: adminEmail,
       subject: `Nuevo Registro - ${businessName}`,
       html: `<p>Se ha registrado un nuevo negocio:</p>
              <ul>

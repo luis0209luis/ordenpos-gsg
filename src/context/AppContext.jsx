@@ -212,7 +212,8 @@ const defaultSettings = {
   deliveryCostPerKm: 1200,
   payrollMonthlyDay: 30,
   payrollBiweeklyDay1: 15,
-  payrollBiweeklyDay2: 30
+  payrollBiweeklyDay2: 30,
+  categoryOrder: []
 }
 
 export function SettingsProvider({ children }) {
@@ -239,6 +240,11 @@ export function SettingsProvider({ children }) {
           supabase.from('staff').select('*').eq('business_id', bid)
         ])
 
+        let localCatOrder = []
+        try {
+          localCatOrder = JSON.parse(localStorage.getItem(`ordenpos_cat_order_${bid}`)) || []
+        } catch (e) {}
+
         if (settingsRes.data) {
           const db = settingsRes.data
           setSettings({
@@ -252,10 +258,11 @@ export function SettingsProvider({ children }) {
             deliveryCostPerKm: db.delivery_cost_per_km !== null && db.delivery_cost_per_km !== undefined ? db.delivery_cost_per_km : defaultSettings.deliveryCostPerKm,
             payrollMonthlyDay: db.payroll_monthly_day || defaultSettings.payrollMonthlyDay,
             payrollBiweeklyDay1: db.payroll_biweekly_day1 || defaultSettings.payrollBiweeklyDay1,
-            payrollBiweeklyDay2: db.payroll_biweekly_day2 || defaultSettings.payrollBiweeklyDay2
+            payrollBiweeklyDay2: db.payroll_biweekly_day2 || defaultSettings.payrollBiweeklyDay2,
+            categoryOrder: db.category_order || localCatOrder
           })
         } else {
-          setSettings({ ...defaultSettings, businessName: user?.businessName || 'Mi Negocio' })
+          setSettings({ ...defaultSettings, businessName: user?.businessName || 'Mi Negocio', categoryOrder: localCatOrder })
         }
         
         if (feedbacksRes.data) setFeedbacks(feedbacksRes.data)
@@ -312,6 +319,35 @@ export function SettingsProvider({ children }) {
       }
     }
     return { success: false, error: "ID de negocio no válido" }
+  }
+
+  const updateCategoryOrder = async (newOrder) => {
+    const updated = { ...settings, categoryOrder: newOrder }
+    
+    // Save locally immediately
+    try {
+      localStorage.setItem(`ordenpos_cat_order_${bid}`, JSON.stringify(newOrder))
+    } catch (e) {
+      console.error("localStorage error:", e)
+    }
+
+    if (isValidUUID(bid)) {
+      try {
+        const { error } = await supabase
+          .from('settings')
+          .update({ category_order: newOrder })
+          .eq('business_id', bid)
+        
+        if (error) {
+          console.warn("Failed to sync category order to database (column might not be ready yet):", error.message)
+        }
+      } catch (e) {
+        console.warn("Error updating category order in Supabase:", e)
+      }
+    }
+    
+    setSettings(updated)
+    return { success: true }
   }
 
   const addFeedback = async (text) => {
@@ -418,6 +454,26 @@ export function SettingsProvider({ children }) {
       return { success: false, error: e.message || "Error de red al cambiar contraseña" }
     }
   }
+
+  const updateStaffInfo = async (id, { name, username }) => {
+    try {
+      const payload = {}
+      if (name !== undefined) payload.name = name
+      if (username !== undefined) payload.username = username
+      const { error } = await supabase.from('staff').update(payload).eq('id', id)
+      if (error) {
+        console.error("Error updating staff info:", error)
+        let friendlyMsg = error.message
+        if (error.code === '23505') friendlyMsg = "El nombre de usuario ya está en uso. Elige otro."
+        return { success: false, error: friendlyMsg }
+      }
+      setStaff(prev => prev.map(s => s.id === id ? { ...s, ...payload } : s))
+      return { success: true }
+    } catch (e) {
+      console.error(e)
+      return { success: false, error: e.message || "Error de red al actualizar información" }
+    }
+  }
   
   const updateStaffPermissions = async (id, permissions) => {
     try {
@@ -443,9 +499,9 @@ export function SettingsProvider({ children }) {
 
   return (
     <SettingsContext.Provider value={{ 
-      settings, updateSettings, feedbacks, addFeedback, deleteFeedback, 
+      settings, updateSettings, updateCategoryOrder, feedbacks, addFeedback, deleteFeedback, 
       toggleFeedbackStatus, staff, addStaff, deleteStaff, changeStaffPassword, 
-      updateStaffPermissions, loading, isConfigured
+      updateStaffInfo, updateStaffPermissions, loading, isConfigured
     }}>
       {children}
     </SettingsContext.Provider>

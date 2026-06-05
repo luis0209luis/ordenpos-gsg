@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useTheme, useSettings, useAuth } from '../context/AppContext'
-import { Settings as SettingsIcon, Save, Building2, FileText, MapPin, Hash, DollarSign, Bell, Users, UserPlus, Trash2, KeyRound, ShieldCheck, CheckSquare, Square, Calendar, User } from 'lucide-react'
+import { Settings as SettingsIcon, Save, Building2, FileText, MapPin, Hash, DollarSign, Bell, Users, UserPlus, Trash2, KeyRound, ShieldCheck, CheckSquare, Square, Calendar, User, Pencil } from 'lucide-react'
 
 const defaultPermissions = {
   CAJERO: ['/pos', '/deliveries', '/inventory'],
@@ -24,7 +24,7 @@ export default function Settings() {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
   const { user, changePassword } = useAuth()
-  const { settings, updateSettings, staff, addStaff, deleteStaff, changeStaffPassword, updateStaffPermissions, isConfigured } = useSettings()
+  const { settings, updateSettings, staff, addStaff, deleteStaff, changeStaffPassword, updateStaffInfo, updateStaffPermissions, isConfigured } = useSettings()
 
   const [formData, setFormData] = useState(settings)
   const [isSaved, setIsSaved] = useState(false)
@@ -42,6 +42,10 @@ export default function Settings() {
 
   // Staff password state
   const [editingStaffId, setEditingStaffId] = useState(null)
+  // Staff info edit state
+  const [editingInfoId, setEditingInfoId] = useState(null)
+  const [editStaffInfo, setEditStaffInfo] = useState({ name: '', username: '' })
+  const [staffInfoMessage, setStaffInfoMessage] = useState('')
   const [staffPass, setStaffPass] = useState({ newPass: '', confirmPass: '' })
   const [staffPassMessage, setStaffPassMessage] = useState('')
   const [editStaffPermissions, setEditStaffPermissions] = useState([])
@@ -170,6 +174,24 @@ export default function Settings() {
       if (res && !res.success) {
         alert(res.error || 'Error al eliminar el miembro de personal.')
       }
+    }
+  }
+
+  const handleStaffInfoUpdate = async (id) => {
+    setStaffInfoMessage('')
+    if (!editStaffInfo.name.trim() || !editStaffInfo.username.trim()) {
+      setStaffInfoMessage('El nombre y el usuario son obligatorios.')
+      return
+    }
+    const res = await updateStaffInfo(id, { name: editStaffInfo.name.trim(), username: editStaffInfo.username.trim() })
+    if (res?.success) {
+      setStaffInfoMessage('¡Información actualizada correctamente!')
+      setTimeout(() => {
+        setStaffInfoMessage('')
+        setEditingInfoId(null)
+      }, 2000)
+    } else {
+      setStaffInfoMessage(res?.error || 'Error al actualizar la información.')
     }
   }
 
@@ -512,6 +534,7 @@ export default function Settings() {
                   <table className="w-full text-left text-sm">
                     <thead>
                       <tr className={`border-b ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-200'}`}>
+                        <th className={`px-4 py-3 font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Nombre</th>
                         <th className={`px-4 py-3 font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Usuario</th>
                         <th className={`px-4 py-3 font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Rol</th>
                         <th className="px-4 py-3 text-center">Acción</th>
@@ -519,6 +542,7 @@ export default function Settings() {
                     </thead>
                     <tbody>
                       <tr className={`border-b ${isDark ? 'border-dark-border text-gray-400' : 'border-gray-200 text-gray-600'}`}>
+                        <td className="px-4 py-3 font-bold">{settings?.ownerName || '—'}</td>
                         <td className="px-4 py-3 font-bold">admin (Dueño)</td>
                         <td className="px-4 py-3"><span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-gold-500/10 text-gold-500">Admin</span></td>
                         <td className="px-4 py-3 text-center text-xs">
@@ -529,7 +553,7 @@ export default function Settings() {
                       </tr>
                       {isEditingAdminPass && (
                         <tr className={`${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-200'} border-b`}>
-                          <td colSpan="3" className="px-4 py-3">
+                          <td colSpan="4" className="px-4 py-3">
                             <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
                               <div className="flex-1 space-y-1 w-full">
                                 <label className={`text-[10px] uppercase font-bold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Nueva Contraseña</label>
@@ -550,25 +574,87 @@ export default function Settings() {
                       {businessStaff.map(s => (
                         <React.Fragment key={s.id}>
                           <tr className={`border-b last:border-0 ${isDark ? 'border-dark-border text-gray-400' : 'border-gray-200 text-gray-600'}`}>
+                            <td className="px-4 py-3 font-medium">{s.name || '—'}</td>
                             <td className="px-4 py-3">{s.username}</td>
                             <td className="px-4 py-3"><span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-blue-500/10 text-blue-500">{s.role}</span></td>
                             <td className="px-4 py-3 text-center flex items-center justify-center gap-1">
                               <button type="button" onClick={() => {
-                                setEditingStaffId(editingStaffId === s.id ? null : s.id)
-                                setStaffPass({ newPass: '', confirmPass: '' })
-                                setStaffPassMessage('')
-                                setEditStaffPermissions(s.permissions || [])
-                              }} className="p-1.5 rounded-lg text-gold-500 hover:bg-gold-500/10 transition-colors" title="Editar Cajero">
+                                if (editingInfoId === s.id) {
+                                  setEditingInfoId(null)
+                                } else {
+                                  setEditingInfoId(s.id)
+                                  setEditStaffInfo({ name: s.name || '', username: s.username || '' })
+                                  setStaffInfoMessage('')
+                                  setEditingStaffId(null)
+                                }
+                              }} className="p-1.5 rounded-lg text-blue-400 hover:bg-blue-500/10 transition-colors" title="Editar Información">
+                                <Pencil size={16} />
+                              </button>
+                              <button type="button" onClick={() => {
+                                if (editingStaffId === s.id) {
+                                  setEditingStaffId(null)
+                                } else {
+                                  setEditingStaffId(s.id)
+                                  setStaffPass({ newPass: '', confirmPass: '' })
+                                  setStaffPassMessage('')
+                                  setEditStaffPermissions(s.permissions || [])
+                                  setEditingInfoId(null)
+                                }
+                              }} className="p-1.5 rounded-lg text-gold-500 hover:bg-gold-500/10 transition-colors" title="Editar Contraseña y Permisos">
                                 <KeyRound size={16} />
                               </button>
-                              <button type="button" onClick={() => handleDeleteStaff(s.id)} className="p-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors" title="Eliminar Cajero">
+                              <button type="button" onClick={() => handleDeleteStaff(s.id)} className="p-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors" title="Eliminar">
                                 <Trash2 size={16} />
                               </button>
                             </td>
                           </tr>
+                          {editingInfoId === s.id && (
+                            <tr className={`${isDark ? 'bg-dark-card border-dark-border' : 'bg-blue-50/50 border-blue-100'} border-b`}>
+                              <td colSpan="4" className="px-4 py-4">
+                                <p className={`text-[10px] uppercase font-bold mb-3 flex items-center gap-1.5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
+                                  <Pencil size={11} /> Editar Información de {s.name || s.username}
+                                </p>
+                                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+                                  <div className="flex-1 space-y-1 w-full">
+                                    <label className={`text-[10px] uppercase font-bold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Nombre Completo</label>
+                                    <input
+                                      type="text"
+                                      value={editStaffInfo.name}
+                                      onChange={e => setEditStaffInfo(prev => ({ ...prev, name: e.target.value }))}
+                                      placeholder="Ej. María González"
+                                      className={`w-full px-3 py-2 rounded-xl border text-sm outline-none focus:border-blue-400 ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}
+                                    />
+                                  </div>
+                                  <div className="flex-1 space-y-1 w-full">
+                                    <label className={`text-[10px] uppercase font-bold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Nombre de Usuario</label>
+                                    <input
+                                      type="text"
+                                      value={editStaffInfo.username}
+                                      onChange={e => setEditStaffInfo(prev => ({ ...prev, username: e.target.value }))}
+                                      placeholder="Ej. maria_cajero"
+                                      className={`w-full px-3 py-2 rounded-xl border text-sm outline-none focus:border-blue-400 ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStaffInfoUpdate(s.id)}
+                                    disabled={!editStaffInfo.name.trim() || !editStaffInfo.username.trim()}
+                                    className="px-5 py-2 w-full sm:w-auto rounded-xl text-xs font-bold uppercase bg-blue-500 text-white disabled:opacity-50 transition-all hover:scale-105 shrink-0"
+                                  >
+                                    Guardar
+                                  </button>
+                                </div>
+                                {staffInfoMessage && (
+                                  <p className={`mt-2 text-xs font-semibold ${staffInfoMessage.includes('correctamente') ? 'text-emerald-500' : 'text-red-500'}`}>
+                                    {staffInfoMessage}
+                                  </p>
+                                )}
+                              </td>
+                            </tr>
+                          )}
                           {editingStaffId === s.id && (
                             <tr className={`${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-200'} border-b`}>
-                              <td colSpan="3" className="px-4 py-3">
+                              <td colSpan="4" className="px-4 py-3">
                                 <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
                                   <div className="flex-1 space-y-1 w-full">
                                     <label className={`text-[10px] uppercase font-bold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Nueva Contraseña ({s.username})</label>

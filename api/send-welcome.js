@@ -14,8 +14,9 @@ export default async function handler(req, res) {
     const resend = new Resend(process.env.RESEND_API_KEY)
     console.log('Instancia de Resend creada. Intentando enviar email a:', to)
 
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'ORDENPOS <onboarding@resend.dev>'
     const response = await resend.emails.send({
-      from: 'ORDENPOS <onboarding@resend.dev>',
+      from: fromEmail,
       to,
       subject: `¡Bienvenido a ORDENPOS, ${ownerName}!`,
       html: `

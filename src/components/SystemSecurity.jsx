@@ -9,25 +9,53 @@ export default function SystemSecurity({ businesses }) {
   
   const [logs, setLogs] = useState([])
   const [loadingLogs, setLoadingLogs] = useState(true)
+  const [logsError, setLogsError] = useState('')
 
   // Support Tickets State
   const [tickets, setTickets] = useState([])
   const [loadingTickets, setLoadingTickets] = useState(true)
+  const [ticketsError, setTicketsError] = useState('')
   const [replyingTo, setReplyingTo] = useState(null)
   const [replyMessage, setReplyMessage] = useState('')
+  const [submittingReply, setSubmittingReply] = useState(false)
+  const [replyError, setReplyError] = useState('')
 
   useEffect(() => {
     async function fetchLogsAndTickets() {
       setLoadingLogs(true)
       setLoadingTickets(true)
+      setLogsError('')
+      setTicketsError('')
       try {
-        const { data: logsData } = await supabase.from('system_logs').select('*').order('created_at', { ascending: false }).limit(100)
-        if (logsData) setLogs(logsData)
+        const { data: logsData, error: logsErr } = await supabase
+          .from('system_logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(100)
         
-        const { data: ticketsData } = await supabase.from('support_tickets').select('*').order('created_at', { ascending: false }).limit(50)
-        if (ticketsData) setTickets(ticketsData)
+        if (logsErr) {
+          console.error(logsErr)
+          setLogsError(logsErr.message)
+        } else if (logsData) {
+          setLogs(logsData)
+        }
+        
+        const { data: ticketsData, error: ticketsErr } = await supabase
+          .from('support_tickets')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(50)
+        
+        if (ticketsErr) {
+          console.error(ticketsErr)
+          setTicketsError(ticketsErr.message)
+        } else if (ticketsData) {
+          setTickets(ticketsData)
+        }
       } catch (e) {
         console.error(e)
+        setLogsError(e.message || 'Error al conectar con system_logs')
+        setTicketsError(e.message || 'Error al conectar con support_tickets')
       } finally {
         setLoadingLogs(false)
         setLoadingTickets(false)
@@ -39,19 +67,27 @@ export default function SystemSecurity({ businesses }) {
   const handleReplyTicket = async (e) => {
     e.preventDefault()
     if (!replyMessage || !replyingTo) return
+    setSubmittingReply(true)
+    setReplyError('')
     try {
-      const { data } = await supabase.from('support_tickets')
+      const { data, error } = await supabase.from('support_tickets')
         .update({ admin_response: replyMessage, status: 'resolved', updated_at: new Date().toISOString() })
         .eq('id', replyingTo.id)
         .select().single()
       
-      if (data) {
+      if (error) {
+        console.error(error)
+        setReplyError(error.message || 'Error al responder el ticket')
+      } else if (data) {
         setTickets(tickets.map(t => t.id === data.id ? data : t))
         setReplyingTo(null)
         setReplyMessage('')
       }
     } catch (e) {
       console.error(e)
+      setReplyError(e.message || 'Ocurrió un error inesperado al guardar la respuesta')
+    } finally {
+      setSubmittingReply(false)
     }
   }
 
@@ -77,6 +113,16 @@ export default function SystemSecurity({ businesses }) {
             Visor de Logs del Sistema
           </h3>
           <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-3">
+            {logsError && (
+              <div className="p-3.5 bg-red-500/10 border border-red-500/30 text-red-500 text-xs rounded-xl flex items-center gap-2 animate-fade-in">
+                <AlertCircle size={16} className="shrink-0" />
+                <span className="flex-1">
+                  {logsError.includes('public.system_logs') 
+                    ? 'La tabla public.system_logs no existe en la base de datos de Supabase.' 
+                    : logsError}
+                </span>
+              </div>
+            )}
             {loadingLogs ? (
               <p className="text-center text-gray-500 mt-10">Cargando logs...</p>
             ) : (logs || []).length === 0 ? (
@@ -112,6 +158,16 @@ export default function SystemSecurity({ businesses }) {
           </p>
 
           <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-4">
+            {ticketsError && (
+              <div className="p-3.5 bg-red-500/10 border border-red-500/30 text-red-500 text-xs rounded-xl flex items-center gap-2 animate-fade-in">
+                <AlertCircle size={16} className="shrink-0" />
+                <span className="flex-1">
+                  {ticketsError.includes('public.support_tickets') 
+                    ? 'La tabla public.support_tickets no existe en la base de datos de Supabase.' 
+                    : ticketsError}
+                </span>
+              </div>
+            )}
             {loadingTickets ? (
               <p className="text-center text-gray-500 mt-10">Cargando tickets...</p>
             ) : tickets.length === 0 ? (
@@ -145,11 +201,26 @@ export default function SystemSecurity({ businesses }) {
                   
                   {replyingTo?.id === t.id && (
                     <form onSubmit={handleReplyTicket} className="mt-3 space-y-2 animate-fade-in">
-                      <textarea rows="3" required placeholder="Escribe tu respuesta..." value={replyMessage} onChange={e=>setReplyMessage(e.target.value)}
-                        className="w-full p-2 text-xs rounded-lg border border-gray-300 dark:border-dark-border bg-white dark:bg-black/50 outline-none focus:border-blue-500" />
+                      {replyError && (
+                        <div className="p-2 bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] font-bold rounded-lg flex items-center gap-1.5">
+                          <AlertCircle size={12} className="shrink-0" />
+                          <span className="flex-1">{replyError}</span>
+                        </div>
+                      )}
+                      <textarea rows="3" required disabled={submittingReply} placeholder="Escribe tu respuesta..." value={replyMessage} onChange={e=>setReplyMessage(e.target.value)}
+                        className="w-full p-2 text-xs rounded-lg border border-gray-300 dark:border-dark-border bg-white dark:bg-black/50 outline-none focus:border-blue-500 disabled:opacity-60" />
                       <div className="flex gap-2">
-                        <button type="button" onClick={() => {setReplyingTo(null); setReplyMessage('');}} className="flex-1 py-1.5 rounded-lg border border-gray-300 dark:border-dark-border text-xs font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5">Cancelar</button>
-                        <button type="submit" className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500">Enviar y Resolver</button>
+                        <button type="button" disabled={submittingReply} onClick={() => {setReplyingTo(null); setReplyMessage(''); setReplyError('');}} className="flex-1 py-1.5 rounded-lg border border-gray-300 dark:border-dark-border text-xs font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5 disabled:opacity-50">Cancelar</button>
+                        <button type="submit" disabled={submittingReply} className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 disabled:opacity-50 flex items-center justify-center gap-1">
+                          {submittingReply ? (
+                            <>
+                              <div className="w-3.5 h-3.5 border border-white/30 border-t-white rounded-full animate-spin" />
+                              <span>Guardando...</span>
+                            </>
+                          ) : (
+                            'Enviar y Resolver'
+                          )}
+                        </button>
                       </div>
                     </form>
                   )}

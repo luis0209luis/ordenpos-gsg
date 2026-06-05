@@ -112,7 +112,7 @@ export const generateRawTicket = (sale, settings, salesHistory = []) => {
   const refPadding = Math.max(0, Math.floor((32 - refStr.length) / 2))
   text += `${' '.repeat(refPadding)}${refStr}\n`
   
-  text += `\n\n\n` // Feed paper
+  text += `\n` // Feed 1 line before cut (saves paper)
   
   return text
 }

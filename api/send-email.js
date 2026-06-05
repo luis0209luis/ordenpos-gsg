@@ -5,8 +5,9 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const { to, businessName, amount, days } = req.body
   try {
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'ORDENPOS <onboarding@resend.dev>'
     await resend.emails.send({
-      from: 'ORDENPOS <no-reply@tudominio.com>',
+      from: fromEmail,
       to,
       subject: `Nuevo Pago Recibido - ${businessName}`,
       html: `<p>El negocio <strong>${businessName}</strong> pagó $${amount} por ${days} días.</p>`

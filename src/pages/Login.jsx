@@ -265,7 +265,7 @@ export default function Login() {
           )}
 
           <p className={`text-center text-xs mt-8 font-medium ${theme === 'dark' ? 'text-gray-600' : 'text-gray-400'}`}>
-            © {new Date().getFullYear()} ORDENPOS · Todos los derechos reservados
+            © 2026 ORDENPOS. Desarrollado y administrado por GEMA SYSTEMS GROUP.
           </p>
         </div>
       </div>

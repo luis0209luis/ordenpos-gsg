@@ -45,12 +45,24 @@ export default function Welcome() {
   }
   const displayName = getDisplayName();
 
+  const getGender = () => {
+    // Use gender field if available
+    if (user?.gender) return user.gender; // 'M' or 'F'
+    // Heuristic: check last letter of first name in Spanish
+    const firstName = (user?.name || user?.username || '').trim().split(' ')[0].toLowerCase();
+    const femaleEndings = ['a', 'e', 'ía', 'ia', 'ina', 'isa'];
+    if (femaleEndings.some(end => firstName.endsWith(end))) return 'F';
+    return 'M';
+  }
+
+  const isFemale = getGender() === 'F';
+
   const getMotivationalMessage = () => {
     const role = user?.role?.toUpperCase();
-    if (role === 'DOMICILIARIO') return '¿Listo para realizar los envíos hoy?';
-    if (role === 'CAJERO') return '¿Listo para una jornada de grandes ventas?';
-    if (role === 'PREPARADOR') return '¿Listo para despachar todas las órdenes?';
-    return '¿Listo para poner en orden el negocio hoy?';
+    if (role === 'DOMICILIARIO') return isFemale ? '¿Lista para realizar los envíos hoy?' : '¿Listo para realizar los envíos hoy?';
+    if (role === 'CAJERO') return isFemale ? '¿Lista para una jornada de grandes ventas?' : '¿Listo para una jornada de grandes ventas?';
+    if (role === 'PREPARADOR') return isFemale ? '¿Lista para despachar todas las órdenes?' : '¿Listo para despachar todas las órdenes?';
+    return isFemale ? '¿Lista para poner en orden el negocio hoy?' : '¿Listo para poner en orden el negocio hoy?';
   }
   
   // Verify if a preparador exists to optionally hide kitchen
@@ -97,7 +109,7 @@ export default function Welcome() {
         
         {/* Dynamic Greeting */}
         <h1 className={`font-display font-black text-4xl md:text-5xl lg:text-6xl mb-4 tracking-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>
-          {isFirstTime ? '¡Bienvenido,' : '¡Hola de nuevo,'} <span className="text-transparent bg-clip-text bg-gold-gradient">{displayName}</span>!
+          {isFirstTime ? (isFemale ? '¡Bienvenida,' : '¡Bienvenido,') : (isFemale ? '¡Hola de nuevo,' : '¡Hola de nuevo,')} <span className="text-transparent bg-clip-text bg-gold-gradient">{displayName}</span>!
         </h1>
         
         {/* Motivational Message */}

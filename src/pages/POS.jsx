@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useTheme, useSettings, useAuth } from '../context/AppContext'
 import { useInventory } from '../context/InventoryContext'
 import { getSmartImage } from '../utils/imageHelper'
-import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle2, Receipt, X, Printer, Edit2, Truck, Smartphone } from 'lucide-react'
+import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle2, Receipt, X, Printer, Edit2, Truck, Smartphone, ArrowUp, ArrowDown } from 'lucide-react'
 import DeliveryModule from '../components/DeliveryModule'
 import TicketGenerator, { generateRawTicket } from '../components/TicketGenerator'
 import { getPaddedTurnNumber } from '../utils/turnHelper'
@@ -11,7 +11,7 @@ export default function POS() {
   const { theme } = useTheme() || {}
   const isDark = theme === 'dark'
   const { products = [], processSale, salesHistory = [] } = useInventory() || {}
-  const { settings = {}, staff = [] } = useSettings() || {}
+  const { settings = {}, staff = [], updateCategoryOrder } = useSettings() || {}
   const { user } = useAuth() || {}
 
   const getDynamicBusinessName = () => {
@@ -53,11 +53,51 @@ export default function POS() {
   const [deliveryData, setDeliveryData] = useState({ name: '', address: '', distance: null, fee: 0, suggestedFee: 0, confirmed: false })
   
   // Checkout & Ticket State
-  // Checkout & Ticket State
   const [finishedSale, setFinishedSale] = useState(null)
   const [mobileCartOpen, setMobileCartOpen] = useState(false)
 
-  const categories = ['Todas', ...new Set((products || []).map(p => p.categoria))]
+  // Reorder Categories State
+  const [isReorderModalOpen, setIsReorderModalOpen] = useState(false)
+  const [tempCategoryOrder, setTempCategoryOrder] = useState([])
+
+  const rawCategories = [...new Set((products || []).map(p => p.categoria).filter(Boolean))]
+  const catOrder = settings?.categoryOrder || []
+  
+  const sortedCategories = rawCategories.sort((a, b) => {
+    const idxA = catOrder.indexOf(a)
+    const idxB = catOrder.indexOf(b)
+    if (idxA === -1 && idxB === -1) return a.localeCompare(b)
+    if (idxA === -1) return 1
+    if (idxB === -1) return -1
+    return idxA - idxB
+  })
+  
+  const categories = ['Todas', ...sortedCategories]
+
+  useEffect(() => {
+    if (isReorderModalOpen) {
+      setTempCategoryOrder(sortedCategories)
+    }
+  }, [isReorderModalOpen])
+
+  const moveCategory = (index, direction) => {
+    const newOrder = [...tempCategoryOrder]
+    const targetIndex = index + direction
+    if (targetIndex < 0 || targetIndex >= newOrder.length) return
+    
+    const temp = newOrder[index]
+    newOrder[index] = newOrder[targetIndex]
+    newOrder[targetIndex] = temp
+    
+    setTempCategoryOrder(newOrder)
+  }
+
+  const handleSaveCategoryOrder = async () => {
+    if (updateCategoryOrder) {
+      await updateCategoryOrder(tempCategoryOrder)
+    }
+    setIsReorderModalOpen(false)
+  }
 
   const filteredProducts = (products || []).filter(p => {
     const matchesSearch = p.nombre.toLowerCase().includes(searchTerm.toLowerCase())
@@ -126,11 +166,98 @@ export default function POS() {
     }
   }
 
-  const handleBluetoothPrint = () => {
+  // ── Web Bluetooth / ESC-POS printing ──────────────────────────────────────
+  // Converts plain-text ticket into ESC/POS byte array for thermal printers.
+  const buildEscPos = (text) => {
+    const ESC = 0x1B
+    const GS  = 0x1D
+    const encoder = new TextEncoder()
+    const init  = [ESC, 0x40]          // Initialize printer
+    const feed1 = [ESC, 0x64, 0x01]   // Feed 1 line (saves paper)
+    const cut   = [GS,  0x56, 0x41, 0x10]  // Partial cut
+
+    const bytes = [...init]
+    text.split('\n').forEach(line => {
+      bytes.push(...encoder.encode(line + '\n'))
+    })
+    bytes.push(...feed1, ...cut)
+    return new Uint8Array(bytes)
+  }
+
+  // Goojprt PT-210 BLE UUIDs (standard SPP-over-BLE profile)
+  const PT210_SERVICE = '000018f0-0000-1000-8000-00805f9b34fb'
+  const PT210_CHAR    = '00002af1-0000-1000-8000-00805f9b34fb'
+  // Fallback UUIDs used by some PT-210 firmware variants
+  const FALLBACK_SERVICE = '0000ff00-0000-1000-8000-00805f9b34fb'
+  const FALLBACK_CHAR    = '0000ff02-0000-1000-8000-00805f9b34fb'
+
+  const btCharRef = useRef(null)  // Cache BLE characteristic between prints
+
+  const handleBluetoothPrint = async () => {
     if (!finishedSale) return
-    const rawText = generateRawTicket(finishedSale, settings, salesHistory)
-    const base64Data = btoa(unescape(encodeURIComponent(rawText)))
-    window.location.href = `rawbt:data:text/plain;base64,${base64Data}`
+
+    // 1. Check Web Bluetooth support
+    if (!navigator.bluetooth) {
+      const isAndroid = /Android/i.test(navigator.userAgent)
+      if (isAndroid) {
+        const rawText = generateRawTicket(finishedSale, settings, salesHistory)
+        const base64Data = btoa(unescape(encodeURIComponent(rawText)))
+        window.location.href = `intent:base64,${base64Data}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`
+      } else {
+        alert(
+          '⚠️ Tu navegador no soporta impresión Bluetooth directa.\n\n' +
+          '📱 En iPhone: descarga la app gratuita "Bluefy" desde el App Store y abre ORDENPOS desde Bluefy. El botón Bluetooth funcionará directo con tu Goojprt PT-210.\n\n' +
+          '🤖 En Android: usa Google Chrome.'
+        )
+      }
+      return
+    }
+
+    // 2. Connect / reuse BLE characteristic
+    try {
+      if (!btCharRef.current) {
+        const device = await navigator.bluetooth.requestDevice({
+          filters: [
+            { namePrefix: 'MTP' },
+            { namePrefix: 'Goojprt' },
+            { namePrefix: 'PT-' },
+            { namePrefix: 'RPP' },
+            { namePrefix: 'BT' },
+          ],
+          optionalServices: [PT210_SERVICE, FALLBACK_SERVICE]
+        })
+
+        const server = await device.gatt.connect()
+
+        let service, characteristic
+        try {
+          service = await server.getPrimaryService(PT210_SERVICE)
+          characteristic = await service.getCharacteristic(PT210_CHAR)
+        } catch {
+          service = await server.getPrimaryService(FALLBACK_SERVICE)
+          characteristic = await service.getCharacteristic(FALLBACK_CHAR)
+        }
+
+        btCharRef.current = characteristic
+        device.addEventListener('gattserverdisconnected', () => {
+          btCharRef.current = null
+        })
+      }
+
+      // 3. Build ESC/POS bytes and send in 512-byte chunks
+      const rawText = generateRawTicket(finishedSale, settings, salesHistory)
+      const escBytes = buildEscPos(rawText)
+      const CHUNK = 512
+      for (let offset = 0; offset < escBytes.length; offset += CHUNK) {
+        await btCharRef.current.writeValue(escBytes.slice(offset, offset + CHUNK))
+      }
+
+    } catch (err) {
+      console.error('Bluetooth print error:', err)
+      if (err.name === 'NotFoundError') return  // User cancelled — silent
+      alert(`❌ Error de impresión:\n${err.message}\n\nAsegúrate de que la impresora esté encendida y en rango.`)
+      btCharRef.current = null
+    }
   }
 
   return (
@@ -171,21 +298,37 @@ export default function POS() {
             </button>
           </div>
           
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-            {categories.map(cat => (
+          <div className="flex items-center gap-2">
+            <div className="flex-1 flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+              {categories.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-4 py-3 md:py-2 min-h-[44px] rounded-xl text-sm font-semibold transition-all whitespace-nowrap border
+                    ${selectedCategory === cat
+                      ? 'bg-gold-gradient text-dark-bg border-transparent shadow-gold-sm'
+                      : isDark 
+                        ? 'bg-dark-card border-dark-border text-gray-400 hover:text-white hover:border-gold-500/50' 
+                        : 'bg-light-surface border-light-border text-gray-600 hover:text-gray-900 hover:border-gold-400/50'}`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            {user?.role === 'admin' && (
               <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-3 md:py-2 min-h-[44px] rounded-xl text-sm font-semibold transition-all whitespace-nowrap border
-                  ${selectedCategory === cat
-                    ? 'bg-gold-gradient text-dark-bg border-transparent shadow-gold-sm'
-                    : isDark 
-                      ? 'bg-dark-card border-dark-border text-gray-400 hover:text-white hover:border-gold-500/50' 
-                      : 'bg-light-surface border-light-border text-gray-600 hover:text-gray-900 hover:border-gold-400/50'}`}
+                type="button"
+                onClick={() => setIsReorderModalOpen(true)}
+                className={`p-3 md:p-2.5 rounded-xl border-2 transition-all shrink-0 flex items-center justify-center min-h-[44px] min-w-[44px]
+                  ${isDark 
+                    ? 'bg-dark-card border-dark-border text-gray-400 hover:text-gold-500 hover:border-gold-500/30' 
+                    : 'bg-light-surface border-light-border text-gray-500 hover:text-gold-600 hover:border-gold-400/50'}`}
+                title="Reordenar Categorías"
               >
-                {cat}
+                <Edit2 size={18} />
               </button>
-            ))}
+            )}
           </div>
         </div>
 
@@ -503,6 +646,103 @@ export default function POS() {
         </div>
       )}
       
+      {/* REORDER CATEGORIES MODAL */}
+      {isReorderModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsReorderModalOpen(false)} />
+          
+          <div className={`relative z-10 w-full max-w-md mx-auto flex flex-col rounded-3xl border shadow-2xl overflow-hidden animate-slide-in-up
+            ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
+            
+            {/* Header */}
+            <div className={`p-6 border-b flex items-center justify-between
+              ${isDark ? 'border-dark-border bg-black/20' : 'border-light-border bg-gray-50'}`}>
+              <div>
+                <h3 className="font-display font-bold text-lg">Reordenar Categorías</h3>
+                <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                  Elige la posición de las pestañas en el punto de venta.
+                </p>
+              </div>
+              <button onClick={() => setIsReorderModalOpen(false)} className={`p-2 rounded-full transition-colors ${isDark ? 'hover:bg-white/10 text-gray-400 hover:text-white' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-900'}`}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* List */}
+            <div className="p-6 overflow-y-auto max-h-[50vh] space-y-3">
+              {tempCategoryOrder.length === 0 ? (
+                <p className={`text-center py-8 text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                  No hay categorías registradas en tus productos.
+                </p>
+              ) : (
+                tempCategoryOrder.map((cat, idx) => (
+                  <div
+                    key={cat}
+                    className={`flex items-center justify-between p-4 rounded-2xl border transition-all duration-200
+                      ${isDark 
+                        ? 'bg-dark-card border-dark-border hover:border-gold-500/20' 
+                        : 'bg-gray-50 border-gray-100 hover:border-gold-400/30'}`}
+                  >
+                    <span className="font-semibold text-sm truncate pr-4">{cat}</span>
+                    
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => moveCategory(idx, -1)}
+                        disabled={idx === 0}
+                        className={`p-2 rounded-lg transition-all border
+                          ${idx === 0 
+                            ? 'opacity-30 cursor-not-allowed border-transparent' 
+                            : isDark
+                              ? 'bg-dark-surface border-dark-border hover:border-gold-500/30 text-gray-400 hover:text-white' 
+                              : 'bg-white border-gray-200 hover:border-gold-400/50 text-gray-600 hover:text-gray-900'}`}
+                        title="Subir"
+                      >
+                        <ArrowUp size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveCategory(idx, 1)}
+                        disabled={idx === tempCategoryOrder.length - 1}
+                        className={`p-2 rounded-lg transition-all border
+                          ${idx === tempCategoryOrder.length - 1 
+                            ? 'opacity-30 cursor-not-allowed border-transparent' 
+                            : isDark
+                              ? 'bg-dark-surface border-dark-border hover:border-gold-500/30 text-gray-400 hover:text-white' 
+                              : 'bg-white border-gray-200 hover:border-gold-400/50 text-gray-600 hover:text-gray-900'}`}
+                        title="Bajar"
+                      >
+                        <ArrowDown size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className={`p-6 border-t flex justify-end gap-3
+              ${isDark ? 'border-dark-border bg-black/10' : 'border-light-border bg-gray-50'}`}>
+              <button
+                type="button"
+                onClick={() => setIsReorderModalOpen(false)}
+                className={`px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wide transition-colors
+                  ${isDark ? 'bg-dark-card hover:bg-dark-surface text-gray-400 hover:text-white' : 'bg-white hover:bg-gray-100 text-gray-500 hover:text-gray-700 border border-gray-200'}`}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveCategoryOrder}
+                className="px-6 py-2.5 rounded-xl bg-gold-gradient text-black font-extrabold text-xs uppercase tracking-wide hover:scale-105 active:scale-95 transition-all shadow-gold-sm"
+              >
+                Guardar Orden
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   )
 }

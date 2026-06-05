@@ -60,5 +60,5 @@ export function getSmartImage(productName = '', userImageUrl = null) {
   }
 
   // 3. Fallback: Logo de la marca o categoría no reconocida
-  return { url: '/favicon.svg', isReference: true, isFallback: true }
+  return { url: '/favicon.png', isReference: true, isFallback: true }
 }

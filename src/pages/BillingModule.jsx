@@ -184,7 +184,8 @@ export default function BillingModule() {
         }
 
         if (settingsMaster.enableEmail && settingsMaster.email_notificaciones) {
-          fetch('/api/send-email', {
+          const apiBase = window.location.hostname === 'localhost' ? 'http://localhost:3001' : '';
+          fetch(`${apiBase}/api/send-email`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ to: settingsMaster.email_notificaciones, businessName, amount: planPrice, days: 30 })

@@ -242,6 +242,7 @@ export function InventoryProvider({ children }) {
       }
 
       // Save turn number locally under ordenpos_orders in localStorage
+      // Turns reset at 5:00 AM each day (start of new sales shift)
       try {
         const storedStr = localStorage.getItem('ordenpos_orders') || '[]'
         let stored = []
@@ -251,20 +252,37 @@ export function InventoryProvider({ children }) {
         } catch {
           stored = []
         }
-        
+
+        // Helper: returns the shift-day boundary (5 AM today, or yesterday if before 5 AM)
+        const getShiftStart = (date) => {
+          const d = new Date(date)
+          const shiftStart = new Date(d)
+          shiftStart.setHours(5, 0, 0, 0)
+          // If it's before 5 AM, the current shift started at 5 AM the previous day
+          if (d < shiftStart) {
+            shiftStart.setDate(shiftStart.getDate() - 1)
+          }
+          return shiftStart
+        }
+
+        const now = new Date()
+        const currentShiftStart = getShiftStart(now)
+
         let nextNumber = 1
         if (stored.length > 0) {
           const lastOrder = stored[stored.length - 1]
           const lastNum = lastOrder && typeof lastOrder.number === 'number' ? lastOrder.number : 0
-          if (lastNum < 50) {
-            nextNumber = lastNum + 1
-          } else {
-            nextNumber = 1
+          const lastOrderTime = lastOrder && lastOrder.ts ? new Date(lastOrder.ts) : null
+
+          // Only continue the sequence if the last order was in the same shift
+          if (lastOrderTime && getShiftStart(lastOrderTime).getTime() === currentShiftStart.getTime()) {
+            nextNumber = lastNum < 50 ? lastNum + 1 : 1
           }
+          // Otherwise nextNumber stays 1 (new shift reset)
         }
-        
-        stored.push({ id: data.id, number: nextNumber })
-        if (stored.length > 100) {
+
+        stored.push({ id: data.id, number: nextNumber, ts: now.toISOString() })
+        if (stored.length > 200) {
           stored.shift()
         }
         localStorage.setItem('ordenpos_orders', JSON.stringify(stored))
