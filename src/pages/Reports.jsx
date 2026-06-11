@@ -14,7 +14,7 @@ export default function Reports() {
   const { user } = useAuth() || {}
   const isDark = theme === 'dark'
   const { products = [], salesHistory = [], deleteSale } = useInventory() || {}
-  const [timeFilter, setTimeFilter] = useState('Mes')
+  const [timeFilter, setTimeFilter] = useState('Hoy')
 
   const handleDeleteSale = (id) => {
     if (confirm('¿Estás seguro? Esta acción afectará el inventario y las estadísticas diarias.')) {
