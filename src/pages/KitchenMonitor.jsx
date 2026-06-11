@@ -69,6 +69,21 @@ export default function KitchenMonitor() {
                       </li>
                     ))}
                   </ul>
+
+                  {order.notes && (
+                    <div className={`mt-6 p-4 rounded-2xl border flex flex-col gap-1
+                      ${isDark 
+                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' 
+                        : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
+                      <span className="text-[10px] font-black uppercase tracking-widest opacity-80">
+                        ⚠️ OBSERVACIONES DE PREPARACIÓN:
+                      </span>
+                      <p className="text-base font-bold uppercase leading-snug">
+                        {order.notes}
+                      </p>
+                    </div>
+                  )}
+
                   {order.isDelivery && (
                     <div className={`mt-6 p-4 rounded-xl text-sm border
                       ${isDark ? 'bg-blue-500/10 border-blue-500/30' : 'bg-blue-50 border-blue-200'}`}>

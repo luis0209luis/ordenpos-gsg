@@ -78,6 +78,11 @@ export const generateRawTicket = (sale, settings, salesHistory = []) => {
   }
   text += line
   
+  if (sale.notes) {
+    text += `Notas: ${sale.notes.toUpperCase()}\n`
+    text += line
+  }
+  
   // Items
   ;(sale.items || []).forEach(item => {
     const qtyProduct = `${item.quantity}x ${item.nombre}`.substring(0, 21).padEnd(21)
@@ -182,6 +187,13 @@ export default function TicketGenerator({ sale, settings }) {
           </div>
         ))}
       </div>
+
+      {sale.notes && (
+        <div className="ticket-notes border-b border-dashed border-black pb-2 mb-2 text-xs text-black">
+          <p className="uppercase"><strong className="font-bold">Observaciones:</strong></p>
+          <p className="uppercase font-mono">{sale.notes}</p>
+        </div>
+      )}
 
       <div className="ticket-totals text-xs text-black">
         <div className="flex justify-between mb-1 font-mono">

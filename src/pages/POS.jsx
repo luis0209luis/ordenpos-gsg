@@ -56,6 +56,7 @@ export default function POS() {
   const [finishedSale, setFinishedSale] = useState(null)
   const [mobileCartOpen, setMobileCartOpen] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [notes, setNotes] = useState('')
 
   // Reorder Categories State
   const [isReorderModalOpen, setIsReorderModalOpen] = useState(false)
@@ -162,7 +163,8 @@ export default function POS() {
       deliveryData: isDelivery ? { ...deliveryData } : null,
       deliveryStatus: isDelivery ? 'Pendiente' : null,
       kitchenStatus,
-      paymentMethod
+      paymentMethod,
+      notes: notes
     }
     
     // Show tickets modal INSTANTLY
@@ -171,9 +173,11 @@ export default function POS() {
     // Save state copies to send to DB
     const cartCopy = [...cart]
     const deliveryDataCopy = isDelivery ? { ...deliveryData } : null
+    const notesCopy = notes
     
     // Clear cart & reset states instantly
     setCart([])
+    setNotes('')
     setIsDelivery(false)
     setDeliveryData({ name: '', address: '', distance: null, fee: 0, suggestedFee: 0, confirmed: false })
     setMobileCartOpen(false)
@@ -181,7 +185,7 @@ export default function POS() {
     
     try {
       // Process sale in background
-      const saleRecord = await processSale(cartCopy, total, deliveryDataCopy, kitchenStatus, paymentMethod)
+      const saleRecord = await processSale(cartCopy, total, deliveryDataCopy, kitchenStatus, paymentMethod, notesCopy)
       
       // Update finished sale in modal with the actual record from DB
       setFinishedSale(prev => prev && prev.id === tempId ? saleRecord : prev)
@@ -526,6 +530,24 @@ export default function POS() {
 
         {/* Total & Checkout */}
         <div className={`p-6 border-t ${isDark ? 'border-dark-border bg-dark-card' : 'border-light-border bg-light-surface'}`}>
+          {cart.length > 0 && (
+            <div className="mb-4">
+              <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                Observaciones de la Orden
+              </label>
+              <textarea
+                rows={2}
+                placeholder="Ej: Hamburguesa sin cebolla, papas con doble salsa..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className={`w-full px-4 py-2.5 rounded-xl text-xs font-medium outline-none border transition-all resize-none
+                  focus:border-gold-500 focus:shadow-gold-sm
+                  ${isDark ? 'bg-dark-surface border-dark-border text-white placeholder-gray-600' 
+                           : 'bg-white border-light-border text-gray-900 placeholder-gray-400'}`}
+              />
+            </div>
+          )}
+
           <div className="flex justify-between items-center mb-2">
             <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Subtotal</span>
             <span className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>${subtotal.toLocaleString('es-CO')}</span>
@@ -623,6 +645,13 @@ export default function POS() {
                   </div>
                 )}
               </div>
+
+              {finishedSale?.notes && (
+                <div className="mb-4 p-2 border border-black border-dashed text-xs text-black">
+                  <p className="font-bold mb-0.5 uppercase">OBSERVACIONES:</p>
+                  <p className="uppercase">{finishedSale.notes}</p>
+                </div>
+              )}
 
               {/* Método de pago */}
               <div className="flex justify-between items-center text-xs mb-2 text-black font-mono">
