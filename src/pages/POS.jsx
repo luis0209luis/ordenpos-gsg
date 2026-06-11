@@ -147,24 +147,46 @@ export default function POS() {
     if (cart.length === 0) return
     if (isDelivery && (!deliveryData.confirmed || !deliveryData.address)) return
     
-    // Send every sale to the kitchen as 'pending' automatically
     const kitchenStatus = 'pending'
+    const nowISO = new Date().toISOString()
+    const tempId = `temp-${Date.now()}`
+    
+    // Create an optimistic sale record to show the ticket modal instantly
+    const optimisticSale = {
+      id: tempId,
+      created_at: nowISO,
+      date: nowISO,
+      items: [...cart],
+      total,
+      isDelivery,
+      deliveryData: isDelivery ? { ...deliveryData } : null,
+      deliveryStatus: isDelivery ? 'Pendiente' : null,
+      kitchenStatus,
+      paymentMethod
+    }
+    
+    // Show tickets modal INSTANTLY
+    setFinishedSale(optimisticSale)
+    
+    // Save state copies to send to DB
+    const cartCopy = [...cart]
+    const deliveryDataCopy = isDelivery ? { ...deliveryData } : null
+    
+    // Clear cart & reset states instantly
+    setCart([])
+    setIsDelivery(false)
+    setDeliveryData({ name: '', address: '', distance: null, fee: 0, suggestedFee: 0, confirmed: false })
+    setMobileCartOpen(false)
+    setShowPaymentModal(false)
     
     try {
-      // Process sale and get the record for tickets
-      const saleRecord = await processSale(cart, total, isDelivery ? deliveryData : null, kitchenStatus, paymentMethod)
+      // Process sale in background
+      const saleRecord = await processSale(cartCopy, total, deliveryDataCopy, kitchenStatus, paymentMethod)
       
-      // Show tickets modal
-      setFinishedSale(saleRecord)
-      
-      // Clear cart
-      setCart([])
-      setIsDelivery(false)
-      setDeliveryData({ name: '', address: '', distance: null, fee: 0, suggestedFee: 0, confirmed: false })
-      setMobileCartOpen(false)
-      setShowPaymentModal(false)
+      // Update finished sale in modal with the actual record from DB
+      setFinishedSale(prev => prev && prev.id === tempId ? saleRecord : prev)
     } catch (e) {
-      console.error("Error processing sale:", e)
+      console.error("Error processing sale in background:", e)
     }
   }
 
