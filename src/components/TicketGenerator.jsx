@@ -95,6 +95,10 @@ export const generateRawTicket = (sale, settings, salesHistory = []) => {
     text += `Domicilio: `.padEnd(20) + `$${(sale.deliveryData?.fee || 0).toLocaleString('es-CO').padStart(10)}\n`
   }
   
+  // Payment method
+  const payMethod = sale.paymentMethod || 'Efectivo'
+  text += `Pago: `.padEnd(20) + `${payMethod.toUpperCase().padStart(12)}\n`
+  
   text += "================================\n"
   text += `TOTAL: `.padEnd(20) + `$${(sale.total || 0).toLocaleString('es-CO').padStart(10)}\n`
   text += "================================\n"
@@ -190,6 +194,12 @@ export default function TicketGenerator({ sale, settings }) {
             <span>${(sale.deliveryData?.fee || 0).toLocaleString('es-CO')}</span>
           </div>
         )}
+        
+        {/* Payment method in print component */}
+        <div className="flex justify-between mb-1 font-mono">
+          <span>Método de Pago</span>
+          <span className="uppercase">{sale.paymentMethod || 'Efectivo'}</span>
+        </div>
         
         {/* TOTAL highlighted with double line border above it */}
         <div className="flex justify-between font-bold text-base pt-1 font-mono border-t-4 border-double border-black">

@@ -1,7 +1,8 @@
 const express = require('express');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
-const fetch = require('node-fetch');
+
+// Native fetch is used (built-in since Node 18+)
 
 const app = express();
 app.use(cors());

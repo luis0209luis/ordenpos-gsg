@@ -71,6 +71,19 @@ export default function Reports() {
   const totalIngresos = filteredSales.reduce((acc, sale) => acc + sale.total, 0)
   const totalOrdenes = filteredSales.length
 
+  const paymentBreakdown = useMemo(() => {
+    const breakdown = { Efectivo: 0, Nequi: 0, Transferencia: 0, Otro: 0 }
+    filteredSales.forEach(sale => {
+      const method = sale.paymentMethod || 'Efectivo'
+      if (breakdown[method] !== undefined) {
+        breakdown[method] += sale.total
+      } else {
+        breakdown.Otro += sale.total
+      }
+    })
+    return breakdown
+  }, [filteredSales])
+
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
@@ -166,6 +179,55 @@ export default function Reports() {
         </div>
       </div>
 
+      {/* Arqueo de Caja / Cierre de Turno */}
+      <div className={`p-6 rounded-3xl shadow-soft-lg border
+        ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
+        <div className="flex items-center justify-between mb-4 border-b pb-3 border-dashed border-gray-500/20">
+          <div>
+            <h3 className={`font-display font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              Arqueo de Caja (Cierre por Medio de Pago)
+            </h3>
+            <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+              Resumen de caja acumulado en el periodo: {timeFilter}.
+            </p>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className={`p-4 rounded-2xl border ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-100'}`}>
+            <span className="text-2xl">💵</span>
+            <p className={`text-xs font-semibold mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Efectivo</p>
+            <h4 className={`font-display font-bold text-xl mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              ${Math.round(paymentBreakdown.Efectivo).toLocaleString('es-CO')}
+            </h4>
+          </div>
+
+          <div className={`p-4 rounded-2xl border ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-100'}`}>
+            <span className="text-2xl">📱</span>
+            <p className={`text-xs font-semibold mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Nequi</p>
+            <h4 className={`font-display font-bold text-xl mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              ${Math.round(paymentBreakdown.Nequi).toLocaleString('es-CO')}
+            </h4>
+          </div>
+
+          <div className={`p-4 rounded-2xl border ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-100'}`}>
+            <span className="text-2xl">🏦</span>
+            <p className={`text-xs font-semibold mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Transferencia</p>
+            <h4 className={`font-display font-bold text-xl mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              ${Math.round(paymentBreakdown.Transferencia).toLocaleString('es-CO')}
+            </h4>
+          </div>
+
+          <div className={`p-4 rounded-2xl border ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-100'}`}>
+            <span className="text-2xl">📝</span>
+            <p className={`text-xs font-semibold mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Otros / Sin espec.</p>
+            <h4 className={`font-display font-bold text-xl mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              ${Math.round(paymentBreakdown.Otro).toLocaleString('es-CO')}
+            </h4>
+          </div>
+        </div>
+      </div>
+
       {/* Main Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
@@ -241,46 +303,67 @@ export default function Reports() {
                 ${isDark ? 'border-dark-border bg-dark-card text-gray-400' : 'border-light-border bg-light-surface text-gray-500'}`}>
                 <th className="px-6 py-4 font-semibold">Orden / Fecha</th>
                 <th className="px-6 py-4 font-semibold">Artículos</th>
+                <th className="px-6 py-4 font-semibold text-center">Método de Pago</th>
                 <th className="px-6 py-4 font-semibold text-right">Total</th>
                 <th className="px-6 py-4 font-semibold text-center">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {(filteredSales || []).slice().reverse().map(sale => (
-                <tr key={sale?.id} className={`border-b last:border-0 transition-colors duration-200
-                  ${isDark ? 'border-dark-border text-gray-300 hover:bg-dark-card' : 'border-light-border text-gray-700 hover:bg-gray-50'}`}>
-                  <td className="px-6 py-4">
-                    <p className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Orden #{getPaddedTurnNumber(sale, salesHistory)}</p>
-                    <p className="text-[10px] text-gray-500 font-mono">Ref: #{String(sale?.id || '').slice(-6)}</p>
-                    <p className="text-xs text-gray-500">{new Date(sale?.date).toLocaleString()}</p>
+              {(filteredSales || []).slice().reverse().map(sale => {
+                const method = sale.paymentMethod || 'Efectivo';
+                let methodBadge = 'bg-gray-500/10 text-gray-400 border-gray-500/20';
+                let methodEmoji = '💵';
+                if (method === 'Efectivo') {
+                  methodBadge = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+                  methodEmoji = '💵';
+                } else if (method === 'Nequi') {
+                  methodBadge = 'bg-pink-500/10 text-pink-400 border-pink-500/20';
+                  methodEmoji = '📱';
+                } else if (method === 'Transferencia') {
+                  methodBadge = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+                  methodEmoji = '🏦';
+                }
 
-                  </td>
-                  <td className="px-6 py-4 text-sm">
-                    {(sale?.items || []).map(item => (
-                      <div key={item.id}>{item.quantity}x {item.nombre}</div>
-                    ))}
-                  </td>
-                  <td className="px-6 py-4 text-right font-bold">
-                    ${sale.total.toLocaleString('es-CO')}
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    {user?.role === 'admin' ? (
-                      <button onClick={() => handleDeleteSale(sale.id)} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all
-                        ${isDark 
-                          ? 'bg-red-500/10 border-gold-500/30 text-red-400 hover:border-gold-500 hover:bg-red-500/20' 
-                          : 'bg-red-50 border-gold-500/50 text-red-600 hover:border-gold-500 hover:bg-red-100'}`}>
-                        Eliminar Venta
-                      </button>
-                    ) : (
-                      <span className="text-xs italic text-gray-500">Sin permisos</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                return (
+                  <tr key={sale?.id} className={`border-b last:border-0 transition-colors duration-200
+                    ${isDark ? 'border-dark-border text-gray-300 hover:bg-dark-card' : 'border-light-border text-gray-700 hover:bg-gray-50'}`}>
+                    <td className="px-6 py-4">
+                      <p className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Orden #{getPaddedTurnNumber(sale, salesHistory)}</p>
+                      <p className="text-[10px] text-gray-500 font-mono">Ref: #{String(sale?.id || '').slice(-6)}</p>
+                      <p className="text-xs text-gray-500">{new Date(sale?.date).toLocaleString()}</p>
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      {(sale?.items || []).map(item => (
+                        <div key={item.id}>{item.quantity}x {item.nombre}</div>
+                      ))}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${methodBadge}`}>
+                        <span>{methodEmoji}</span> {method}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right font-bold">
+                      ${sale.total.toLocaleString('es-CO')}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      {user?.role === 'admin' ? (
+                        <button onClick={() => handleDeleteSale(sale.id)} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all
+                          ${isDark 
+                            ? 'bg-red-500/10 border-gold-500/30 text-red-400 hover:border-gold-500 hover:bg-red-500/20' 
+                            : 'bg-red-50 border-gold-500/50 text-red-600 hover:border-gold-500 hover:bg-red-100'}`}>
+                          Eliminar Venta
+                        </button>
+                      ) : (
+                        <span className="text-xs italic text-gray-500">Sin permisos</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
               
               {filteredSales.length === 0 && (
                 <tr>
-                  <td colSpan="4" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                  <td colSpan="5" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                     No hay ventas registradas en este periodo.
                   </td>
                 </tr>

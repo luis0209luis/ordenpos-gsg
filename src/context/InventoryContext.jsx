@@ -42,7 +42,8 @@ export function InventoryProvider({ children }) {
             isDelivery: sale.is_delivery,
             deliveryData: sale.delivery_data,
             deliveryStatus: sale.delivery_status || sale.deliveryStatus,
-            kitchenStatus: sale.kitchen_status || sale.kitchenStatus
+            kitchenStatus: sale.kitchen_status || sale.kitchenStatus,
+            paymentMethod: sale.payment_method || sale.paymentMethod || 'Efectivo'
           }))
           setSalesHistory(mappedSales)
         }
@@ -71,7 +72,8 @@ export function InventoryProvider({ children }) {
               isDelivery: sale.is_delivery,
               deliveryData: sale.delivery_data,
               deliveryStatus: sale.delivery_status || sale.deliveryStatus,
-              kitchenStatus: sale.kitchen_status || sale.kitchenStatus
+              kitchenStatus: sale.kitchen_status || sale.kitchenStatus,
+              paymentMethod: sale.payment_method || sale.paymentMethod || 'Efectivo'
             })
 
             if (payload.eventType === 'INSERT') {
@@ -101,7 +103,8 @@ export function InventoryProvider({ children }) {
                 isDelivery: sale.is_delivery,
                 deliveryData: sale.delivery_data,
                 deliveryStatus: sale.delivery_status || sale.deliveryStatus,
-                kitchenStatus: sale.kitchen_status || sale.kitchenStatus
+                kitchenStatus: sale.kitchen_status || sale.kitchenStatus,
+                paymentMethod: sale.payment_method || sale.paymentMethod || 'Efectivo'
               }))
               setSalesHistory(prev => {
                 const hasDifferences = prev.length !== mappedSales.length ||
@@ -195,7 +198,7 @@ export function InventoryProvider({ children }) {
     }
   }
 
-  const processSale = async (cartItems, total, deliveryData = null, kitchenStatus = null) => {
+  const processSale = async (cartItems, total, deliveryData = null, kitchenStatus = null, paymentMethod = 'Efectivo') => {
     // Optimistic UI: update stock locally right away
     setProducts(prev => prev.map(product => {
       const cartItem = cartItems.find(item => item.id === product.id)
@@ -213,7 +216,8 @@ export function InventoryProvider({ children }) {
       is_delivery: !!deliveryData,
       delivery_data: deliveryData || null,
       delivery_status: deliveryData ? 'Pendiente' : null,
-      kitchen_status: kitchenStatus || null
+      kitchen_status: kitchenStatus || null,
+      payment_method: paymentMethod
     }
 
     const nowISO = new Date().toISOString()
@@ -238,7 +242,8 @@ export function InventoryProvider({ children }) {
         isDelivery: data.is_delivery,
         deliveryData: data.delivery_data,
         deliveryStatus: data.delivery_status,
-        kitchenStatus: data.kitchen_status
+        kitchenStatus: data.kitchen_status,
+        paymentMethod: data.payment_method || paymentMethod
       }
 
       // Save turn number locally under ordenpos_orders in localStorage
@@ -319,7 +324,8 @@ export function InventoryProvider({ children }) {
         isDelivery: !!deliveryData,
         deliveryData: deliveryData || null,
         deliveryStatus: deliveryData ? 'Pendiente' : null,
-        kitchenStatus: kitchenStatus || null
+        kitchenStatus: kitchenStatus || null,
+        paymentMethod: paymentMethod
       }
       setSalesHistory(prev => [tempSale, ...prev])
       return tempSale  // Always return something so the ticket modal works

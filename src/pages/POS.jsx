@@ -55,6 +55,7 @@ export default function POS() {
   // Checkout & Ticket State
   const [finishedSale, setFinishedSale] = useState(null)
   const [mobileCartOpen, setMobileCartOpen] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
 
   // Reorder Categories State
   const [isReorderModalOpen, setIsReorderModalOpen] = useState(false)
@@ -142,7 +143,7 @@ export default function POS() {
 
   const hasPreparador = (staff || []).some(s => s.role === 'PREPARADOR')
 
-  const handleProcessSale = async () => {
+  const handleProcessSale = async (paymentMethod = 'Efectivo') => {
     if (cart.length === 0) return
     if (isDelivery && (!deliveryData.confirmed || !deliveryData.address)) return
     
@@ -151,7 +152,7 @@ export default function POS() {
     
     try {
       // Process sale and get the record for tickets
-      const saleRecord = await processSale(cart, total, isDelivery ? deliveryData : null, kitchenStatus)
+      const saleRecord = await processSale(cart, total, isDelivery ? deliveryData : null, kitchenStatus, paymentMethod)
       
       // Show tickets modal
       setFinishedSale(saleRecord)
@@ -161,6 +162,7 @@ export default function POS() {
       setIsDelivery(false)
       setDeliveryData({ name: '', address: '', distance: null, fee: 0, suggestedFee: 0, confirmed: false })
       setMobileCartOpen(false)
+      setShowPaymentModal(false)
     } catch (e) {
       console.error("Error processing sale:", e)
     }
@@ -522,7 +524,7 @@ export default function POS() {
           </div>
           
           <button
-            onClick={handleProcessSale}
+            onClick={() => setShowPaymentModal(true)}
             disabled={cart.length === 0 || (isDelivery && !deliveryData.confirmed)}
             className={`w-full py-4 rounded-2xl font-bold text-sm tracking-widest uppercase flex items-center justify-center gap-2
               transition-all duration-300
@@ -598,6 +600,12 @@ export default function POS() {
                     <span>${(finishedSale?.deliveryData?.fee || 0).toLocaleString('es-CO')}</span>
                   </div>
                 )}
+              </div>
+
+              {/* Método de pago */}
+              <div className="flex justify-between items-center text-xs mb-2 text-black font-mono">
+                <span>Método de Pago:</span>
+                <span className="font-bold uppercase">{finishedSale?.paymentMethod || 'Efectivo'}</span>
               </div>
 
               {/* TOTAL highlighted with double line border above it */}
@@ -737,6 +745,102 @@ export default function POS() {
                 className="px-6 py-2.5 rounded-xl bg-gold-gradient text-black font-extrabold text-xs uppercase tracking-wide hover:scale-105 active:scale-95 transition-all shadow-gold-sm"
               >
                 Guardar Orden
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* PAYMENT METHOD MODAL */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" onClick={() => setShowPaymentModal(false)} />
+          
+          <div className={`relative z-10 w-full max-w-md mx-auto flex flex-col rounded-3xl border shadow-2xl overflow-hidden animate-slide-in-up
+            ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
+            
+            {/* Header */}
+            <div className={`p-6 border-b flex items-center justify-between
+              ${isDark ? 'border-dark-border bg-black/20' : 'border-light-border bg-gray-50'}`}>
+              <div>
+                <h3 className="font-display font-bold text-lg">Método de Pago</h3>
+                <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                  Selecciona la forma de pago para esta orden.
+                </p>
+              </div>
+              <button onClick={() => setShowPaymentModal(false)} className={`p-2 rounded-full transition-colors ${isDark ? 'hover:bg-white/10 text-gray-400 hover:text-white' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-900'}`}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Methods options */}
+            <div className="p-6 space-y-4">
+              <div className="text-center mb-2">
+                <span className={`text-xs uppercase tracking-wider font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total a pagar</span>
+                <h2 className="text-3xl font-black font-display tracking-tight text-gold-500 mt-1">
+                  ${total.toLocaleString('es-CO')}
+                </h2>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleProcessSale('Efectivo')}
+                  className={`w-full p-4 rounded-2xl border-2 flex items-center gap-4 transition-all duration-200 hover:scale-[1.02] text-left
+                    ${isDark 
+                      ? 'bg-dark-card border-dark-border hover:border-emerald-500/50 hover:bg-emerald-500/5' 
+                      : 'bg-gray-50 border-gray-100 hover:border-emerald-500/50 hover:bg-emerald-50'}`}
+                >
+                  <span className="text-3xl">💵</span>
+                  <div>
+                    <h4 className="font-bold text-base">Efectivo</h4>
+                    <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Pago en efectivo físico</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleProcessSale('Nequi')}
+                  className={`w-full p-4 rounded-2xl border-2 flex items-center gap-4 transition-all duration-200 hover:scale-[1.02] text-left
+                    ${isDark 
+                      ? 'bg-dark-card border-dark-border hover:border-pink-500/50 hover:bg-pink-500/5' 
+                      : 'bg-gray-50 border-gray-100 hover:border-pink-500/50 hover:bg-pink-50'}`}
+                >
+                  <span className="text-3xl">📱</span>
+                  <div>
+                    <h4 className="font-bold text-base">Nequi</h4>
+                    <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Pago digital por Nequi</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleProcessSale('Transferencia')}
+                  className={`w-full p-4 rounded-2xl border-2 flex items-center gap-4 transition-all duration-200 hover:scale-[1.02] text-left
+                    ${isDark 
+                      ? 'bg-dark-card border-dark-border hover:border-blue-500/50 hover:bg-blue-500/5' 
+                      : 'bg-gray-50 border-gray-100 hover:border-blue-500/50 hover:bg-blue-50'}`}
+                >
+                  <span className="text-3xl">🏦</span>
+                  <div>
+                    <h4 className="font-bold text-base">Transferencia</h4>
+                    <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Bancolombia u otras cuentas</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className={`p-4 border-t flex justify-end
+              ${isDark ? 'border-dark-border bg-black/10' : 'border-light-border bg-gray-50'}`}>
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                className={`px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wide transition-colors
+                  ${isDark ? 'bg-dark-card hover:bg-dark-surface text-gray-400' : 'bg-white hover:bg-gray-100 text-gray-500 border border-gray-200'}`}
+              >
+                Cancelar
               </button>
             </div>
 
