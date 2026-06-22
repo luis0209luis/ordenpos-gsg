@@ -66,9 +66,11 @@ export default function Inventory() {
     unidad: 'unidad',
     stock_actual: 0,
     stock_minimo: 1,
+    stock_actual_empaque: 0,
+    stock_minimo_empaque: 1,
     precio_unitario: 0,  // stored as per-unit cost in DB
     precio_empaque: 0,   // what the user actually enters (price per package/unit shown)
-    pack_large_unit: '',
+    pack_large_unit: 'unidad',
     pack_large_ratio: 1,
     pack_medium_unit: '',
     pack_medium_ratio: 1,
@@ -461,29 +463,31 @@ export default function Inventory() {
 
   const openSupplyModal = (item = null) => {
     setSupplyErrorMsg('')
-    setSupplyActiveTab('general')
     if (item) {
       setEditingSupplyItem(item)
       // Backward-compatible loading: map either large or medium pack to pack_large fields
-      const packUnit = item.pack_large_unit || item.pack_medium_unit || ''
+      const packUnit = item.pack_large_unit || item.pack_medium_unit || 'unidad'
       const packRatio = item.pack_large_unit
         ? (item.pack_large_ratio || 1)
         : (item.pack_medium_unit ? (item.pack_medium_ratio || 1) : 1)
-      const hasPackaging = !!packUnit
       const ratio = parseFloat(packRatio) || 1
       const precioEmpaque = (item.precio_unitario || 0) * ratio
+      const stockActualEmpaque = (item.stock_actual || 0) / ratio
+      const stockMinimoEmpaque = (item.stock_minimo || 0) / ratio
       setSupplyFormData({
         nombre: item.nombre || '',
         unidad: item.unidad || 'unidad',
         stock_actual: item.stock_actual !== undefined ? item.stock_actual : 0,
         stock_minimo: item.stock_minimo !== undefined ? item.stock_minimo : 1,
+        stock_actual_empaque: stockActualEmpaque,
+        stock_minimo_empaque: stockMinimoEmpaque,
         precio_unitario: item.precio_unitario !== undefined ? item.precio_unitario : 0,
         precio_empaque: precioEmpaque,
         pack_large_unit: packUnit,
         pack_large_ratio: ratio,
         pack_medium_unit: '',
         pack_medium_ratio: 1,
-        hasPackagingConfig: hasPackaging
+        hasPackagingConfig: true
       })
     } else {
       setEditingSupplyItem(null)
@@ -492,9 +496,11 @@ export default function Inventory() {
         unidad: 'unidad',
         stock_actual: 0,
         stock_minimo: 1,
+        stock_actual_empaque: 0,
+        stock_minimo_empaque: 1,
         precio_unitario: 0,
         precio_empaque: 0,
-        pack_large_unit: '',
+        pack_large_unit: 'unidad',
         pack_large_ratio: 1,
         pack_medium_unit: '',
         pack_medium_ratio: 1,
@@ -506,28 +512,30 @@ export default function Inventory() {
 
   const handleDuplicateSupply = (item) => {
     setSupplyErrorMsg('')
-    setSupplyActiveTab('general')
     setEditingSupplyItem(null)
     // Backward-compatible loading: map either large or medium pack to pack_large fields
-    const packUnit = item.pack_large_unit || item.pack_medium_unit || ''
+    const packUnit = item.pack_large_unit || item.pack_medium_unit || 'unidad'
     const packRatio = item.pack_large_unit
       ? (item.pack_large_ratio || 1)
       : (item.pack_medium_unit ? (item.pack_medium_ratio || 1) : 1)
-    const hasPackaging = !!packUnit
     const ratio = parseFloat(packRatio) || 1
     const precioEmpaque = (item.precio_unitario || 0) * ratio
+    const stockActualEmpaque = (item.stock_actual || 0) / ratio
+    const stockMinimoEmpaque = (item.stock_minimo || 0) / ratio
     setSupplyFormData({
       nombre: item.nombre ? `Copia de ${item.nombre}` : 'Copia de Insumo',
       unidad: item.unidad || 'unidad',
       stock_actual: item.stock_actual !== undefined ? item.stock_actual : 0,
       stock_minimo: item.stock_minimo !== undefined ? item.stock_minimo : 1,
+      stock_actual_empaque: stockActualEmpaque,
+      stock_minimo_empaque: stockMinimoEmpaque,
       precio_unitario: item.precio_unitario !== undefined ? item.precio_unitario : 0,
       precio_empaque: precioEmpaque,
       pack_large_unit: packUnit,
       pack_large_ratio: ratio,
       pack_medium_unit: '',
       pack_medium_ratio: 1,
-      hasPackagingConfig: hasPackaging
+      hasPackagingConfig: true
     })
     setIsSupplyModalOpen(true)
   }
@@ -713,26 +721,30 @@ export default function Inventory() {
     try {
       setSupplyErrorMsg('')
       if (!supplyFormData.nombre?.trim()) {
-        setSupplyActiveTab('general')
         setSupplyErrorMsg('El nombre del insumo es obligatorio.')
         return
       }
+
       // Determine the ratio used for price calculation
-      const packRatio = supplyFormData.hasPackagingConfig && supplyFormData.pack_large_unit && parseFloat(supplyFormData.pack_large_ratio) > 1
-        ? parseFloat(supplyFormData.pack_large_ratio)
-        : 1
+      const packRatio = parseFloat(supplyFormData.pack_large_ratio) || 1
+      
       // precio_empaque is what the user entered (price per package/box)
       // precio_unitario stored in DB = precio_empaque / packRatio (per base unit)
       const precioEmpaque = parseFloat(supplyFormData.precio_empaque) || 0
       const precioUnitario = packRatio > 1 ? precioEmpaque / packRatio : precioEmpaque
+      
+      // stock in base units = stock_empaques * packRatio
+      const stockActual = (parseFloat(supplyFormData.stock_actual_empaque) || 0) * packRatio
+      const stockMinimo = (parseFloat(supplyFormData.stock_minimo_empaque) || 0) * packRatio
+
       const itemData = {
         nombre: supplyFormData.nombre,
         unidad: supplyFormData.unidad,
-        stock_actual: parseFloat(supplyFormData.stock_actual) || 0,
-        stock_minimo: parseFloat(supplyFormData.stock_minimo) || 0,
+        stock_actual: stockActual,
+        stock_minimo: stockMinimo,
         precio_unitario: precioUnitario,
-        pack_large_unit: supplyFormData.hasPackagingConfig ? (supplyFormData.pack_large_unit || null) : null,
-        pack_large_ratio: supplyFormData.hasPackagingConfig ? (parseFloat(supplyFormData.pack_large_ratio) || 1) : 1,
+        pack_large_unit: supplyFormData.pack_large_unit || 'unidad',
+        pack_large_ratio: packRatio,
         pack_medium_unit: null,
         pack_medium_ratio: 1
       }
@@ -1604,33 +1616,8 @@ export default function Inventory() {
               </h3>
             </div>
 
-            {/* Tab Bar */}
-            <div className="flex border-b border-gray-100 dark:border-dark-border/40 shrink-0 px-6 mb-2">
-              <button
-                type="button"
-                onClick={() => setSupplyActiveTab('general')}
-                className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider text-center border-b-2 transition-all ${
-                  supplyActiveTab === 'general'
-                    ? 'border-gold-500 text-gold-500'
-                    : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'
-                }`}
-              >
-                📋 General
-              </button>
-              <button
-                type="button"
-                onClick={() => setSupplyActiveTab('packaging')}
-                className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider text-center border-b-2 transition-all ${
-                  supplyActiveTab === 'packaging'
-                    ? 'border-gold-500 text-gold-500'
-                    : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'
-                }`}
-              >
-                📦 Cajas / Paquetes {supplyFormData.hasPackagingConfig && <span className="ml-1 text-[9px] bg-gold-500 text-dark-bg px-1.5 py-0.5 rounded-full font-bold">Activo</span>}
-              </button>
-            </div>
-
-            <div className="overflow-y-auto flex-1 px-6 pb-2">
+            {/* Unified Form Body */}
+            <div className="overflow-y-auto flex-1 px-6 pb-2 pt-2">
 
               {supplyErrorMsg && (
                 <div className="mt-2 mb-3 p-3 bg-red-500/10 border border-red-500/30 text-red-500 rounded-xl text-xs font-bold flex items-center gap-2 animate-fade-in">
@@ -1640,32 +1627,46 @@ export default function Inventory() {
               )}
 
               <form id="supply-form" onSubmit={handleSupplySubmit} className="space-y-4 pb-1">
-                
-                {/* TAB 1: GENERAL */}
-                {supplyActiveTab === 'general' && (
-                  <div className="space-y-4 animate-fade-in">
+                <div className="space-y-4 animate-fade-in text-left">
+                  {/* 1. Nombre */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider opacity-70">Nombre del insumo</label>
+                    <input
+                      required
+                      type="text"
+                      placeholder="Ej: Harina de trigo, Salsa rosada..."
+                      value={supplyFormData.nombre}
+                      onChange={e => setSupplyFormData({ ...supplyFormData, nombre: e.target.value })}
+                      className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
+                        ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                    />
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 px-1">Escribe un nombre descriptivo y claro.</p>
+                  </div>
+
+                  {/* 2. Presentación de Compra y Unidad Base */}
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold uppercase tracking-wider opacity-70">Nombre del insumo</label>
+                      <label className="text-[10px] font-bold uppercase tracking-wider opacity-70">¿Cómo lo compras? (Empaque)</label>
                       <input
                         required
                         type="text"
-                        placeholder="Ej: Harina de trigo, Salsa rosada..."
-                        value={supplyFormData.nombre}
-                        onChange={e => setSupplyFormData({ ...supplyFormData, nombre: e.target.value })}
+                        placeholder="Ej: bolsa, caja, pote, saco..."
+                        value={supplyFormData.pack_large_unit}
+                        onChange={e => setSupplyFormData({ ...supplyFormData, pack_large_unit: e.target.value })}
                         className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
                           ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
                       />
-                      <p className="text-[10px] text-gray-400 dark:text-gray-500 px-1">Escribe un nombre descriptivo y claro.</p>
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500 px-1">Ej: bolsa, caja, pote, und.</p>
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold uppercase tracking-wider opacity-70">Unidad de medida</label>
+                      <label className="text-[10px] font-bold uppercase tracking-wider opacity-70">Unidad de Medida Base</label>
                       {isCreatingUnit ? (
                         <div className="relative w-full">
                           <input
                             autoFocus
                             type="text"
-                            placeholder="Ej: caja, porción, ml..."
+                            placeholder="Ej: litro, kg, gr, und..."
                             value={newUnitName}
                             onChange={e => setNewUnitName(e.target.value)}
                             onKeyDown={e => {
@@ -1730,159 +1731,130 @@ export default function Inventory() {
                           )}
                         </div>
                       )}
-                      <p className="text-[10px] text-gray-400 dark:text-gray-500 px-1">¿Cómo mides y utilizas este insumo en tus recetas?</p>
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500 px-1">Ej: litro, kg, gramo, und.</p>
                     </div>
+                  </div>
 
-                    {/* Price field: user enters price per package (if configured) or per base unit */}
-                    {(() => {
-                      const ratio = supplyFormData.hasPackagingConfig && supplyFormData.pack_large_unit && parseFloat(supplyFormData.pack_large_ratio) > 1
-                        ? parseFloat(supplyFormData.pack_large_ratio)
-                        : 1
-                      const hasPackUnit = supplyFormData.hasPackagingConfig && supplyFormData.pack_large_unit && ratio > 1
-                      const packUnit = hasPackUnit ? supplyFormData.pack_large_unit : supplyFormData.unidad
-                      const precioUnitCalc = ratio > 1
-                        ? ((parseFloat(supplyFormData.precio_empaque) || 0) / ratio)
-                        : null
-                      return (
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold uppercase tracking-wider opacity-70">
-                            Precio de Compra por {hasPackUnit ? packUnit : (supplyFormData.unidad || 'unidad')} ($)
-                          </label>
-                          <div className="relative">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-gray-500 font-bold">$</span>
-                            <input
-                              required
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              placeholder="Ej: 1500"
-                              value={supplyFormData.precio_empaque}
-                              onChange={e => setSupplyFormData({ ...supplyFormData, precio_empaque: e.target.value })}
-                              className={`w-full pl-8 pr-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
-                                ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
-                            />
-                          </div>
-                          <p className="text-[10px] text-gray-400 dark:text-gray-500 px-1">
-                            {hasPackUnit && ratio > 1
-                              ? <>¿Cuánto pagas por {hasPackUnit ? `1 ${packUnit}` : `1 ${supplyFormData.unidad || 'unidad'}`}? {precioUnitCalc > 0 && <span className="text-gold-500 font-bold">(≈ ${Number(precioUnitCalc).toLocaleString('es-CO')} por {supplyFormData.unidad || 'unidad'})</span>}</>
-                              : <>¿Cuánto pagas por 1 {supplyFormData.unidad || 'unidad'}?</>
-                            }
-                          </p>
-                        </div>
-                      )
-                    })()}
+                  {/* 3. Contenido de cada Empaque (Frase interactiva) */}
+                  <div className="p-3.5 rounded-2xl bg-black/10 dark:bg-black/20 border border-gray-200/10 dark:border-dark-border/20 space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-gold-500 block">
+                      📏 Contenido por Empaque
+                    </label>
+                    <div className="flex items-center gap-2 text-xs font-semibold text-gray-700 dark:text-gray-300 flex-wrap">
+                      <span>1</span>
+                      <span className="px-2 py-1 bg-gold-500/10 text-gold-500 rounded border border-gold-500/20 max-w-[120px] truncate">
+                        {supplyFormData.pack_large_unit || 'unidad'}
+                      </span>
+                      <span>contiene</span>
+                      <input
+                        required
+                        type="number"
+                        min="0.0001"
+                        step="any"
+                        placeholder="Ej: 10"
+                        value={supplyFormData.pack_large_ratio}
+                        onChange={e => setSupplyFormData({ ...supplyFormData, pack_large_ratio: e.target.value })}
+                        className={`w-20 px-2 py-1.5 rounded-lg text-xs font-semibold outline-none border transition focus:border-gold-500 text-center
+                          ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                      />
+                      <span className="text-gold-500 font-bold">
+                        {supplyFormData.unidad || 'unidad'}(s)
+                      </span>
+                    </div>
+                    <p className="text-[9px] text-gray-400 dark:text-gray-500 italic">
+                      Ejemplo: Si compras una bolsa que trae 3 litros de insumo, pon 3. Si se vende por unidad suelta, pon 1.
+                    </p>
+                  </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                  {/* 4. Precio de Compra por Empaque */}
+                  {(() => {
+                    const ratio = parseFloat(supplyFormData.pack_large_ratio) || 1
+                    const packUnit = supplyFormData.pack_large_unit || 'unidad'
+                    const precioUnitCalc = ratio > 1
+                      ? ((parseFloat(supplyFormData.precio_empaque) || 0) / ratio)
+                      : null
+                    return (
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase tracking-wider opacity-70">Stock Actual</label>
+                        <label className="text-[10px] font-bold uppercase tracking-wider opacity-70">
+                          Precio de Compra por {packUnit || 'unidad'} ($)
+                        </label>
                         <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-gray-500 font-bold">$</span>
                           <input
                             required
                             type="number"
                             step="0.01"
                             min="0"
-                            placeholder="0"
-                            value={supplyFormData.stock_actual}
-                            onChange={e => setSupplyFormData({ ...supplyFormData, stock_actual: e.target.value })}
-                            className={`w-full pr-12 pl-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
+                            placeholder="Ej: 15000"
+                            value={supplyFormData.precio_empaque}
+                            onChange={e => setSupplyFormData({ ...supplyFormData, precio_empaque: e.target.value })}
+                            className={`w-full pl-8 pr-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
                               ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
                           />
-                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-500 font-semibold truncate max-w-[32px]">
-                            {supplyFormData.unidad || 'und'}
-                          </span>
                         </div>
-                        <p className="text-[10px] text-gray-400 dark:text-gray-500 px-1">Cantidad actual en bodega.</p>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500 px-1">
+                          ¿Cuánto pagas por 1 {packUnit || 'unidad'}? {precioUnitCalc > 0 && ratio > 1 && <span className="text-gold-500 font-bold">(≈ ${Number(precioUnitCalc.toFixed(2)).toLocaleString('es-CO')} por {supplyFormData.unidad || 'unidad'})</span>}
+                        </p>
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase tracking-wider opacity-70">Stock Mínimo</label>
-                        <div className="relative">
-                          <input
-                            required
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            placeholder="1"
-                            value={supplyFormData.stock_minimo}
-                            onChange={e => setSupplyFormData({ ...supplyFormData, stock_minimo: e.target.value })}
-                            className={`w-full pr-12 pl-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
-                              ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
-                          />
-                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-500 font-semibold truncate max-w-[32px]">
-                            {supplyFormData.unidad || 'und'}
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-gray-400 dark:text-gray-500 px-1">Mínimo para alerta de recompra.</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                    )
+                  })()}
 
-                {/* TAB 2: PACKAGING */}
-                {supplyActiveTab === 'packaging' && (
-                  <div className="space-y-4 animate-fade-in">
-                    <div className={`p-4 rounded-2xl border-2 transition-all ${
-                      supplyFormData.hasPackagingConfig 
-                        ? 'border-gold-500 bg-gold-500/5' 
-                        : isDark ? 'border-dark-border bg-dark-card/30' : 'border-light-border bg-light-surface/30'
-                    }`}>
-                      <div className="flex items-center gap-2.5 select-none mb-2">
-                        <input
-                          type="checkbox"
-                          id="hasPackagingConfigCheckbox"
-                          checked={supplyFormData.hasPackagingConfig}
-                          onChange={e => setSupplyFormData(prev => ({ ...prev, hasPackagingConfig: e.target.checked }))}
-                          className="w-4 h-4 rounded text-gold-500 focus:ring-gold-500 border-gray-300 dark:border-dark-border cursor-pointer"
-                        />
-                        <label htmlFor="hasPackagingConfigCheckbox" className="text-xs font-bold uppercase opacity-85 select-none cursor-pointer">
-                          ¿Se compra por Cajas/Paquetes?
-                        </label>
-                      </div>
-
-                      <p className="text-[10px] text-gray-400 dark:text-gray-500">
-                        Configura empaques si compras este insumo al por mayor (ej: cajas o paquetes enteros) para ingresar facturas más fácilmente.
-                      </p>
-
-                      {supplyFormData.hasPackagingConfig && (
-                        <div className="mt-4 space-y-4 animate-fade-in text-left">
-                          
-                          {/* Empaque de Compra Único */}
-                          <div className="space-y-2 p-3.5 rounded-xl bg-black/10 dark:bg-black/20 border border-gray-200/10 dark:border-dark-border/20">
-                            <label className="text-[10px] font-bold uppercase tracking-wider text-gold-500 block">
-                              📦 Detalle del Empaque de Compra (Ej: Caja, Bolsa, Bulto, Pote)
-                            </label>
-                            
-                            <div className="flex items-center gap-2 text-xs font-semibold text-gray-700 dark:text-gray-300 flex-wrap">
-                              <span>1</span>
-                              <input
-                                type="text"
-                                placeholder="caja"
-                                value={supplyFormData.pack_large_unit}
-                                onChange={e => setSupplyFormData({ ...supplyFormData, pack_large_unit: e.target.value })}
-                                className={`w-28 px-2.5 py-2 rounded-xl text-xs font-semibold outline-none border transition focus:border-gold-500 text-center
-                                  ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
-                              />
-                              <span>contiene</span>
-                              <input
-                                type="number"
-                                min="1.0001"
-                                step="any"
-                                placeholder="10"
-                                value={supplyFormData.pack_large_ratio}
-                                onChange={e => setSupplyFormData({ ...supplyFormData, pack_large_ratio: e.target.value })}
-                                className={`w-20 px-2.5 py-2 rounded-xl text-xs font-semibold outline-none border transition focus:border-gold-500 text-center
-                                  ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
-                              />
-                              <span className="text-gold-500 font-bold">
-                                {supplyFormData.unidad || 'unidad'}(s)
-                              </span>
-                            </div>
-                            <p className="text-[9px] text-gray-400 dark:text-gray-500 italic">Ejemplo: Si compras una caja que contiene 10 unidades de {supplyFormData.unidad || 'unidad'}, pon "caja" y "10".</p>
+                  {/* 5. Stock Actual y Mínimo (Ingresados en Empaques) */}
+                  {(() => {
+                    const packUnit = supplyFormData.pack_large_unit || 'unidad'
+                    const ratio = parseFloat(supplyFormData.pack_large_ratio) || 1
+                    const stockActualCalc = (parseFloat(supplyFormData.stock_actual_empaque) || 0) * ratio
+                    const stockMinimoCalc = (parseFloat(supplyFormData.stock_minimo_empaque) || 0) * ratio
+                    return (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold uppercase tracking-wider opacity-70">Stock Actual (en {packUnit || 'und'})</label>
+                          <div className="relative">
+                            <input
+                              required
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder="0"
+                              value={supplyFormData.stock_actual_empaque}
+                              onChange={e => setSupplyFormData({ ...supplyFormData, stock_actual_empaque: e.target.value })}
+                              className={`w-full pr-12 pl-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
+                                ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                            />
+                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-500 font-semibold truncate max-w-[32px]">
+                              {packUnit || 'und'}
+                            </span>
                           </div>
+                          <p className="text-[10px] text-gray-400 dark:text-gray-500 px-1">
+                            Equivale a: <span className="font-bold text-gold-500">{Number(stockActualCalc.toFixed(2))} {supplyFormData.unidad || 'unidad'}(s)</span>.
+                          </p>
                         </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold uppercase tracking-wider opacity-70">Stock Mínimo (en {packUnit || 'und'})</label>
+                          <div className="relative">
+                            <input
+                              required
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder="1"
+                              value={supplyFormData.stock_minimo_empaque}
+                              onChange={e => setSupplyFormData({ ...supplyFormData, stock_minimo_empaque: e.target.value })}
+                              className={`w-full pr-12 pl-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
+                                ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                            />
+                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-500 font-semibold truncate max-w-[32px]">
+                              {packUnit || 'und'}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-gray-400 dark:text-gray-500 px-1">
+                            Alerta a las: <span className="font-bold text-gold-500">{Number(stockMinimoCalc.toFixed(2))} {supplyFormData.unidad || 'unidad'}(s)</span>.
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
               </form>
             </div>
 
