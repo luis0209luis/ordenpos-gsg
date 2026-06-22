@@ -7,7 +7,7 @@ const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem('ordenpos_user')) }
+    try { return JSON.parse(localStorage.getItem('ordenpos_user')) }
     catch { return null }
   })
 
@@ -41,7 +41,7 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Credenciales incorrectas. Verifique usuario y contraseña.' }
       }
       const userData = { username, role: 'Superadmin', loginAt: new Date().toISOString() }
-      sessionStorage.setItem('ordenpos_user', JSON.stringify(userData))
+      localStorage.setItem('ordenpos_user', JSON.stringify(userData))
       setUser(userData)
       return { success: true }
     }
@@ -81,7 +81,7 @@ export function AuthProvider({ children }) {
           }
           
           if (!requiresPasswordChange) {
-            sessionStorage.setItem('ordenpos_user', JSON.stringify(userData))
+            localStorage.setItem('ordenpos_user', JSON.stringify(userData))
             setUser(userData)
           }
           return { success: true, requiresPasswordChange, tempUser: userData }
@@ -129,7 +129,7 @@ export function AuthProvider({ children }) {
           permissions: staffMatch.permissions || getFallbackPermissions(staffMatch.role), 
           loginAt: new Date().toISOString() 
         }
-        sessionStorage.setItem('ordenpos_user', JSON.stringify(userData))
+        localStorage.setItem('ordenpos_user', JSON.stringify(userData))
         setUser(userData)
         return { success: true }
       }
@@ -148,7 +148,7 @@ export function AuthProvider({ children }) {
         .update({ password_hash: newPassword })
         .eq('id', tempUser.businessId)
 
-      sessionStorage.setItem('ordenpos_user', JSON.stringify(tempUser))
+      localStorage.setItem('ordenpos_user', JSON.stringify(tempUser))
       setUser(tempUser)
       return true
     } catch (e) {
@@ -158,7 +158,7 @@ export function AuthProvider({ children }) {
   }
 
   const logout = () => {
-    sessionStorage.removeItem('ordenpos_user')
+    localStorage.removeItem('ordenpos_user')
     setUser(null)
   }
 

@@ -10,7 +10,7 @@ import { getPaddedTurnNumber } from '../utils/turnHelper'
 export default function POS() {
   const { theme } = useTheme() || {}
   const isDark = theme === 'dark'
-  const { products = [], processSale, salesHistory = [] } = useInventory() || {}
+  const { products = [], processSale, salesHistory = [], getEstimatedStock, customizationOptions = [], getProductOptions } = useInventory() || {}
   const { settings = {}, staff = [], updateCategoryOrder } = useSettings() || {}
   const { user } = useAuth() || {}
 
@@ -57,6 +57,8 @@ export default function POS() {
   const [mobileCartOpen, setMobileCartOpen] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [notes, setNotes] = useState('')
+  const [customizingProduct, setCustomizingProduct] = useState(null)
+  const [selectedOptionsForCustom, setSelectedOptionsForCustom] = useState([])
 
   // Reorder Categories State
   const [isReorderModalOpen, setIsReorderModalOpen] = useState(false)
@@ -107,15 +109,69 @@ export default function POS() {
     return matchesSearch && matchesCategory
   })
 
+  const getEffectiveStock = (product) => {
+    if (product.inventory_mode === 'unlimited') return Infinity
+    if (product.inventory_mode === 'recipe') {
+      return getEstimatedStock ? (getEstimatedStock(product.id) ?? 0) : 0
+    }
+    return product.stock_actual ?? 0
+  }
+
+  const addCustomProductToCart = (product, selectedOpts) => {
+    const extraPrice = selectedOpts.reduce((sum, o) => sum + (o.extra_price || 0), 0)
+    const finalPrice = product.precio + extraPrice
+    
+    const sortedOpts = [...selectedOpts].sort((a, b) => {
+      const idA = a.id || 0
+      const idB = b.id || 0
+      return idA > idB ? 1 : -1
+    })
+    const optionLabels = sortedOpts.map(o => o.label).join(', ')
+    const customLabel = optionLabels ? `${product.nombre} (${optionLabels})` : product.nombre
+    
+    const cartItemId = selectedOpts.length > 0 
+      ? `${product.id}-${sortedOpts.map(o => o.id || Math.random()).join(',')}`
+      : product.id
+
+    setCart(prev => {
+      const existing = prev.find(item => item.id === cartItemId)
+      const stockLimit = getEffectiveStock(product)
+      if (existing) {
+        if (existing.quantity >= stockLimit) return prev
+        return prev.map(item => item.id === cartItemId ? { ...item, quantity: item.quantity + 1 } : item)
+      }
+      if (stockLimit <= 0) return prev
+      return [...prev, { 
+        ...product, 
+        id: cartItemId,
+        productId: product.id,
+        nombre: customLabel,
+        precio: finalPrice,
+        selectedOptions: sortedOpts,
+        quantity: 1 
+      }]
+    })
+  }
+
   const addToCart = (product) => {
+    if (product.is_customizable) {
+      const opts = getProductOptions ? getProductOptions(product.id) : []
+      if (opts.length > 0) {
+        setCustomizingProduct(product)
+        setSelectedOptionsForCustom([])
+        return
+      }
+    }
+
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id)
+      const stockLimit = getEffectiveStock(product)
       if (existing) {
-        if (existing.quantity >= product.stock_actual) return prev
+        if (existing.quantity >= stockLimit) return prev
         return prev.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item)
       }
-      if (product.stock_actual <= 0) return prev
-      return [...prev, { ...product, quantity: 1 }]
+      if (stockLimit <= 0) return prev
+      return [...prev, { ...product, productId: product.id, quantity: 1 }]
     })
   }
 
@@ -123,9 +179,12 @@ export default function POS() {
     setCart(prev => prev.map(item => {
       if (item.id === id) {
         const newQ = item.quantity + delta
-        const product = (products || []).find(p => p.id === id)
-        if (newQ > 0 && product && newQ <= product.stock_actual) {
-          return { ...item, quantity: newQ }
+        const product = (products || []).find(p => p.id === (item.productId || id))
+        if (product) {
+          const stockLimit = getEffectiveStock(product)
+          if (newQ > 0 && newQ <= stockLimit) {
+            return { ...item, quantity: newQ }
+          }
         }
         if (newQ <= 0) return { ...item, quantity: 0 }
       }
@@ -374,9 +433,14 @@ export default function POS() {
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredProducts.map(product => {
               const currentMinStock = product.stock_minimo !== undefined && product.stock_minimo !== null 
-                ? product.stock_minimo : settings.globalMinStock
-              const outOfStock = product.stock_actual <= 0
-              const isLowStock = product.stock_actual <= currentMinStock && !outOfStock
+                ? product.stock_minimo : (settings.globalMinStock || 10)
+              
+              const isRecipe = product.inventory_mode === 'recipe'
+              const isUnlimited = product.inventory_mode === 'unlimited'
+              
+              const stockLimit = getEffectiveStock(product)
+              const outOfStock = !isUnlimited && stockLimit <= 0
+              const isLowStock = !isUnlimited && stockLimit <= currentMinStock && !outOfStock
               const imgInfo = getSmartImage(product.nombre, product.image_url)
 
               return (
@@ -399,14 +463,16 @@ export default function POS() {
                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
                     )}
 
-                    <span className={`absolute top-2 right-2 text-[10px] whitespace-nowrap font-bold px-2 py-0.5 rounded-md border backdrop-blur-md shadow-sm
-                      ${outOfStock 
-                        ? (isDark ? 'bg-gold-500/80 border-gold-500/30 text-black' : 'bg-gold-100/90 border-gold-300 text-gold-900')
-                        : isLowStock 
-                          ? (isDark ? 'bg-orange-500/80 border-orange-500/30 text-black' : 'bg-orange-100/90 border-orange-300 text-orange-900')
-                          : (isDark ? 'bg-black/60 border-white/20 text-white' : 'bg-white/90 border-gray-300 text-gray-800')}`}>
-                      Stock: {product.stock_actual}
-                    </span>
+                    {!isUnlimited && (
+                      <span className={`absolute top-2 right-2 text-[10px] whitespace-nowrap font-bold px-2 py-0.5 rounded-md border backdrop-blur-md shadow-sm
+                        ${outOfStock 
+                          ? (isDark ? 'bg-gold-500/80 border-gold-500/30 text-black' : 'bg-gold-100/90 border-gold-300 text-gold-900')
+                          : isLowStock 
+                            ? (isDark ? 'bg-orange-500/80 border-orange-500/30 text-black' : 'bg-orange-100/90 border-orange-300 text-orange-900')
+                            : (isDark ? 'bg-black/60 border-white/20 text-white' : 'bg-white/90 border-gray-300 text-gray-800')}`}>
+                        {isRecipe ? `Stock: ~${stockLimit}` : `Stock: ${stockLimit}`}
+                      </span>
+                    )}
                   </div>
 
                   <div className="p-4 flex flex-col flex-1">
@@ -893,6 +959,123 @@ export default function POS() {
               >
                 Cancelar
               </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOMIZATION OPTIONS MODAL */}
+      {customizingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setCustomizingProduct(null)} />
+          
+          <div className={`relative w-full max-w-md rounded-3xl shadow-2xl animate-slide-in-up border flex flex-col max-h-[85vh]
+            ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
+            
+            {/* Header */}
+            <div className="px-6 pt-6 pb-2 shrink-0 relative">
+              <button 
+                onClick={() => setCustomizingProduct(null)} 
+                className={`absolute top-6 right-6 p-2 rounded-full transition-colors
+                  ${isDark ? 'hover:bg-dark-card text-gray-400 hover:text-white' : 'hover:bg-light-surface text-gray-500 hover:text-gray-900'}`}
+              >
+                <X size={18} />
+              </button>
+
+              <h3 className="font-display font-bold text-xl pr-8">
+                Personalizar: {customizingProduct.nombre}
+              </h3>
+              <p className={`text-xs mt-1 font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                Elige hasta {customizingProduct.max_selections} {customizingProduct.max_selections === 1 ? 'opción' : 'opciones'}.
+              </p>
+            </div>
+
+            {/* Options List */}
+            <div className="overflow-y-auto flex-1 px-6 pb-2 max-h-[300px]">
+              <div className="space-y-2 mt-2">
+                {getProductOptions(customizingProduct.id).map(opt => {
+                  const isChecked = selectedOptionsForCustom.some(o => o.id === opt.id)
+                  const atLimit = selectedOptionsForCustom.length >= (customizingProduct.max_selections || 1)
+                  
+                  const handleToggleOption = () => {
+                    if (isChecked) {
+                      setSelectedOptionsForCustom(prev => prev.filter(o => o.id !== opt.id))
+                    } else {
+                      if (customizingProduct.max_selections === 1) {
+                        setSelectedOptionsForCustom([opt])
+                      } else if (!atLimit) {
+                        setSelectedOptionsForCustom(prev => [...prev, opt])
+                      }
+                    }
+                  }
+
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={handleToggleOption}
+                      disabled={!isChecked && atLimit && customizingProduct.max_selections > 1}
+                      className={`w-full p-4 rounded-2xl border-2 flex items-center justify-between transition-all duration-200 text-left
+                        ${isChecked 
+                          ? 'border-gold-500 bg-gold-500/10 text-gold-500' 
+                          : (!isChecked && atLimit && customizingProduct.max_selections > 1)
+                            ? 'opacity-50 cursor-not-allowed border-transparent'
+                            : isDark 
+                              ? 'bg-dark-card border-dark-border hover:border-gray-700 text-gray-300' 
+                              : 'bg-gray-50 border-gray-100 hover:border-gray-300 text-gray-700'}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all
+                          ${isChecked 
+                            ? 'border-gold-500 bg-gold-500 text-dark-bg' 
+                            : isDark ? 'border-gray-600' : 'border-gray-300'}`}>
+                          {isChecked && <Plus size={14} strokeWidth={3} />}
+                        </div>
+                        <span className="font-bold text-sm">{opt.label}</span>
+                      </div>
+                      
+                      {opt.extra_price > 0 && (
+                        <span className={`font-semibold text-xs ${isChecked ? 'text-gold-400' : 'text-gray-400'}`}>
+                          + ${Number(opt.extra_price).toLocaleString('es-CO')}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Footer sticky con el botón de agregar */}
+            <div className={`px-6 pb-6 pt-4 shrink-0 border-t ${isDark ? 'border-dark-border/40' : 'border-gray-100'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <span className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Precio Unitario Total:
+                </span>
+                <span className={`font-display font-black text-xl ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  ${Number(customizingProduct.precio + selectedOptionsForCustom.reduce((sum, o) => sum + (o.extra_price || 0), 0)).toLocaleString('es-CO')}
+                </span>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCustomizingProduct(null)}
+                  className={`flex-1 py-3 rounded-xl text-xs font-bold uppercase transition-colors
+                    ${isDark ? 'bg-dark-card hover:bg-dark-surface text-gray-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-600 border border-gray-200'}`}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    addCustomProductToCart(customizingProduct, selectedOptionsForCustom)
+                    setCustomizingProduct(null)
+                  }}
+                  className="flex-[2] py-3 rounded-xl text-xs font-bold uppercase bg-gold-gradient text-dark-bg hover:scale-[1.02] active:scale-[0.98] transition-all shadow-gold-md"
+                >
+                  Agregar al Pedido
+                </button>
+              </div>
             </div>
 
           </div>

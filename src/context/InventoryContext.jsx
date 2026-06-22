@@ -11,12 +11,17 @@ export function InventoryProvider({ children }) {
 
   const [products, setProducts] = useState([])
   const [salesHistory, setSalesHistory] = useState([])
+  const [supplyItems, setSupplyItems] = useState([])
+  const [productRecipes, setProductRecipes] = useState([])
+  const [customizationOptions, setCustomizationOptions] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let isMounted = true
     let productsChannel
     let salesChannel
+    let supplyItemsChannel
+    let optionsChannel
     let pollingInterval
 
     async function loadData() {
@@ -48,6 +53,40 @@ export function InventoryProvider({ children }) {
           }))
           setSalesHistory(mappedSales)
         }
+
+        // Fetch supply items, recipes and customization options in parallel
+        const productIds = prodRes.data?.map(p => p.id) || []
+        const [supplyRes, recipesRes, optionsRes] = await Promise.all([
+          supabase.from('supply_items').select('*').eq('business_id', bid),
+          productIds.length > 0
+            ? supabase.from('product_recipes').select('*').in('product_id', productIds)
+            : Promise.resolve({ data: [] }),
+          productIds.length > 0
+            ? supabase.from('product_customization_options').select('*').in('product_id', productIds).order('sort_order', { ascending: true })
+            : Promise.resolve({ data: [] })
+        ])
+
+        if (!isMounted) return
+
+        if (supplyRes.data) setSupplyItems(supplyRes.data)
+        if (recipesRes.data) setProductRecipes(recipesRes.data)
+        if (optionsRes.data) setCustomizationOptions(optionsRes.data)
+
+        // Set up real-time channel for supply_items
+        supplyItemsChannel = supabase.channel('supply_items-changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'supply_items', filter: `business_id=eq.${bid}` }, payload => {
+            if (!isMounted) return
+            if (payload.eventType === 'INSERT') {
+              setSupplyItems(prev => prev.find(s => s.id === payload.new.id) ? prev : [...prev, payload.new])
+            }
+            if (payload.eventType === 'UPDATE') {
+              setSupplyItems(prev => prev.map(s => s.id === payload.new.id ? { ...s, ...payload.new } : s))
+            }
+            if (payload.eventType === 'DELETE') {
+              setSupplyItems(prev => prev.filter(s => s.id !== payload.old.id))
+            }
+          })
+          .subscribe()
 
         productsChannel = supabase.channel('products-changes')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `business_id=eq.${bid}` }, payload => {
@@ -86,6 +125,21 @@ export function InventoryProvider({ children }) {
             }
             if (payload.eventType === 'DELETE') {
               setSalesHistory(prev => prev.filter(s => s.id !== payload.old.id))
+            }
+          })
+          .subscribe()
+
+        optionsChannel = supabase.channel('customization-options-changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'product_customization_options' }, payload => {
+            if (!isMounted) return
+            if (payload.eventType === 'INSERT') {
+              setCustomizationOptions(prev => prev.find(o => o.id === payload.new.id) ? prev : [...prev, payload.new].sort((a,b)=>a.sort_order - b.sort_order))
+            }
+            if (payload.eventType === 'UPDATE') {
+              setCustomizationOptions(prev => prev.map(o => o.id === payload.new.id ? { ...o, ...payload.new } : o).sort((a,b)=>a.sort_order - b.sort_order))
+            }
+            if (payload.eventType === 'DELETE') {
+              setCustomizationOptions(prev => prev.filter(o => o.id !== payload.old.id))
             }
           })
           .subscribe()
@@ -136,6 +190,8 @@ export function InventoryProvider({ children }) {
       isMounted = false
       if (productsChannel) supabase.removeChannel(productsChannel)
       if (salesChannel) supabase.removeChannel(salesChannel)
+      if (supplyItemsChannel) supabase.removeChannel(supplyItemsChannel)
+      if (optionsChannel) supabase.removeChannel(optionsChannel)
       if (pollingInterval) clearInterval(pollingInterval)
     }
   }, [bid])
@@ -201,15 +257,89 @@ export function InventoryProvider({ children }) {
     }
   }
 
+  const saveCustomizationOptions = async (productId, options) => {
+    try {
+      // Delete all existing options for this product
+      await supabase.from('product_customization_options').delete().eq('product_id', productId)
+      if (options.length > 0) {
+        const rows = options.map((o, i) => ({
+          product_id: productId,
+          supply_item_id: o.supply_item_id || null,
+          label: o.label,
+          cantidad_base: parseFloat(o.cantidad_base) || 0,
+          discount_mode: o.discount_mode || 'split',
+          extra_price: parseFloat(o.extra_price) || 0,
+          sort_order: i
+        }))
+        const { data, error } = await supabase.from('product_customization_options').insert(rows).select()
+        if (error) throw error
+        setCustomizationOptions(prev => [
+          ...prev.filter(o => o.product_id !== productId),
+          ...data
+        ])
+      } else {
+        setCustomizationOptions(prev => prev.filter(o => o.product_id !== productId))
+      }
+    } catch (e) {
+      console.error('Error saving customization options:', e)
+      throw e
+    }
+  }
+
+  const getProductOptions = (productId) => {
+    return customizationOptions
+      .filter(o => o.product_id === productId)
+      .sort((a, b) => a.sort_order - b.sort_order)
+  }
+
   const processSale = async (cartItems, total, deliveryData = null, kitchenStatus = null, paymentMethod = 'Efectivo', notes = '') => {
     // Optimistic UI: update stock locally right away
     setProducts(prev => prev.map(product => {
       const cartItem = cartItems.find(item => item.id === product.id)
-      if (cartItem) {
+      if (cartItem && (product.inventory_mode === 'finished' || !product.inventory_mode)) {
         return { ...product, stock_actual: Math.max(0, product.stock_actual - cartItem.quantity) }
       }
       return product
     }))
+
+    // Optimistically update supply items stock locally for recipe products
+    setSupplyItems(prev => {
+      let updated = [...prev]
+      for (const item of cartItems) {
+        const product = products.find(p => p.id === item.id || p.id === item.productId)
+        if (product && product.inventory_mode === 'recipe') {
+          const recipe = productRecipes.filter(r => r.product_id === product.id)
+          for (const recipeItem of recipe) {
+            updated = updated.map(s => {
+              if (s.id === recipeItem.supply_item_id) {
+                return { ...s, stock_actual: Math.max(0, Number(s.stock_actual) - (Number(recipeItem.cantidad) * item.quantity)) }
+              }
+              return s
+            })
+          }
+        }
+        // Deduct from customizable product selectedOptions
+        if (item.selectedOptions?.length > 0) {
+          const totalSelected = item.selectedOptions.length
+          for (const opt of item.selectedOptions) {
+            if (!opt.supply_item_id) continue
+            let deduct = 0
+            if (opt.discount_mode === 'split') {
+              deduct = (Number(opt.cantidad_base) / totalSelected) * item.quantity
+            } else {
+              deduct = Number(opt.cantidad_base) * item.quantity
+            }
+            updated = updated.map(s => {
+              if (s.id === opt.supply_item_id) {
+                return { ...s, stock_actual: Math.max(0, Number(s.stock_actual) - deduct) }
+              }
+              return s
+            })
+          }
+        }
+      }
+      return updated
+    })
 
     // Build the record — do NOT include created_at, Supabase generates it automatically
     const dbSaleRecord = {
@@ -302,14 +432,52 @@ export function InventoryProvider({ children }) {
 
       setSalesHistory(prev => [mappedData, ...prev])
 
-      // Update stock in DB for each sold item
+      // Update stock in DB for each sold item according to inventory mode
       for (const item of cartItems) {
-        const product = products.find(p => p.id === item.id)
-        if (product) {
+        const product = products.find(p => p.id === item.id || p.id === item.productId)
+        if (!product) continue
+
+        if (product.inventory_mode === 'finished' || !product.inventory_mode) {
           await supabase
             .from('products')
             .update({ stock_actual: Math.max(0, product.stock_actual - item.quantity) })
-            .eq('id', item.id)
+            .eq('id', product.id)
+        } else if (product.inventory_mode === 'recipe') {
+          const recipe = productRecipes.filter(r => r.product_id === product.id)
+          for (const recipeItem of recipe) {
+            const supply = supplyItems.find(s => s.id === recipeItem.supply_item_id)
+            if (supply) {
+              const newStock = Math.max(0, Number(supply.stock_actual) - (Number(recipeItem.cantidad) * item.quantity))
+              await supabase
+                .from('supply_items')
+                .update({ stock_actual: newStock })
+                .eq('id', supply.id)
+              
+              setSupplyItems(prev => prev.map(s => s.id === supply.id ? { ...s, stock_actual: newStock } : s))
+            }
+          }
+        }
+
+        // Deduct from supply items for customizable product selectedOptions (ADDITIVE to any recipe deductions above)
+        if (item.selectedOptions?.length > 0) {
+          const totalSelected = item.selectedOptions.length
+          for (const opt of item.selectedOptions) {
+            if (!opt.supply_item_id) continue
+            const supply = supplyItems.find(s => s.id === opt.supply_item_id)
+            if (!supply) continue
+            let deduct = 0
+            if (opt.discount_mode === 'split') {
+              deduct = (Number(opt.cantidad_base) / totalSelected) * item.quantity
+            } else {
+              deduct = Number(opt.cantidad_base) * item.quantity
+            }
+            const newStock = Math.max(0, Number(supply.stock_actual) - deduct)
+            await supabase
+              .from('supply_items')
+              .update({ stock_actual: newStock })
+              .eq('id', supply.id)
+            setSupplyItems(prev => prev.map(s => s.id === supply.id ? { ...s, stock_actual: newStock } : s))
+          }
         }
       }
 
@@ -342,13 +510,35 @@ export function InventoryProvider({ children }) {
     const sale = salesHistory.find(s => s.id === saleId)
     if (!sale) return
 
+    // Optimistic UI restore for products
     setProducts(prev => prev.map(product => {
       const soldItem = sale.items.find(item => item.id === product.id)
-      if (soldItem) {
+      if (soldItem && (product.inventory_mode === 'finished' || !product.inventory_mode)) {
         return { ...product, stock_actual: product.stock_actual + soldItem.quantity }
       }
       return product
     }))
+
+    // Optimistic UI restore for supply items
+    setSupplyItems(prev => {
+      let updated = [...prev]
+      for (const item of sale.items) {
+        const product = products.find(p => p.id === item.id)
+        if (product && product.inventory_mode === 'recipe') {
+          const recipe = productRecipes.filter(r => r.product_id === product.id)
+          for (const recipeItem of recipe) {
+            updated = updated.map(s => {
+              if (s.id === recipeItem.supply_item_id) {
+                return { ...s, stock_actual: Number(s.stock_actual) + (Number(recipeItem.cantidad) * item.quantity) }
+              }
+              return s
+            })
+          }
+        }
+      }
+      return updated
+    })
+
     setSalesHistory(prev => prev.filter(s => s.id !== saleId))
 
     if (!isValidUUID(bid)) return
@@ -357,11 +547,25 @@ export function InventoryProvider({ children }) {
       await supabase.from('sales').delete().eq('id', saleId)
       for (const item of sale.items) {
         const product = products.find(p => p.id === item.id)
-        if (product) {
+        if (!product) continue
+
+        if (product.inventory_mode === 'finished' || !product.inventory_mode) {
           await supabase
             .from('products')
             .update({ stock_actual: product.stock_actual + item.quantity })
             .eq('id', item.id)
+        } else if (product.inventory_mode === 'recipe') {
+          const recipe = productRecipes.filter(r => r.product_id === product.id)
+          for (const recipeItem of recipe) {
+            const supply = supplyItems.find(s => s.id === recipeItem.supply_item_id)
+            if (supply) {
+              const newStock = Number(supply.stock_actual) + (Number(recipeItem.cantidad) * item.quantity)
+              await supabase
+                .from('supply_items')
+                .update({ stock_actual: newStock })
+                .eq('id', supply.id)
+            }
+          }
         }
       }
     } catch (e) {
@@ -393,10 +597,74 @@ export function InventoryProvider({ children }) {
     }
   }
 
+  const addSupplyItem = async (item) => {
+    if (!isValidUUID(bid)) {
+      const mockItem = { ...item, id: `mock-supply-${Date.now()}`, business_id: bid }
+      setSupplyItems(prev => [...prev, mockItem])
+      return mockItem
+    }
+    const { data, error } = await supabase.from('supply_items').insert({ ...item, business_id: bid }).select().single()
+    if (error) throw error
+    setSupplyItems(prev => [...prev, data])
+    return data
+  }
+
+  const updateSupplyItem = async (id, updates) => {
+    if (!isValidUUID(bid)) {
+      setSupplyItems(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s))
+      return { id, ...updates }
+    }
+    const { data, error } = await supabase.from('supply_items').update(updates).eq('id', id).select().single()
+    if (error) throw error
+    setSupplyItems(prev => prev.map(s => s.id === id ? { ...s, ...data } : s))
+    return data
+  }
+
+  const deleteSupplyItem = async (id) => {
+    if (!isValidUUID(bid)) {
+      setSupplyItems(prev => prev.filter(s => s.id !== id))
+      return
+    }
+    const { error } = await supabase.from('supply_items').delete().eq('id', id)
+    if (error) throw error
+    setSupplyItems(prev => prev.filter(s => s.id !== id))
+  }
+
+  const saveProductRecipe = async (productId, recipeItems) => {
+    if (!isValidUUID(bid)) {
+      const newRecipes = recipeItems.map(r => ({ id: `mock-recipe-${Date.now()}-${Math.random()}`, product_id: productId, supply_item_id: r.supply_item_id, cantidad: r.cantidad }))
+      setProductRecipes(prev => [...prev.filter(r => r.product_id !== productId), ...newRecipes])
+      return
+    }
+    await supabase.from('product_recipes').delete().eq('product_id', productId)
+    if (recipeItems.length > 0) {
+      const rows = recipeItems.map(r => ({ product_id: productId, supply_item_id: r.supply_item_id, cantidad: r.cantidad }))
+      const { data, error } = await supabase.from('product_recipes').insert(rows).select()
+      if (error) throw error
+      setProductRecipes(prev => [...prev.filter(r => r.product_id !== productId), ...data])
+    } else {
+      setProductRecipes(prev => prev.filter(r => r.product_id !== productId))
+    }
+  }
+
+  const getEstimatedStock = (productId) => {
+    const recipe = productRecipes.filter(r => r.product_id === productId)
+    if (recipe.length === 0) return null
+    const limits = recipe.map(r => {
+      const supply = supplyItems.find(s => s.id === r.supply_item_id)
+      if (!supply || r.cantidad === 0) return Infinity
+      return Math.floor(supply.stock_actual / r.cantidad)
+    })
+    return Math.min(...limits)
+  }
+
   return (
     <InventoryContext.Provider value={{
       products, addProduct, updateProduct, deleteProduct,
-      processSale, salesHistory, deleteSale, updateDeliveryStatus, updateKitchenStatus, loading
+      processSale, salesHistory, deleteSale, updateDeliveryStatus, updateKitchenStatus, loading,
+      supplyItems, addSupplyItem, updateSupplyItem, deleteSupplyItem,
+      productRecipes, saveProductRecipe, getEstimatedStock,
+      customizationOptions, saveCustomizationOptions, getProductOptions
     }}>
       {children}
     </InventoryContext.Provider>

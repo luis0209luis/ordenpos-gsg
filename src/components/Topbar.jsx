@@ -8,7 +8,7 @@ export default function Topbar({ title, onMenuClick }) {
   const { theme, toggleTheme } = useTheme() || {}
   const isDark = theme === 'dark'
   
-  const { products = [] } = useInventory() || {}
+  const { products = [], getEstimatedStock } = useInventory() || {}
   const { settings = {} } = useSettings() || {}
   const navigate = useNavigate()
 
@@ -54,8 +54,19 @@ export default function Topbar({ title, onMenuClick }) {
     }
   }, [showSearch])
 
+  const getProductStockLimit = (product) => {
+    if (product.inventory_mode === 'recipe') {
+      return getEstimatedStock ? (getEstimatedStock(product.id) ?? 0) : 0
+    }
+    return product.stock_actual ?? 0
+  }
+
   // Calculate notifications
-  const lowStockProducts = (products || []).filter(p => p.stock_actual <= (p.stock_minimo ?? settings?.globalMinStock))
+  const lowStockProducts = (products || []).filter(p => {
+    if (p.inventory_mode === 'unlimited') return false
+    const currentMinStock = p.stock_minimo ?? settings?.globalMinStock ?? 10
+    return getProductStockLimit(p) <= currentMinStock
+  })
   const notificationsCount = lowStockProducts.length
 
   // Calculate search results
@@ -182,7 +193,9 @@ export default function Topbar({ title, onMenuClick }) {
                               Stock bajo: {p.nombre}
                             </p>
                             <p className={`text-xs mt-1 leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                              Solo quedan <span className={`font-bold ${isDark ? 'text-red-400' : 'text-red-600'}`}>{p.stock_actual}</span> unidades. Se recomienda reponer pronto.
+                              Solo quedan <span className={`font-bold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                                {p.inventory_mode === 'recipe' ? `~${getProductStockLimit(p)}` : getProductStockLimit(p)}
+                              </span> unidades. Se recomienda reponer pronto.
                             </p>
                           </div>
                         </div>
@@ -274,7 +287,17 @@ export default function Topbar({ title, onMenuClick }) {
                             {p.nombre}
                           </p>
                           <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                            Stock: <span className={p.stock_actual <= 0 ? 'text-red-500 font-bold' : ''}>{p.stock_actual}</span> • {p.categoria}
+                            {p.inventory_mode === 'unlimited' ? (
+                              <span>Ilimitado • {p.categoria}</span>
+                            ) : (
+                              <span>
+                                Stock:{' '}
+                                <span className={getProductStockLimit(p) <= 0 ? 'text-red-500 font-bold' : ''}>
+                                  {p.inventory_mode === 'recipe' ? `~${getProductStockLimit(p)}` : getProductStockLimit(p)}
+                                </span>{' '}
+                                • {p.categoria}
+                              </span>
+                            )}
                           </p>
                         </div>
                       </div>

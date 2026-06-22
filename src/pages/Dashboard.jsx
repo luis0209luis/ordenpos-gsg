@@ -14,7 +14,7 @@ export default function Dashboard() {
   const { theme } = useTheme() || {}
   const { user } = useAuth() || {}
   const { settings = {} } = useSettings() || {}
-  const { products = [], salesHistory = [] } = useInventory() || {}
+  const { products = [], salesHistory = [], getEstimatedStock } = useInventory() || {}
   const { employees = [] } = useFinance() || {}
   const isDark = theme === 'dark'
   const navigate = useNavigate()
@@ -166,11 +166,28 @@ export default function Dashboard() {
 
   const realLowStock = useMemo(() => {
     return (products || [])
-      .filter(p => p.stock_actual <= (p.stock_minimo ?? settings?.globalMinStock))
-      .map(p => ({ id: p.id, name: p.nombre, stock: p.stock_actual }))
+      .filter(p => {
+        if (p.inventory_mode === 'unlimited') return false
+        const currentMinStock = p.stock_minimo ?? settings?.globalMinStock ?? 10
+        const stockLimit = p.inventory_mode === 'recipe'
+          ? (getEstimatedStock ? (getEstimatedStock(p.id) ?? 0) : 0)
+          : (p.stock_actual ?? 0)
+        return stockLimit <= currentMinStock
+      })
+      .map(p => {
+        const stockLimit = p.inventory_mode === 'recipe'
+          ? (getEstimatedStock ? (getEstimatedStock(p.id) ?? 0) : 0)
+          : (p.stock_actual ?? 0)
+        return { 
+          id: p.id, 
+          name: p.nombre, 
+          stock: stockLimit,
+          isRecipe: p.inventory_mode === 'recipe'
+        }
+      })
       .sort((a, b) => a.stock - b.stock)
       .slice(0, 5) // Show only top 5 alerts to keep UI clean
-  }, [products, settings])
+  }, [products, settings, getEstimatedStock])
 
   const todayDeliveriesCount = useMemo(() => {
     const todayStr = new Date().toLocaleDateString()
