@@ -66,7 +66,8 @@ export default function Inventory() {
     unidad: 'unidad',
     stock_actual: 0,
     stock_minimo: 1,
-    precio_unitario: 0,
+    precio_unitario: 0,  // stored as per-unit cost in DB
+    precio_empaque: 0,   // what the user actually enters (price per package/unit shown)
     pack_large_unit: '',
     pack_large_ratio: 1,
     pack_medium_unit: '',
@@ -463,17 +464,26 @@ export default function Inventory() {
     setSupplyActiveTab('general')
     if (item) {
       setEditingSupplyItem(item)
+      const hasPackaging = !!(item.pack_large_unit || item.pack_medium_unit)
+      // Reverse-calculate precio_empaque from stored precio_unitario × ratio
+      const ratio = (item.pack_medium_unit && (item.pack_medium_ratio || 1) > 1)
+        ? parseFloat(item.pack_medium_ratio)
+        : (item.pack_large_unit && (item.pack_large_ratio || 1) > 1)
+          ? parseFloat(item.pack_large_ratio)
+          : 1
+      const precioEmpaque = (item.precio_unitario || 0) * ratio
       setSupplyFormData({
         nombre: item.nombre || '',
         unidad: item.unidad || 'unidad',
         stock_actual: item.stock_actual !== undefined ? item.stock_actual : 0,
         stock_minimo: item.stock_minimo !== undefined ? item.stock_minimo : 1,
         precio_unitario: item.precio_unitario !== undefined ? item.precio_unitario : 0,
+        precio_empaque: precioEmpaque,
         pack_large_unit: item.pack_large_unit || '',
         pack_large_ratio: item.pack_large_ratio || 1,
         pack_medium_unit: item.pack_medium_unit || '',
         pack_medium_ratio: item.pack_medium_ratio || 1,
-        hasPackagingConfig: !!(item.pack_large_unit || item.pack_medium_unit)
+        hasPackagingConfig: hasPackaging
       })
     } else {
       setEditingSupplyItem(null)
@@ -483,6 +493,7 @@ export default function Inventory() {
         stock_actual: 0,
         stock_minimo: 1,
         precio_unitario: 0,
+        precio_empaque: 0,
         pack_large_unit: '',
         pack_large_ratio: 1,
         pack_medium_unit: '',
@@ -497,17 +508,25 @@ export default function Inventory() {
     setSupplyErrorMsg('')
     setSupplyActiveTab('general')
     setEditingSupplyItem(null)
+    const hasPackaging = !!(item.pack_large_unit || item.pack_medium_unit)
+    const ratio = (item.pack_medium_unit && (item.pack_medium_ratio || 1) > 1)
+      ? parseFloat(item.pack_medium_ratio)
+      : (item.pack_large_unit && (item.pack_large_ratio || 1) > 1)
+        ? parseFloat(item.pack_large_ratio)
+        : 1
+    const precioEmpaque = (item.precio_unitario || 0) * ratio
     setSupplyFormData({
       nombre: item.nombre ? `Copia de ${item.nombre}` : 'Copia de Insumo',
       unidad: item.unidad || 'unidad',
       stock_actual: item.stock_actual !== undefined ? item.stock_actual : 0,
       stock_minimo: item.stock_minimo !== undefined ? item.stock_minimo : 1,
       precio_unitario: item.precio_unitario !== undefined ? item.precio_unitario : 0,
+      precio_empaque: precioEmpaque,
       pack_large_unit: item.pack_large_unit || '',
       pack_large_ratio: item.pack_large_ratio || 1,
       pack_medium_unit: item.pack_medium_unit || '',
       pack_medium_ratio: item.pack_medium_ratio || 1,
-      hasPackagingConfig: !!(item.pack_large_unit || item.pack_medium_unit)
+      hasPackagingConfig: hasPackaging
     })
     setIsSupplyModalOpen(true)
   }
@@ -702,12 +721,25 @@ export default function Inventory() {
         setSupplyErrorMsg('Debe seleccionar una unidad de medida.')
         return
       }
+      // Determine the ratio used for price calculation
+      // We prefer medium pack ratio; fall back to large; else 1 (no packaging)
+      const packRatio = supplyFormData.hasPackagingConfig
+        ? (supplyFormData.pack_medium_unit && parseFloat(supplyFormData.pack_medium_ratio) > 1
+            ? parseFloat(supplyFormData.pack_medium_ratio)
+            : (supplyFormData.pack_large_unit && parseFloat(supplyFormData.pack_large_ratio) > 1)
+              ? parseFloat(supplyFormData.pack_large_ratio)
+              : 1)
+        : 1
+      // precio_empaque is what the user entered (price per package/box)
+      // precio_unitario stored in DB = precio_empaque / packRatio (per base unit)
+      const precioEmpaque = parseFloat(supplyFormData.precio_empaque) || 0
+      const precioUnitario = packRatio > 1 ? precioEmpaque / packRatio : precioEmpaque
       const itemData = {
         nombre: supplyFormData.nombre,
         unidad: supplyFormData.unidad,
         stock_actual: parseFloat(supplyFormData.stock_actual) || 0,
         stock_minimo: parseFloat(supplyFormData.stock_minimo) || 0,
-        precio_unitario: parseFloat(supplyFormData.precio_unitario) || 0,
+        precio_unitario: precioUnitario,
         pack_large_unit: supplyFormData.hasPackagingConfig ? (supplyFormData.pack_large_unit || null) : null,
         pack_large_ratio: supplyFormData.hasPackagingConfig ? (parseFloat(supplyFormData.pack_large_ratio) || 1) : 1,
         pack_medium_unit: supplyFormData.hasPackagingConfig ? (supplyFormData.pack_medium_unit || null) : null,
@@ -1008,7 +1040,30 @@ export default function Inventory() {
                           </td>
                           <td className="px-6 py-4 text-sm text-center capitalize">{item.unidad}</td>
                           <td className="px-6 py-4 text-sm text-right font-semibold">
-                            ${Number(item.precio_unitario || 0).toLocaleString('es-CO')}
+                            {/* Show price per package if packaging configured, else per base unit */}
+                            {(() => {
+                              const ratio = (item.pack_medium_unit && (item.pack_medium_ratio || 1) > 1)
+                                ? parseFloat(item.pack_medium_ratio)
+                                : (item.pack_large_unit && (item.pack_large_ratio || 1) > 1)
+                                  ? parseFloat(item.pack_large_ratio)
+                                  : 1
+                              const packUnit = (item.pack_medium_unit && (item.pack_medium_ratio || 1) > 1)
+                                ? item.pack_medium_unit
+                                : (item.pack_large_unit && (item.pack_large_ratio || 1) > 1)
+                                  ? item.pack_large_unit
+                                  : item.unidad
+                              const precioMostrar = (item.precio_unitario || 0) * ratio
+                              return (
+                                <div className="flex flex-col items-end">
+                                  <span>${Number(precioMostrar).toLocaleString('es-CO')}</span>
+                                  {ratio > 1 && (
+                                    <span className="text-[10px] opacity-50 font-normal">
+                                      por {packUnit}
+                                    </span>
+                                  )}
+                                </div>
+                              )
+                            })()}
                           </td>
                           <td className="px-6 py-4 text-center">
                             <div className="flex flex-col items-center">
@@ -1687,24 +1742,54 @@ export default function Inventory() {
                       <p className="text-[10px] text-gray-400 dark:text-gray-500 px-1">¿Cómo mides y utilizas este insumo en tus recetas?</p>
                     </div>
 
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold uppercase tracking-wider opacity-70">Precio de Compra por Unidad ($)</label>
-                      <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-gray-500 font-bold">$</span>
-                        <input
-                          required
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          placeholder="Ej: 1500"
-                          value={supplyFormData.precio_unitario}
-                          onChange={e => setSupplyFormData({ ...supplyFormData, precio_unitario: e.target.value })}
-                          className={`w-full pl-8 pr-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
-                            ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
-                        />
-                      </div>
-                      <p className="text-[10px] text-gray-400 dark:text-gray-500 px-1">Costo estimado por unidad de medida básica ({supplyFormData.unidad || 'unidad'}).</p>
-                    </div>
+                    {/* Price field: user enters price per package (if configured) or per base unit */}
+                    {(() => {
+                      const medRatio = parseFloat(supplyFormData.pack_medium_ratio) || 1
+                      const largeRatio = parseFloat(supplyFormData.pack_large_ratio) || 1
+                      
+                      const hasMediumPack = supplyFormData.hasPackagingConfig && supplyFormData.pack_medium_unit && medRatio > 1
+                      const hasLargePack = supplyFormData.hasPackagingConfig && supplyFormData.pack_large_unit && largeRatio > 1
+                      
+                      const hasPackUnit = hasMediumPack || hasLargePack
+                      const packUnit = hasMediumPack
+                        ? supplyFormData.pack_medium_unit
+                        : (hasLargePack ? supplyFormData.pack_large_unit : supplyFormData.unidad)
+                        
+                      const activeRatio = hasMediumPack
+                        ? medRatio
+                        : (hasLargePack ? largeRatio : 1)
+                        
+                      const precioUnitCalc = activeRatio > 1
+                        ? ((parseFloat(supplyFormData.precio_empaque) || 0) / activeRatio)
+                        : null
+                      return (
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold uppercase tracking-wider opacity-70">
+                            Precio de Compra por {hasPackUnit ? packUnit : (supplyFormData.unidad || 'unidad')} ($)
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-gray-500 font-bold">$</span>
+                            <input
+                              required
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder="Ej: 1500"
+                              value={supplyFormData.precio_empaque}
+                              onChange={e => setSupplyFormData({ ...supplyFormData, precio_empaque: e.target.value })}
+                              className={`w-full pl-8 pr-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
+                                ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                            />
+                          </div>
+                          <p className="text-[10px] text-gray-400 dark:text-gray-500 px-1">
+                            {hasPackUnit && activeRatio > 1
+                              ? <>¿Cuánto pagas por {hasPackUnit ? `1 ${packUnit}` : `1 ${supplyFormData.unidad || 'unidad'}`}? {precioUnitCalc > 0 && <span className="text-gold-500 font-bold">(≈ ${Number(precioUnitCalc).toLocaleString('es-CO')} por {supplyFormData.unidad || 'unidad'})</span>}</>
+                              : <>¿Cuánto pagas por 1 {supplyFormData.unidad || 'unidad'}?</>
+                            }
+                          </p>
+                        </div>
+                      )
+                    })()}
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
