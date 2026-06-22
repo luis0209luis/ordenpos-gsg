@@ -1099,23 +1099,23 @@ export default function Inventory() {
                       return (
                         <tr
                           key={item.id}
-                          draggable
-                          onDragStart={(e) => handleSupplyDragStart(e, item.id)}
                           onDragOver={(e) => handleSupplyDragOver(e, item.id)}
                           onDrop={(e) => handleSupplyDrop(e, item.id)}
                           onDragEnd={handleSupplyDragEnd}
-                          className={`border-b last:border-0 transition-colors duration-200 hover:bg-gold-500/5 select-none
+                          className={`border-b last:border-0 transition-colors duration-200 hover:bg-gold-500/5
                             ${isDragOver ? (isDark ? 'border-t-2 border-t-gold-400 bg-gold-500/10' : 'border-t-2 border-t-gold-500 bg-gold-50') : ''}
                             ${isDark ? 'border-dark-border text-gray-300' : 'border-light-border text-gray-700'}`}>
-                          {/* Drag Handle */}
+                          {/* Drag Handle — solo desde aquí se puede arrastrar */}
                           <td className="pl-3 pr-1 py-4 w-8">
                             <span
+                              draggable
+                              onDragStart={(e) => handleSupplyDragStart(e, item.id)}
                               title="Arrastra para reordenar"
-                              className={`flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity
-                                ${isDark ? 'text-gray-600 hover:text-gray-400' : 'text-gray-300 hover:text-gray-500'}`}
-                              style={{ opacity: 0.35 }}
+                              className={`flex items-center justify-center cursor-grab active:cursor-grabbing transition-opacity
+                                ${isDark ? 'text-gray-500 hover:text-gold-400' : 'text-gray-300 hover:text-gold-500'}`}
+                              style={{ opacity: 0.45 }}
                             >
-                              <GripVertical size={16} />
+                              <GripVertical size={18} />
                             </span>
                           </td>
                           <td className={`px-6 py-4 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
