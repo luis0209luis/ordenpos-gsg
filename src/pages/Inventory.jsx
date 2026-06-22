@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useTheme, useSettings } from '../context/AppContext'
 import { useInventory } from '../context/InventoryContext'
 import { useFinance } from '../context/FinanceContext'
-import { Plus, Edit2, Trash2, AlertTriangle, Search, X, Check, PackagePlus, Copy } from 'lucide-react'
+import { Plus, Edit2, Trash2, AlertTriangle, Search, X, Check, PackagePlus, Copy, GripVertical } from 'lucide-react'
 
 const DEFAULT_UNITS = [
   { value: 'unidad', label: 'Unidad (und)' },
@@ -780,9 +780,68 @@ export default function Inventory() {
     }
   }
 
-  const filteredSupplies = (supplyItems || []).filter(s =>
+  // --- Drag & Drop order for supplies ---
+  const [supplyOrder, setSupplyOrder] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('ordenpos_supply_order') || '[]') } catch { return [] }
+  })
+  const dragSupplyId = useRef(null)
+  const dragOverSupplyId = useRef(null)
+  const [dragOverId, setDragOverId] = useState(null)
+
+  // Apply custom order: sort supplyItems by stored order, then append any new items at the end
+  const orderedSupplies = (() => {
+    const all = supplyItems || []
+    if (supplyOrder.length === 0) return all
+    const orderMap = {}
+    supplyOrder.forEach((id, idx) => { orderMap[id] = idx })
+    return [...all].sort((a, b) => {
+      const ia = orderMap[a.id] ?? 999999
+      const ib = orderMap[b.id] ?? 999999
+      return ia - ib
+    })
+  })()
+
+  const filteredSupplies = orderedSupplies.filter(s =>
     (s.nombre || '').toLowerCase().includes(supplySearchTerm.toLowerCase())
   )
+
+  const handleSupplyDragStart = (e, id) => {
+    dragSupplyId.current = id
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleSupplyDragOver = (e, id) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    dragOverSupplyId.current = id
+    setDragOverId(id)
+  }
+
+  const handleSupplyDrop = (e, id) => {
+    e.preventDefault()
+    const fromId = dragSupplyId.current
+    const toId = id
+    if (!fromId || fromId === toId) { setDragOverId(null); return }
+    // Build new ordered list based on current visible order
+    const currentIds = orderedSupplies.map(s => s.id)
+    const fromIdx = currentIds.indexOf(fromId)
+    const toIdx = currentIds.indexOf(toId)
+    if (fromIdx === -1 || toIdx === -1) { setDragOverId(null); return }
+    const newIds = [...currentIds]
+    newIds.splice(fromIdx, 1)
+    newIds.splice(toIdx, 0, fromId)
+    setSupplyOrder(newIds)
+    localStorage.setItem('ordenpos_supply_order', JSON.stringify(newIds))
+    dragSupplyId.current = null
+    dragOverSupplyId.current = null
+    setDragOverId(null)
+  }
+
+  const handleSupplyDragEnd = () => {
+    dragSupplyId.current = null
+    dragOverSupplyId.current = null
+    setDragOverId(null)
+  }
 
   return (
     <div className="space-y-6 animate-fade-in pb-8">
@@ -1015,6 +1074,7 @@ export default function Inventory() {
                 <thead>
                   <tr className={`border-b text-xs uppercase tracking-wider
                     ${isDark ? 'border-dark-border bg-dark-card text-gray-400' : 'border-light-border bg-light-surface text-gray-500'}`}>
+                    <th className="pl-3 pr-1 py-4 w-8"></th>
                     <th className="px-6 py-4 font-semibold">Insumo</th>
                     <th className="px-6 py-4 font-semibold text-center">Unidad</th>
                     <th className="px-6 py-4 font-semibold text-right">Precio Unitario</th>
@@ -1027,7 +1087,7 @@ export default function Inventory() {
                 <tbody>
                   {filteredSupplies.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className={`px-6 py-8 text-center text-sm font-medium
+                      <td colSpan="8" className={`px-6 py-8 text-center text-sm font-medium
                         ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                         No se encontraron insumos en bodega.
                       </td>
@@ -1035,9 +1095,29 @@ export default function Inventory() {
                   ) : (
                     filteredSupplies.map((item) => {
                       const isLowStock = Number(item.stock_actual) <= Number(item.stock_minimo)
+                      const isDragOver = dragOverId === item.id
                       return (
-                        <tr key={item.id} className={`border-b last:border-0 transition-colors duration-200 hover:bg-gold-500/5
-                          ${isDark ? 'border-dark-border text-gray-300' : 'border-light-border text-gray-700'}`}>
+                        <tr
+                          key={item.id}
+                          draggable
+                          onDragStart={(e) => handleSupplyDragStart(e, item.id)}
+                          onDragOver={(e) => handleSupplyDragOver(e, item.id)}
+                          onDrop={(e) => handleSupplyDrop(e, item.id)}
+                          onDragEnd={handleSupplyDragEnd}
+                          className={`border-b last:border-0 transition-colors duration-200 hover:bg-gold-500/5 select-none
+                            ${isDragOver ? (isDark ? 'border-t-2 border-t-gold-400 bg-gold-500/10' : 'border-t-2 border-t-gold-500 bg-gold-50') : ''}
+                            ${isDark ? 'border-dark-border text-gray-300' : 'border-light-border text-gray-700'}`}>
+                          {/* Drag Handle */}
+                          <td className="pl-3 pr-1 py-4 w-8">
+                            <span
+                              title="Arrastra para reordenar"
+                              className={`flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity
+                                ${isDark ? 'text-gray-600 hover:text-gray-400' : 'text-gray-300 hover:text-gray-500'}`}
+                              style={{ opacity: 0.35 }}
+                            >
+                              <GripVertical size={16} />
+                            </span>
+                          </td>
                           <td className={`px-6 py-4 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
                             {item.nombre}
                           </td>
