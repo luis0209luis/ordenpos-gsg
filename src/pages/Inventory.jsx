@@ -2,22 +2,92 @@ import { useState, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useTheme, useSettings } from '../context/AppContext'
 import { useInventory } from '../context/InventoryContext'
-import { Plus, Edit2, Trash2, AlertTriangle, Search, X, Check } from 'lucide-react'
+import { useFinance } from '../context/FinanceContext'
+import { Plus, Edit2, Trash2, AlertTriangle, Search, X, Check, PackagePlus, Copy } from 'lucide-react'
+
+const DEFAULT_UNITS = [
+  { value: 'unidad', label: 'Unidad (und)' },
+  { value: 'libra', label: 'Libra (lb)' },
+  { value: 'kg', label: 'Kilogramo (kg)' },
+  { value: 'gramo', label: 'Gramo (g)' },
+  { value: 'litro', label: 'Litro (L)' },
+  { value: 'ml', label: 'Mililitro (ml)' },
+  { value: 'onza', label: 'Onza (oz)' },
+  { value: 'galon', label: 'Galón (gal)' },
+  { value: 'bolsa', label: 'Bolsa' },
+  { value: 'pote', label: 'Pote' },
+  { value: 'caja', label: 'Caja' },
+  { value: 'saco', label: 'Saco' },
+  { value: 'paquete', label: 'Paquete' },
+  { value: 'lata', label: 'Lata' }
+]
 
 export default function Inventory() {
   const { theme } = useTheme() || {}
   const isDark = theme === 'dark'
-  const { products = [], addProduct, updateProduct, deleteProduct } = useInventory() || {}
+  const {
+    products = [],
+    addProduct,
+    updateProduct,
+    deleteProduct,
+    supplyItems = [],
+    addSupplyItem,
+    updateSupplyItem,
+    deleteSupplyItem,
+    productRecipes = [],
+    saveProductRecipe,
+    getEstimatedStock,
+    saveCustomizationOptions,
+    getProductOptions
+  } = useInventory() || {}
   const { settings = {} } = useSettings() || {}
+  const { addExpense } = useFinance() || {}
 
+  // Tabs State
+  const [activeTab, setActiveTab] = useState('products')
+
+  // Product Inventory Search & Modal
   const [searchTerm, setSearchTerm] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
   const [errorMsg, setErrorMsg] = useState('')
-
   const [formData, setFormData] = useState({
-    nombre: '', precio: '', stock_actual: '', stock_minimo: '', categoria: '', image_url: ''
+    nombre: '', precio: '', stock_actual: '', stock_minimo: '', categoria: '', image_url: '', inventory_mode: 'finished'
   })
+  const [recipeItems, setRecipeItems] = useState([])
+  const [customOptionsList, setCustomOptionsList] = useState([])
+
+  // Supply Items Modal & Adjustment
+  const [supplySearchTerm, setSupplySearchTerm] = useState('')
+  const [isSupplyModalOpen, setIsSupplyModalOpen] = useState(false)
+  const [editingSupplyItem, setEditingSupplyItem] = useState(null)
+  const [supplyFormData, setSupplyFormData] = useState({
+    nombre: '',
+    unidad: 'unidad',
+    stock_actual: 0,
+    stock_minimo: 1,
+    precio_unitario: 0,
+    pack_large_unit: '',
+    pack_large_ratio: 1,
+    pack_medium_unit: '',
+    pack_medium_ratio: 1,
+    hasPackagingConfig: false
+  })
+  const [supplyErrorMsg, setSupplyErrorMsg] = useState('')
+
+  const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false)
+  const [adjustingSupplyItem, setAdjustingSupplyItem] = useState(null)
+  const [adjustNewStock, setAdjustNewStock] = useState('')
+
+  // Stock Entry Modal (Ingreso de Mercancía)
+  const [isEntryModalOpen, setIsEntryModalOpen] = useState(false)
+  const [entryTarget, setEntryTarget] = useState(null) // { type: 'product' | 'supply', item }
+  const [entryQty, setEntryQty] = useState('')
+  const [entryUnitPrice, setEntryUnitPrice] = useState('')
+  const [entryTotalCost, setEntryTotalCost] = useState('')
+  const [entryRecordExpense, setEntryRecordExpense] = useState(true)
+  const [entryCategory, setEntryCategory] = useState('Insumos')
+  const [entryUnitType, setEntryUnitType] = useState('base') // 'base' | 'medium' | 'large'
 
   const DEFAULT_CATEGORIES = ['Bebida', 'Comida Rápida', 'Repostería', 'Pan'];
   const [customCategories, setCustomCategories] = useState([]);
@@ -29,6 +99,102 @@ export default function Inventory() {
 
   const availableCategories = [...new Set([...DEFAULT_CATEGORIES, ...(products || []).map(p => p?.categoria || 'Sin Categoría'), ...customCategories])]
     .filter(c => !deletedCategories.includes(c) && c !== 'Sin Categoría');
+
+  const [customUnits, setCustomUnits] = useState(() => {
+    return JSON.parse(localStorage.getItem('ordenpos_custom_units') || '[]');
+  });
+
+  const [deletedUnits, setDeletedUnits] = useState(() => {
+    return JSON.parse(localStorage.getItem('ordenpos_deleted_units') || '[]');
+  });
+
+  const [isCreatingUnit, setIsCreatingUnit] = useState(false);
+  const [newUnitName, setNewUnitName] = useState('');
+
+  // Unificamos las unidades disponibles (defecto + personalizadas + en uso)
+  const availableUnits = (() => {
+    const supplyUnits = (supplyItems || []).map(s => s.unidad).filter(Boolean);
+    const allUnitsMap = new Map();
+    
+    DEFAULT_UNITS.forEach(u => {
+      if (!deletedUnits.includes(u.value)) {
+        allUnitsMap.set(u.value, u.label);
+      }
+    });
+    
+    customUnits.forEach(u => {
+      allUnitsMap.set(u.value, u.label);
+    });
+    
+    supplyUnits.forEach(u => {
+      if (!allUnitsMap.has(u)) {
+        allUnitsMap.set(u, u.charAt(0).toUpperCase() + u.slice(1));
+      }
+    });
+
+    return Array.from(allUnitsMap.entries()).map(([value, label]) => ({ value, label }));
+  })();
+
+  const handleCreateUnit = () => {
+    const newUnit = newUnitName.trim();
+    if (newUnit) {
+      const value = newUnit.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, '_');
+      const label = newUnit.charAt(0).toUpperCase() + newUnit.slice(1);
+      
+      // Si estaba eliminada, la restauramos
+      if (deletedUnits.includes(value)) {
+        const newDeleted = deletedUnits.filter(u => u !== value);
+        setDeletedUnits(newDeleted);
+        localStorage.setItem('ordenpos_deleted_units', JSON.stringify(newDeleted));
+      }
+
+      setCustomUnits(prev => {
+        if (!prev.some(u => u.value === value)) {
+          const updated = [...prev, { value, label }];
+          localStorage.setItem('ordenpos_custom_units', JSON.stringify(updated));
+          return updated;
+        }
+        return prev;
+      });
+
+      setSupplyFormData(prev => ({ ...prev, unidad: value }));
+      setIsCreatingUnit(false);
+      setNewUnitName('');
+    }
+  };
+
+  const handleDeleteUnit = (unitToDelete) => {
+    const inUse = (supplyItems || []).some(s => s.unidad === unitToDelete);
+    if (inUse) {
+      const confirmDelete = window.confirm(
+        `La unidad "${unitToDelete}" está siendo usada por algunos insumos. Si la eliminas, esos insumos cambiarán a "Unidad (unidad)". ¿Deseas continuar?`
+      );
+      if (!confirmDelete) return;
+
+      // Actualizar los insumos en uso
+      const suppliesToUpdate = (supplyItems || []).filter(s => s.unidad === unitToDelete);
+      suppliesToUpdate.forEach(s => {
+        updateSupplyItem(s.id, { ...s, unidad: 'unidad' });
+      });
+    }
+
+    const isDefault = DEFAULT_UNITS.some(u => u.value === unitToDelete);
+    if (isDefault) {
+      const newDeleted = [...deletedUnits, unitToDelete];
+      setDeletedUnits(newDeleted);
+      localStorage.setItem('ordenpos_deleted_units', JSON.stringify(newDeleted));
+    }
+
+    setCustomUnits(prev => {
+      const updated = prev.filter(u => u.value !== unitToDelete);
+      localStorage.setItem('ordenpos_custom_units', JSON.stringify(updated));
+      return updated;
+    });
+
+    if (supplyFormData.unidad === unitToDelete) {
+      setSupplyFormData(prev => ({ ...prev, unidad: 'unidad' }));
+    }
+  };
 
   const [autoImage, setAutoImage] = useState(null)
   const [customImage, setCustomImage] = useState(null)
@@ -60,6 +226,75 @@ export default function Inventory() {
       setFormData(prev => ({ ...prev, image_url: autoImage || '' }));
     }
   }, [autoImage, customImage])
+
+  // Ajustar precio unitario y costo total en Entrada de Mercancía según la unidad elegida
+  useEffect(() => {
+    if (entryTarget && entryTarget.type === 'supply') {
+      const item = entryTarget.item
+      const basePrice = item.precio_unitario || 0
+      let multiplier = 1
+      if (entryUnitType === 'medium') {
+        multiplier = parseFloat(item.pack_medium_ratio) || 1
+      } else if (entryUnitType === 'large') {
+        multiplier = parseFloat(item.pack_large_ratio) || 1
+      }
+      const adjustedPrice = basePrice * multiplier
+      setEntryUnitPrice(adjustedPrice || '')
+      
+      const qty = parseFloat(entryQty) || 0
+      if (qty > 0 && adjustedPrice > 0) {
+        setEntryTotalCost((qty * adjustedPrice).toFixed(0))
+      } else {
+        setEntryTotalCost('')
+      }
+    }
+  }, [entryUnitType])
+
+  const formatStockWithPackages = (stockVal, item) => {
+    const stock = Number(stockVal || 0)
+    if (!item.pack_large_unit && !item.pack_medium_unit) {
+      return `${stock} ${item.unidad || 'und'}`
+    }
+
+    const parts = []
+    let tempStock = stock
+
+    const getPlural = (unit, qty) => {
+      if (qty === 1 || !unit) return unit
+      if (['a', 'e', 'o'].includes(unit.slice(-1).toLowerCase())) {
+        return unit + 's'
+      }
+      return unit
+    }
+
+    // Empaque Grande
+    if (item.pack_large_unit && item.pack_large_ratio && Number(item.pack_large_ratio) > 1) {
+      const largeRatio = Number(item.pack_large_ratio)
+      const largeQty = Math.floor(tempStock / largeRatio)
+      if (largeQty > 0) {
+        parts.push(`${largeQty} ${getPlural(item.pack_large_unit, largeQty)}`)
+        tempStock = tempStock % largeRatio
+      }
+    }
+
+    // Empaque Mediano
+    if (item.pack_medium_unit && item.pack_medium_ratio && Number(item.pack_medium_ratio) > 1) {
+      const mediumRatio = Number(item.pack_medium_ratio)
+      const mediumQty = Math.floor(tempStock / mediumRatio)
+      if (mediumQty > 0) {
+        parts.push(`${mediumQty} ${getPlural(item.pack_medium_unit, mediumQty)}`)
+        tempStock = tempStock % mediumRatio
+      }
+    }
+
+    // Unidades sueltas (unidad base)
+    if (tempStock > 0 || parts.length === 0) {
+      const displayStock = Number(tempStock.toFixed(2))
+      parts.push(`${displayStock} ${getPlural(item.unidad || 'und', displayStock)}`)
+    }
+
+    return parts.join(' - ')
+  }
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -171,8 +406,28 @@ export default function Inventory() {
         ...product,
         nombre: product.nombre || '',
         categoria: product.categoria || '',
-        image_url: product.image_url || ''
+        image_url: product.image_url || '',
+        inventory_mode: product.inventory_mode || 'finished',
+        stock_actual: product.stock_actual || 0,
+        stock_minimo: product.stock_minimo || 10,
+        is_customizable: product.is_customizable || false,
+        max_selections: product.max_selections || 1
       })
+      // Load recipe items
+      const existing = (productRecipes || []).filter(r => r.product_id === product.id)
+      setRecipeItems(existing.map(r => ({ supply_item_id: r.supply_item_id, cantidad: Number(r.cantidad) })))
+      
+      // Load customization options
+      const existingOptions = getProductOptions ? getProductOptions(product.id) : []
+      setCustomOptionsList(existingOptions.map(o => ({
+        id: o.id || Math.random(),
+        supply_item_id: o.supply_item_id || '',
+        label: o.label || '',
+        cantidad_base: o.cantidad_base || 0,
+        discount_mode: o.discount_mode || 'split',
+        extra_price: o.extra_price || 0
+      })))
+      
       setCustomImage(product.image_url?.startsWith('data:image') ? product.image_url : null)
     } else {
       setEditingProduct(null)
@@ -182,8 +437,13 @@ export default function Inventory() {
         stock_actual: '',
         stock_minimo: settings?.globalMinStock || 10,
         categoria: availableCategories[0] || 'Sin Categoría',
-        image_url: ''
+        inventory_mode: 'finished',
+        image_url: '',
+        is_customizable: false,
+        max_selections: 1
       })
+      setRecipeItems([])
+      setCustomOptionsList([])
       setCustomImage(null)
     }
     setIsCreatingCategory(false)
@@ -193,7 +453,173 @@ export default function Inventory() {
   const closeModal = () => {
     setIsModalOpen(false)
     setEditingProduct(null)
+    setCustomOptionsList([])
     setErrorMsg('')
+  }
+
+  const openSupplyModal = (item = null) => {
+    setSupplyErrorMsg('')
+    if (item) {
+      setEditingSupplyItem(item)
+      setSupplyFormData({
+        nombre: item.nombre || '',
+        unidad: item.unidad || 'unidad',
+        stock_actual: item.stock_actual !== undefined ? item.stock_actual : 0,
+        stock_minimo: item.stock_minimo !== undefined ? item.stock_minimo : 1,
+        precio_unitario: item.precio_unitario !== undefined ? item.precio_unitario : 0,
+        pack_large_unit: item.pack_large_unit || '',
+        pack_large_ratio: item.pack_large_ratio || 1,
+        pack_medium_unit: item.pack_medium_unit || '',
+        pack_medium_ratio: item.pack_medium_ratio || 1,
+        hasPackagingConfig: !!(item.pack_large_unit || item.pack_medium_unit)
+      })
+    } else {
+      setEditingSupplyItem(null)
+      setSupplyFormData({
+        nombre: '',
+        unidad: 'unidad',
+        stock_actual: 0,
+        stock_minimo: 1,
+        precio_unitario: 0,
+        pack_large_unit: '',
+        pack_large_ratio: 1,
+        pack_medium_unit: '',
+        pack_medium_ratio: 1,
+        hasPackagingConfig: false
+      })
+    }
+    setIsSupplyModalOpen(true)
+  }
+
+  const handleDuplicateSupply = (item) => {
+    setSupplyErrorMsg('')
+    setEditingSupplyItem(null)
+    setSupplyFormData({
+      nombre: item.nombre ? `Copia de ${item.nombre}` : 'Copia de Insumo',
+      unidad: item.unidad || 'unidad',
+      stock_actual: item.stock_actual !== undefined ? item.stock_actual : 0,
+      stock_minimo: item.stock_minimo !== undefined ? item.stock_minimo : 1,
+      precio_unitario: item.precio_unitario !== undefined ? item.precio_unitario : 0,
+      pack_large_unit: item.pack_large_unit || '',
+      pack_large_ratio: item.pack_large_ratio || 1,
+      pack_medium_unit: item.pack_medium_unit || '',
+      pack_medium_ratio: item.pack_medium_ratio || 1,
+      hasPackagingConfig: !!(item.pack_large_unit || item.pack_medium_unit)
+    })
+    setIsSupplyModalOpen(true)
+  }
+
+  const openAdjustModal = (item) => {
+    setAdjustingSupplyItem(item)
+    setAdjustNewStock(item.stock_actual)
+    setIsAdjustModalOpen(true)
+  }
+
+  const openEntryModal = (type, item) => {
+    setEntryTarget({ type, item })
+    setEntryQty('')
+    setEntryUnitType('base')
+    const defaultPrice = type === 'supply' ? (item.precio_unitario || 0) : 0
+    setEntryUnitPrice(defaultPrice || '')
+    setEntryTotalCost('')
+    setEntryRecordExpense(type === 'supply')
+    setEntryCategory(type === 'supply' ? 'Insumos' : 'Otros')
+    setIsEntryModalOpen(true)
+  }
+
+  const handleStockEntrySubmit = async (e) => {
+    e.preventDefault()
+    const qty = parseFloat(entryQty)
+    if (isNaN(qty) || qty <= 0) {
+      alert('Ingresa una cantidad válida mayor a 0.')
+      return
+    }
+    try {
+      let baseQty = qty
+      let ratioMultiplier = 1
+      if (entryTarget.type === 'supply') {
+        const s = entryTarget.item
+        if (entryUnitType === 'medium' && s.pack_medium_ratio) {
+          ratioMultiplier = parseFloat(s.pack_medium_ratio) || 1
+        } else if (entryUnitType === 'large' && s.pack_large_ratio) {
+          ratioMultiplier = parseFloat(s.pack_large_ratio) || 1
+        }
+        baseQty = qty * ratioMultiplier
+      }
+
+      if (entryTarget.type === 'product') {
+        const p = entryTarget.item
+        await updateProduct(p.id, { stock_actual: (p.stock_actual || 0) + qty })
+      } else {
+        const s = entryTarget.item
+        await updateSupplyItem(s.id, { stock_actual: (s.stock_actual || 0) + baseQty })
+      }
+
+      if (entryRecordExpense) {
+        const totalCost = parseFloat(entryTotalCost) || 0
+        if (totalCost > 0) {
+          const item = entryTarget.item
+          const name = item.nombre
+          const displayUnit = entryTarget.type === 'supply'
+            ? (entryUnitType === 'medium' ? (item.pack_medium_unit || 'paquete') : entryUnitType === 'large' ? (item.pack_large_unit || 'caja') : (item.unidad || 'und'))
+            : 'und'
+          const description = `Compra de Insumo: ${qty} ${displayUnit} de ${name}`
+          
+          await addExpense({
+            description,
+            amount: totalCost,
+            category: entryCategory,
+            date: new Date().toISOString()
+          })
+        }
+      }
+
+      setIsEntryModalOpen(false)
+      setEntryTarget(null)
+      setEntryQty('')
+      setEntryUnitPrice('')
+      setEntryTotalCost('')
+    } catch (err) {
+      console.error(err)
+      alert('Error al registrar la entrada. Inténtalo de nuevo.')
+    }
+  }
+
+  const handleAddRecipeItem = () => {
+    const unused = supplyItems.find(s => !recipeItems.some(ri => ri.supply_item_id === s.id))
+    const defaultId = unused ? unused.id : (supplyItems[0]?.id || '')
+    if (!defaultId) {
+      alert("Primero debes crear insumos en la sección de Bodega.")
+      return
+    }
+    setRecipeItems(prev => [...prev, { supply_item_id: defaultId, cantidad: 1 }])
+  }
+
+  const handleRemoveRecipeItem = (index) => {
+    setRecipeItems(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const handleRecipeItemChange = (index, field, value) => {
+    setRecipeItems(prev => prev.map((item, i) => i === index ? { ...item, [field]: value } : item))
+  }
+
+  const handleAddCustomOption = () => {
+    setCustomOptionsList(prev => [...prev, {
+      id: Math.random(),
+      supply_item_id: '',
+      label: '',
+      cantidad_base: 0,
+      discount_mode: 'split',
+      extra_price: 0
+    }])
+  }
+
+  const handleRemoveCustomOption = (id) => {
+    setCustomOptionsList(prev => prev.filter(o => o.id !== id))
+  }
+
+  const handleCustomOptionChange = (id, field, value) => {
+    setCustomOptionsList(prev => prev.map(o => o.id === id ? { ...o, [field]: value } : o))
   }
 
   const handleSubmit = async (e) => {
@@ -204,6 +630,10 @@ export default function Inventory() {
       const finalImage = formData.image_url || autoImage || ''
       const finalCategoria = formData.categoria || 'Sin Categoría'
       const finalNombre = formData.nombre || 'Producto'
+      
+      const isFinished = formData.inventory_mode === 'finished' || !formData.inventory_mode
+      const isRecipe = formData.inventory_mode === 'recipe'
+      const isUnlimited = formData.inventory_mode === 'unlimited'
 
       const productData = {
         ...formData,
@@ -211,21 +641,43 @@ export default function Inventory() {
         categoria: finalCategoria,
         image_url: finalImage,
         precio: parseFloat(formData.precio) || 0,
-        stock_actual: parseInt(formData.stock_actual) || 0,
-        stock_minimo: parseInt(formData.stock_minimo),
+        stock_actual: isFinished ? (parseInt(formData.stock_actual) || 0) : 0,
+        stock_minimo: isUnlimited ? 0 : (parseInt(formData.stock_minimo) || 0),
+        inventory_mode: formData.inventory_mode || 'finished',
+        is_customizable: !!formData.is_customizable,
+        max_selections: formData.is_customizable ? (parseInt(formData.max_selections) || 1) : 1
       }
 
       if (isNaN(productData.stock_minimo)) {
         productData.stock_minimo = settings?.globalMinStock || 10
       }
 
+      let savedProduct;
       if (editingProduct) {
-        await updateProduct(editingProduct.id, productData)
+        savedProduct = await updateProduct(editingProduct.id, productData)
       } else {
-        await addProduct(productData)
+        savedProduct = await addProduct(productData)
       }
 
-      // Solo se cierra el modal si la promesa se resolvió correctamente sin arrojar error
+      // Guardar receta si el modo es recipe
+      if (savedProduct && savedProduct.id) {
+        if (isRecipe) {
+          const cleanRecipeItems = recipeItems.filter(r => r.supply_item_id && r.cantidad > 0)
+          await saveProductRecipe(savedProduct.id, cleanRecipeItems)
+        } else {
+          // Si cambió de receta a otro modo, eliminar la receta existente
+          await saveProductRecipe(savedProduct.id, [])
+        }
+
+        // Guardar opciones de personalización
+        if (formData.is_customizable && saveCustomizationOptions) {
+          const cleanOptions = customOptionsList.filter(o => o.label?.trim() !== '')
+          await saveCustomizationOptions(savedProduct.id, cleanOptions)
+        } else if (saveCustomizationOptions) {
+          await saveCustomizationOptions(savedProduct.id, [])
+        }
+      }
+
       closeModal()
     } catch (error) {
       console.error("Error al guardar el producto en Inventory.jsx:", error)
@@ -233,130 +685,409 @@ export default function Inventory() {
     }
   }
 
+  const handleSupplySubmit = async (e) => {
+    e.preventDefault()
+    try {
+      setSupplyErrorMsg('')
+      const itemData = {
+        nombre: supplyFormData.nombre,
+        unidad: supplyFormData.unidad,
+        stock_actual: parseFloat(supplyFormData.stock_actual) || 0,
+        stock_minimo: parseFloat(supplyFormData.stock_minimo) || 0,
+        precio_unitario: parseFloat(supplyFormData.precio_unitario) || 0,
+        pack_large_unit: supplyFormData.hasPackagingConfig ? (supplyFormData.pack_large_unit || null) : null,
+        pack_large_ratio: supplyFormData.hasPackagingConfig ? (parseFloat(supplyFormData.pack_large_ratio) || 1) : 1,
+        pack_medium_unit: supplyFormData.hasPackagingConfig ? (supplyFormData.pack_medium_unit || null) : null,
+        pack_medium_ratio: supplyFormData.hasPackagingConfig ? (parseFloat(supplyFormData.pack_medium_ratio) || 1) : 1
+      }
+      if (editingSupplyItem) {
+        await updateSupplyItem(editingSupplyItem.id, itemData)
+      } else {
+        await addSupplyItem(itemData)
+      }
+      setIsSupplyModalOpen(false)
+      setEditingSupplyItem(null)
+    } catch (err) {
+      console.error("Error al guardar insumo:", err)
+      setSupplyErrorMsg(err?.message || "Error al guardar el insumo. Verifica los datos.")
+    }
+  }
+
+  const handleAdjustSubmit = async (e) => {
+    e.preventDefault()
+    try {
+      if (!adjustingSupplyItem) return
+      const newStockValue = parseFloat(adjustNewStock)
+      if (isNaN(newStockValue) || newStockValue < 0) {
+        alert("Por favor ingrese un valor de stock válido y mayor o igual a 0.")
+        return
+      }
+      await updateSupplyItem(adjustingSupplyItem.id, { stock_actual: newStockValue })
+      setIsAdjustModalOpen(false)
+      setAdjustingSupplyItem(null)
+      setAdjustNewStock('')
+    } catch (err) {
+      console.error(err)
+      alert("Error al realizar el ajuste manual.")
+    }
+  }
+
+  const filteredSupplies = (supplyItems || []).filter(s =>
+    (s.nombre || '').toLowerCase().includes(supplySearchTerm.toLowerCase())
+  )
+
   return (
     <div className="space-y-6 animate-fade-in pb-8">
-      {/* Header Actions */}
-      <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-6 rounded-3xl shadow-soft-lg
-        ${isDark ? 'bg-dark-surface border border-dark-border' : 'bg-white border border-light-border'}`}>
-
-        <div className="relative w-full md:w-96">
-          <span className={`absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none
-            ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-            <Search size={18} />
-          </span>
-          <input
-            type="text"
-            placeholder="Buscar productos..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className={`w-full pl-11 pr-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all duration-200
-              focus:border-gold-500 focus:shadow-gold-sm
-              ${isDark ? 'bg-dark-card border-dark-border text-white placeholder-gray-600'
-                : 'bg-light-surface border-light-border text-gray-900 placeholder-gray-400'}`}
-          />
-        </div>
-
+      {/* Tabs de Navegación */}
+      <div className="flex gap-4 border-b pb-2 border-gray-200 dark:border-dark-border">
         <button
-          onClick={() => openModal()}
-          className="px-6 py-3 rounded-2xl font-bold text-sm tracking-wider uppercase flex items-center gap-2
-          bg-gold-gradient text-dark-bg shadow-gold-md hover:shadow-gold-lg
-          hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 whitespace-nowrap"
+          onClick={() => setActiveTab('products')}
+          className={`px-4 py-2 font-display font-bold text-sm uppercase tracking-wider transition-all border-b-2
+            ${activeTab === 'products'
+              ? 'border-gold-500 text-gold-500 font-extrabold'
+              : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
         >
-          <Plus size={18} />
-          Nuevo Producto
+          📦 Catálogo de Productos
+        </button>
+        <button
+          onClick={() => setActiveTab('supplies')}
+          className={`px-4 py-2 font-display font-bold text-sm uppercase tracking-wider transition-all border-b-2
+            ${activeTab === 'supplies'
+              ? 'border-gold-500 text-gold-500 font-extrabold'
+              : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
+        >
+          🧪 Bodega / Insumos
         </button>
       </div>
 
-      {/* Inventory Table */}
-      <div className={`rounded-3xl overflow-hidden shadow-soft-lg border
-        ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className={`border-b text-xs uppercase tracking-wider
-                ${isDark ? 'border-dark-border bg-dark-card text-gray-400' : 'border-light-border bg-light-surface text-gray-500'}`}>
-                <th className="px-6 py-4 font-semibold">Producto</th>
-                <th className="px-6 py-4 font-semibold">Categoría</th>
-                <th className="px-6 py-4 font-semibold text-right">Precio</th>
-                <th className="px-6 py-4 font-semibold text-center">Stock Actual</th>
-                <th className="px-6 py-4 font-semibold text-center">Estado</th>
-                <th className="px-6 py-4 font-semibold text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredProducts.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className={`px-6 py-8 text-center text-sm font-medium
-                    ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                    No se encontraron productos.
-                  </td>
-                </tr>
-              ) : (
-                filteredProducts.map((product) => {
-                  const currentMinStock = product.stock_minimo !== undefined && product.stock_minimo !== null
-                    ? product.stock_minimo
-                    : settings.globalMinStock
-                  const isLowStock = product.stock_actual <= currentMinStock
-                  return (
-                    <tr key={product.id} className={`border-b last:border-0 transition-colors duration-200 hover:bg-gold-500/5
-                      ${isDark ? 'border-dark-border text-gray-300' : 'border-light-border text-gray-700'}`}>
-                      <td className={`px-6 py-4 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {product.nombre}
-                      </td>
-                      <td className="px-6 py-4 text-sm">{product.categoria}</td>
-                      <td className="px-6 py-4 text-sm text-right font-semibold">
-                        ${Number(product.precio).toLocaleString('es-CO')}
-                      </td>
-                      <td className={`px-6 py-4 text-center font-bold font-display text-lg
-                        ${isLowStock ? 'text-red-500' : (isDark ? 'text-gold-400' : 'text-gold-600')}`}>
-                        {product.stock_actual}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex justify-center">
-                          {isLowStock ? (
-                            <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border
-                              ${isDark ? 'bg-gold-500/10 border-gold-500/30 text-gold-400'
-                                : 'bg-gold-50 border-gold-200 text-gold-700'}`}>
-                              <AlertTriangle size={14} />
-                              Stock Bajo
-                            </span>
-                          ) : (
-                            <span className={`px-3 py-1 rounded-full text-xs font-bold border
-                              ${isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                                : 'bg-emerald-50 border-emerald-200 text-emerald-600'}`}>
-                              Óptimo
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex justify-end gap-2">
-                          <button onClick={() => openModal(product)} className={`p-2 rounded-xl transition-all
-                            ${isDark ? 'hover:bg-dark-card text-gray-400 hover:text-white'
-                              : 'hover:bg-light-surface text-gray-500 hover:text-gray-900'}`}>
-                            <Edit2 size={18} />
-                          </button>
-                          <button onClick={() => deleteProduct(product.id)} className={`p-2 rounded-xl transition-all
-                            ${isDark ? 'hover:bg-red-500/10 text-gray-400 hover:text-red-400'
-                              : 'hover:bg-red-50 text-gray-500 hover:text-red-500'}`}>
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
+      {activeTab === 'products' ? (
+        <>
+          {/* Header Actions - Productos */}
+          <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-6 rounded-3xl shadow-soft-lg
+            ${isDark ? 'bg-dark-surface border border-dark-border' : 'bg-white border border-light-border'}`}>
+
+            <div className="relative w-full md:w-96">
+              <span className={`absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none
+                ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                <Search size={18} />
+              </span>
+              <input
+                type="text"
+                placeholder="Buscar productos..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className={`w-full pl-11 pr-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all duration-200
+                  focus:border-gold-500 focus:shadow-gold-sm
+                  ${isDark ? 'bg-dark-card border-dark-border text-white placeholder-gray-600'
+                    : 'bg-light-surface border-light-border text-gray-900 placeholder-gray-400'}`}
+              />
+            </div>
+
+            <button
+              onClick={() => openModal()}
+              className="px-6 py-3 rounded-2xl font-bold text-sm tracking-wider uppercase flex items-center gap-2
+              bg-gold-gradient text-dark-bg shadow-gold-md hover:shadow-gold-lg
+              hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 whitespace-nowrap"
+            >
+              <Plus size={18} />
+              Nuevo Producto
+            </button>
+          </div>
+
+          {/* Inventory Table - Productos */}
+          <div className={`rounded-3xl overflow-hidden shadow-soft-lg border
+            ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className={`border-b text-xs uppercase tracking-wider
+                    ${isDark ? 'border-dark-border bg-dark-card text-gray-400' : 'border-light-border bg-light-surface text-gray-500'}`}>
+                    <th className="px-6 py-4 font-semibold">Producto</th>
+                    <th className="px-6 py-4 font-semibold">Categoría</th>
+                    <th className="px-6 py-4 font-semibold text-right">Precio</th>
+                    <th className="px-6 py-4 font-semibold text-center">Stock Actual</th>
+                    <th className="px-6 py-4 font-semibold text-center">Estado</th>
+                    <th className="px-6 py-4 font-semibold text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredProducts.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" className={`px-6 py-8 text-center text-sm font-medium
+                        ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                        No se encontraron productos.
                       </td>
                     </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                  ) : (
+                    filteredProducts.map((product) => {
+                      const currentMinStock = product.stock_minimo !== undefined && product.stock_minimo !== null
+                        ? product.stock_minimo
+                        : (settings?.globalMinStock || 10)
 
-      {/* Modal */}
+                      const isRecipe = product.inventory_mode === 'recipe'
+                      const isUnlimited = product.inventory_mode === 'unlimited'
+
+                      const estimatedStock = isRecipe && getEstimatedStock ? getEstimatedStock(product.id) : null
+                      const displayStock = isRecipe
+                        ? (estimatedStock !== null ? estimatedStock : 0)
+                        : (product.stock_actual ?? 0)
+
+                      const isLowStock = !isUnlimited && (displayStock <= currentMinStock)
+
+                      return (
+                        <tr key={product.id} className={`border-b last:border-0 transition-colors duration-200 hover:bg-gold-500/5
+                          ${isDark ? 'border-dark-border text-gray-300' : 'border-light-border text-gray-700'}`}>
+                          <td className={`px-6 py-4 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {product.nombre}
+                            {isRecipe && (
+                              <span className="ml-2 text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-gold-500/10 text-gold-500 border border-gold-500/20">
+                                Receta
+                              </span>
+                            )}
+                            {product.is_customizable && (
+                              <span className="ml-2 text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                                Personalizable
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-sm">{product.categoria}</td>
+                          <td className="px-6 py-4 text-sm text-right font-semibold">
+                            ${Number(product.precio).toLocaleString('es-CO')}
+                          </td>
+                          <td className={`px-6 py-4 text-center font-bold font-display text-base
+                            ${isUnlimited ? 'text-gray-500' : isLowStock ? 'text-red-500' : (isDark ? 'text-gold-400' : 'text-gold-600')}`}>
+                            {isUnlimited ? (
+                              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-white/5 border border-white/10 text-gray-400">
+                                Ilimitado
+                              </span>
+                            ) : isRecipe ? (
+                              <span title="Stock estimado en base a insumos de receta">
+                                ~{displayStock} <span className="text-[10px] font-sans font-normal opacity-75">unds est.</span>
+                              </span>
+                            ) : (
+                              displayStock
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex justify-center">
+                              {isUnlimited ? (
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold border
+                                  ${isDark ? 'bg-gray-500/10 border-gray-500/30 text-gray-400'
+                                    : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
+                                  Sin Límite
+                                </span>
+                              ) : isLowStock ? (
+                                <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border
+                                  ${isDark ? 'bg-gold-500/10 border-gold-500/30 text-gold-400'
+                                    : 'bg-gold-50 border-gold-200 text-gold-700'}`}>
+                                  <AlertTriangle size={14} />
+                                  Stock Bajo
+                                </span>
+                              ) : (
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold border
+                                  ${isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                    : 'bg-emerald-50 border-emerald-200 text-emerald-600'}`}>
+                                  Óptimo
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex justify-end gap-2">
+                              {!isUnlimited && !isRecipe && (
+                                <button
+                                  onClick={() => openEntryModal('product', product)}
+                                  title="Registrar entrada de mercancía"
+                                  className={`p-2 rounded-xl transition-all
+                                    ${isDark ? 'hover:bg-emerald-500/10 text-gray-400 hover:text-emerald-400'
+                                      : 'hover:bg-emerald-50 text-gray-500 hover:text-emerald-600'}`}>
+                                  <PackagePlus size={18} />
+                                </button>
+                              )}
+                              <button onClick={() => openModal(product)} className={`p-2 rounded-xl transition-all
+                                ${isDark ? 'hover:bg-dark-card text-gray-400 hover:text-white'
+                                  : 'hover:bg-light-surface text-gray-500 hover:text-gray-900'}`}>
+                                <Edit2 size={18} />
+                              </button>
+                              <button onClick={() => deleteProduct(product.id)} className={`p-2 rounded-xl transition-all
+                                ${isDark ? 'hover:bg-red-500/10 text-gray-400 hover:text-red-400'
+                                  : 'hover:bg-red-50 text-gray-500 hover:text-red-500'}`}>
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Header Actions - Insumos */}
+          <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-6 rounded-3xl shadow-soft-lg
+            ${isDark ? 'bg-dark-surface border border-dark-border' : 'bg-white border border-light-border'}`}>
+
+            <div className="relative w-full md:w-96">
+              <span className={`absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none
+                ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                <Search size={18} />
+              </span>
+              <input
+                type="text"
+                placeholder="Buscar insumos..."
+                value={supplySearchTerm}
+                onChange={(e) => setSupplySearchTerm(e.target.value)}
+                className={`w-full pl-11 pr-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all duration-200
+                  focus:border-gold-500 focus:shadow-gold-sm
+                  ${isDark ? 'bg-dark-card border-dark-border text-white placeholder-gray-600'
+                    : 'bg-light-surface border-light-border text-gray-900 placeholder-gray-400'}`}
+              />
+            </div>
+
+            <button
+              onClick={() => openSupplyModal()}
+              className="px-6 py-3 rounded-2xl font-bold text-sm tracking-wider uppercase flex items-center gap-2
+              bg-gold-gradient text-dark-bg shadow-gold-md hover:shadow-gold-lg
+              hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 whitespace-nowrap"
+            >
+              <Plus size={18} />
+              Nuevo Insumo
+            </button>
+          </div>
+
+          {/* Table - Insumos */}
+          <div className={`rounded-3xl overflow-hidden shadow-soft-lg border
+            ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className={`border-b text-xs uppercase tracking-wider
+                    ${isDark ? 'border-dark-border bg-dark-card text-gray-400' : 'border-light-border bg-light-surface text-gray-500'}`}>
+                    <th className="px-6 py-4 font-semibold">Insumo</th>
+                    <th className="px-6 py-4 font-semibold text-center">Unidad</th>
+                    <th className="px-6 py-4 font-semibold text-right">Precio Unitario</th>
+                    <th className="px-6 py-4 font-semibold text-center">Stock Actual</th>
+                    <th className="px-6 py-4 font-semibold text-center">Stock Mínimo</th>
+                    <th className="px-6 py-4 font-semibold text-center">Estado</th>
+                    <th className="px-6 py-4 font-semibold text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredSupplies.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className={`px-6 py-8 text-center text-sm font-medium
+                        ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                        No se encontraron insumos en bodega.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredSupplies.map((item) => {
+                      const isLowStock = Number(item.stock_actual) <= Number(item.stock_minimo)
+                      return (
+                        <tr key={item.id} className={`border-b last:border-0 transition-colors duration-200 hover:bg-gold-500/5
+                          ${isDark ? 'border-dark-border text-gray-300' : 'border-light-border text-gray-700'}`}>
+                          <td className={`px-6 py-4 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {item.nombre}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-center capitalize">{item.unidad}</td>
+                          <td className="px-6 py-4 text-sm text-right font-semibold">
+                            ${Number(item.precio_unitario || 0).toLocaleString('es-CO')}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <div className="flex flex-col items-center">
+                              <span className={`font-bold font-display text-base tracking-tight
+                                ${isLowStock ? 'text-red-500' : (isDark ? 'text-gold-400' : 'text-gold-600')}`}>
+                                {formatStockWithPackages(item.stock_actual, item)}
+                              </span>
+                              {(item.pack_large_unit || item.pack_medium_unit) && (
+                                <span className={`text-[10px] opacity-60 font-semibold mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                  Total: {item.stock_actual} {item.unidad}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <div className="flex flex-col items-center">
+                              <span className={`font-semibold text-sm tracking-tight ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                {formatStockWithPackages(item.stock_minimo, item)}
+                              </span>
+                              {(item.pack_large_unit || item.pack_medium_unit) && (
+                                <span className={`text-[10px] opacity-60 font-semibold mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                  Total: {item.stock_minimo} {item.unidad}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex justify-center">
+                              {isLowStock ? (
+                                <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border
+                                  ${isDark ? 'bg-gold-500/10 border-gold-500/30 text-gold-400'
+                                    : 'bg-gold-50 border-gold-200 text-gold-700'}`}>
+                                  <AlertTriangle size={14} />
+                                  Bajo
+                                </span>
+                              ) : (
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold border
+                                  ${isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                    : 'bg-emerald-50 border-emerald-200 text-emerald-600'}`}>
+                                  Óptimo
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() => openEntryModal('supply', item)}
+                                title="Registrar entrada de mercancía"
+                                className={`p-2 rounded-xl transition-all
+                                  ${isDark ? 'hover:bg-emerald-500/10 text-gray-400 hover:text-emerald-400'
+                                    : 'hover:bg-emerald-50 text-gray-500 hover:text-emerald-600'}`}
+                              >
+                                <PackagePlus size={18} />
+                              </button>
+                              <button
+                                onClick={() => handleDuplicateSupply(item)}
+                                title="Copiar/Duplicar insumo"
+                                className={`p-2 rounded-xl transition-all
+                                  ${isDark ? 'hover:bg-blue-500/10 text-gray-400 hover:text-blue-400'
+                                    : 'hover:bg-blue-50 text-gray-500 hover:text-blue-500'}`}
+                              >
+                                <Copy size={18} />
+                              </button>
+                              <button onClick={() => openSupplyModal(item)} className={`p-2 rounded-xl transition-all
+                                ${isDark ? 'hover:bg-dark-card text-gray-400 hover:text-white'
+                                  : 'hover:bg-light-surface text-gray-500 hover:text-gray-900'}`}>
+                                <Edit2 size={18} />
+                              </button>
+                              <button onClick={() => deleteSupplyItem(item.id)} className={`p-2 rounded-xl transition-all
+                                ${isDark ? 'hover:bg-red-500/10 text-gray-400 hover:text-red-400'
+                                  : 'hover:bg-red-50 text-gray-500 hover:text-red-500'}`}>
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Modal - Producto */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeModal} />
-          <div className={`relative w-full max-w-4xl p-8 rounded-3xl shadow-2xl animate-slide-in-up border
+          <div className={`relative w-full max-w-4xl p-8 rounded-3xl shadow-2xl animate-slide-in-up border max-h-[90vh] overflow-y-auto
             ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
 
             <button onClick={closeModal} className={`absolute top-6 right-6 p-2 rounded-full transition-colors z-10
@@ -468,19 +1199,286 @@ export default function Inventory() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock Actual</label>
-                      <input required type="number" min="0" value={formData.stock_actual} onChange={e => setFormData({ ...formData, stock_actual: e.target.value })}
-                        className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
-                        ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`} />
+                  {/* Tipo de Inventario */}
+                  <div className="space-y-2">
+                    <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Tipo de inventario</label>
+                    <div className="grid grid-cols-3 gap-3">
+                      {[
+                        { mode: 'finished', icon: '📦', title: 'Stock fijo', desc: 'Tengo el producto listo. Se descuenta al vender.' },
+                        { mode: 'recipe', icon: '🧪', title: 'Por receta', desc: 'Lo preparo al momento. Se descuentan insumos.' },
+                        { mode: 'unlimited', icon: '♾️', title: 'Sin inventario', desc: 'Servicio o producto ilimitado.' }
+                      ].map(opt => (
+                        <button
+                          key={opt.mode}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, inventory_mode: opt.mode })}
+                          className={`p-3 rounded-2xl border-2 text-left flex flex-col gap-1 transition-all
+                            ${formData.inventory_mode === opt.mode
+                              ? 'border-gold-500 bg-gold-500/10'
+                              : isDark ? 'border-dark-border bg-dark-card hover:border-gray-700' : 'border-light-border bg-light-surface hover:border-gray-300'}`}
+                        >
+                          <span className="text-lg">{opt.icon}</span>
+                          <span className={`text-xs font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{opt.title}</span>
+                          <span className={`text-[10px] leading-tight ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{opt.desc}</span>
+                        </button>
+                      ))}
                     </div>
-                    <div className="space-y-1.5">
-                      <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock Mínimo</label>
-                      <input required type="number" min="0" value={formData.stock_minimo} onChange={e => setFormData({ ...formData, stock_minimo: e.target.value })}
-                        className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
-                        ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`} />
+                  </div>
+
+                  {/* Stock Form fields based on inventory_mode */}
+                  {(formData.inventory_mode === 'finished' || !formData.inventory_mode) && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock Actual</label>
+                        <input required type="number" min="0" value={formData.stock_actual} onChange={e => setFormData({ ...formData, stock_actual: e.target.value })}
+                          className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
+                          ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock Mínimo</label>
+                        <input required type="number" min="0" value={formData.stock_minimo} onChange={e => setFormData({ ...formData, stock_minimo: e.target.value })}
+                          className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
+                          ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`} />
+                      </div>
                     </div>
+                  )}
+
+                  {formData.inventory_mode === 'recipe' && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5 opacity-80">
+                        <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock Estimado</label>
+                        <input readOnly type="text" value={`~${editingProduct ? (getEstimatedStock ? (getEstimatedStock(editingProduct.id) ?? 0) : 0) : 0} (Calculado)`}
+                          className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 cursor-not-allowed
+                          ${isDark ? 'bg-dark-card/40 border-dark-border text-gray-400' : 'bg-light-surface/50 border-light-border text-gray-500'}`} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock Mínimo</label>
+                        <input required type="number" min="0" value={formData.stock_minimo} onChange={e => setFormData({ ...formData, stock_minimo: e.target.value })}
+                          className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
+                          ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Receta Builder for Recipe mode */}
+                  {formData.inventory_mode === 'recipe' && (
+                    <div className="space-y-3 p-4 rounded-2xl border-2 border-dashed border-gold-500/20 bg-gold-500/5">
+                      <div className="flex justify-between items-center">
+                        <label className={`text-xs font-bold uppercase ${isDark ? 'text-gold-400' : 'text-gold-700'}`}>Ingredientes de la Receta</label>
+                        <button
+                          type="button"
+                          onClick={handleAddRecipeItem}
+                          className="px-3 py-1.5 bg-gold-gradient text-black text-xs font-bold rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-1"
+                        >
+                          <Plus size={14} /> Agregar
+                        </button>
+                      </div>
+
+                      {recipeItems.length === 0 ? (
+                        <p className={`text-xs text-center py-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>No has configurado ingredientes para este producto. Agrega insumos para calcular el stock estimado.</p>
+                      ) : (
+                        <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
+                          {recipeItems.map((item, idx) => {
+                            const supply = supplyItems.find(s => s.id === item.supply_item_id)
+                            return (
+                              <div key={idx} className="flex gap-2 items-center">
+                                <select
+                                  value={item.supply_item_id}
+                                  onChange={e => handleRecipeItemChange(idx, 'supply_item_id', e.target.value)}
+                                  className={`flex-1 px-3 py-2 rounded-xl text-xs font-medium outline-none border-2 focus:border-gold-500
+                                    ${isDark ? 'bg-dark-card border-dark-border text-white font-semibold' : 'bg-light-surface border-light-border text-gray-900'}`}
+                                >
+                                  {supplyItems.map(s => (
+                                    <option key={s.id} value={s.id}>{s.nombre} ({s.unidad})</option>
+                                  ))}
+                                </select>
+                                <input
+                                  type="number"
+                                  step="0.001"
+                                  min="0.001"
+                                  required
+                                  value={item.cantidad}
+                                  placeholder="Cant."
+                                  onChange={e => handleRecipeItemChange(idx, 'cantidad', parseFloat(e.target.value) || 0)}
+                                  className={`w-24 px-3 py-2 rounded-xl text-xs font-medium outline-none border-2 focus:border-gold-500
+                                    ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                                />
+                                <span className={`text-xs font-bold w-12 truncate ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                  {supply ? supply.unidad : ''}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveRecipeItem(idx)}
+                                  className="p-2 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Producto Personalizable / Combinado */}
+                  <div className={`p-4 rounded-2xl border-2 transition-all ${
+                    formData.is_customizable 
+                      ? 'border-gold-500 bg-gold-500/5' 
+                      : isDark ? 'border-dark-border bg-dark-card/30' : 'border-light-border bg-light-surface/30'
+                  }`}>
+                    <div className="flex items-center justify-between select-none">
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          id="is_customizable"
+                          checked={!!formData.is_customizable}
+                          onChange={e => setFormData(prev => ({ ...prev, is_customizable: e.target.checked }))}
+                          className="w-4 h-4 rounded text-gold-500 focus:ring-gold-500 border-gray-300 dark:border-dark-border cursor-pointer"
+                        />
+                        <label htmlFor="is_customizable" className="text-xs font-bold uppercase opacity-85 select-none cursor-pointer">
+                          🎨 ¿Es producto personalizable / combinado?
+                        </label>
+                      </div>
+                      
+                      {formData.is_customizable && (
+                        <div className="flex items-center gap-2">
+                          <label className="text-[10px] font-bold uppercase opacity-70">Selecciones máx:</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={formData.max_selections || 1}
+                            onChange={e => setFormData(prev => ({ ...prev, max_selections: parseInt(e.target.value) || 1 }))}
+                            className={`w-16 px-2 py-1 text-center rounded-lg text-xs font-semibold outline-none border focus:border-gold-500
+                              ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {formData.is_customizable && (
+                      <div className="mt-4 space-y-4 animate-fade-in text-left">
+                        <div className="flex justify-between items-center border-b pb-2 border-gold-500/20">
+                          <span className="text-[11px] font-bold uppercase text-gold-500">Opciones de Personalización</span>
+                          <button
+                            type="button"
+                            onClick={handleAddCustomOption}
+                            className="px-2.5 py-1 bg-gold-gradient text-black text-[10px] font-bold rounded-lg hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-1"
+                          >
+                            <Plus size={12} /> Agregar Opción
+                          </button>
+                        </div>
+
+                        {customOptionsList.length === 0 ? (
+                          <p className={`text-[11px] text-center py-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                            No has agregado opciones. Ej: Sabores, toppings, salsas extras.
+                          </p>
+                        ) : (
+                          <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
+                            {customOptionsList.map((opt) => {
+                              const selectedSupply = supplyItems.find(s => s.id === opt.supply_item_id)
+                              return (
+                                <div key={opt.id} className={`p-3 rounded-xl border space-y-2 relative transition-all
+                                  ${isDark ? 'bg-dark-card/60 border-dark-border' : 'bg-gray-50 border-gray-200'}`}>
+                                  
+                                  {/* Delete option button top-right */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveCustomOption(opt.id)}
+                                    className="absolute top-2 right-2 p-1 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors"
+                                    title="Eliminar opción"
+                                  >
+                                    <X size={14} />
+                                  </button>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-6">
+                                    {/* Label / Nombre */}
+                                    <div className="space-y-1">
+                                      <label className="text-[9px] font-bold uppercase opacity-70">Nombre Opción</label>
+                                      <input
+                                        type="text"
+                                        required
+                                        placeholder="Ej: Fresa, Arequipe, Chispas"
+                                        value={opt.label}
+                                        onChange={e => handleCustomOptionChange(opt.id, 'label', e.target.value)}
+                                        className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold outline-none border focus:border-gold-500
+                                          ${isDark ? 'bg-dark-bg border-dark-border text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                                      />
+                                    </div>
+
+                                    {/* Precio Extra */}
+                                    <div className="space-y-1">
+                                      <label className="text-[9px] font-bold uppercase opacity-70">Precio Adicional ($)</label>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        placeholder="0"
+                                        value={opt.extra_price}
+                                        onChange={e => handleCustomOptionChange(opt.id, 'extra_price', parseFloat(e.target.value) || 0)}
+                                        className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold outline-none border focus:border-gold-500
+                                          ${isDark ? 'bg-dark-bg border-dark-border text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-dashed border-gray-200 dark:border-dark-border">
+                                    {/* Vinculo Insumo Bodega */}
+                                    <div className="space-y-0.5">
+                                      <label className="text-[8px] font-bold uppercase opacity-60">Insumo Bodega (Opcional)</label>
+                                      <select
+                                        value={opt.supply_item_id}
+                                        onChange={e => handleCustomOptionChange(opt.id, 'supply_item_id', e.target.value)}
+                                        className={`w-full px-2 py-1 rounded-lg text-[10px] font-medium outline-none border focus:border-gold-500 cursor-pointer
+                                          ${isDark ? 'bg-dark-bg border-dark-border text-white font-semibold' : 'bg-white border-gray-300 text-gray-900'}`}
+                                      >
+                                        <option value="">-- No descontar --</option>
+                                        {supplyItems.map(s => (
+                                          <option key={s.id} value={s.id}>{s.nombre} ({s.unidad})</option>
+                                        ))}
+                                      </select>
+                                    </div>
+
+                                    {/* Cantidad Base */}
+                                    <div className="space-y-0.5">
+                                      <label className="text-[8px] font-bold uppercase opacity-60">
+                                        Cant. Base {selectedSupply ? `(${selectedSupply.unidad})` : ''}
+                                      </label>
+                                      <input
+                                        type="number"
+                                        step="0.001"
+                                        min="0"
+                                        disabled={!opt.supply_item_id}
+                                        placeholder="0.0"
+                                        value={opt.cantidad_base}
+                                        onChange={e => handleCustomOptionChange(opt.id, 'cantidad_base', parseFloat(e.target.value) || 0)}
+                                        className={`w-full px-2 py-1 rounded-lg text-[10px] font-semibold outline-none border focus:border-gold-500 disabled:opacity-50 disabled:cursor-not-allowed
+                                          ${isDark ? 'bg-dark-bg border-dark-border text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                                      />
+                                    </div>
+
+                                    {/* Modo de Descuento */}
+                                    <div className="space-y-0.5">
+                                      <label className="text-[8px] font-bold uppercase opacity-60">Modo de Descuento</label>
+                                      <select
+                                        disabled={!opt.supply_item_id}
+                                        value={opt.discount_mode}
+                                        onChange={e => handleCustomOptionChange(opt.id, 'discount_mode', e.target.value)}
+                                        className={`w-full px-2 py-1 rounded-lg text-[10px] font-medium outline-none border focus:border-gold-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed
+                                          ${isDark ? 'bg-dark-bg border-dark-border text-white font-semibold' : 'bg-white border-gray-300 text-gray-900'}`}
+                                      >
+                                        <option value="split">Dividir entre selecciones</option>
+                                        <option value="per_selection">Fijo por selección</option>
+                                      </select>
+                                    </div>
+                                  </div>
+
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <button type="submit" className="w-full py-4 mt-6 rounded-2xl font-bold text-sm tracking-wider uppercase
@@ -525,6 +1523,552 @@ export default function Inventory() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal - Insumo CRUD */}
+      {isSupplyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsSupplyModalOpen(false)} />
+          <div className={`relative w-full max-w-md rounded-3xl shadow-2xl animate-slide-in-up border flex flex-col max-h-[88vh]
+            ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
+
+            <div className="px-6 pt-6 pb-2 shrink-0">
+              <button onClick={() => setIsSupplyModalOpen(false)} className={`absolute top-6 right-6 p-2 rounded-full transition-colors
+                ${isDark ? 'hover:bg-dark-card text-gray-400 hover:text-white' : 'hover:bg-light-surface text-gray-500 hover:text-gray-900'}`}>
+                <X size={18} />
+              </button>
+
+              <h3 className="font-display font-bold text-xl">
+                {editingSupplyItem ? 'Editar Insumo' : 'Nuevo Insumo'}
+              </h3>
+            </div>
+
+            <div className="overflow-y-auto flex-1 px-6 pb-2">
+
+              {supplyErrorMsg && (
+                <div className="mt-3 mb-1 p-3 bg-red-500/10 border border-red-500/30 text-red-500 rounded-xl text-xs font-bold flex items-center gap-2">
+                  <AlertTriangle size={16} />
+                  {supplyErrorMsg}
+                </div>
+              )}
+
+              <form id="supply-form" onSubmit={handleSupplySubmit} className="space-y-4 pb-1">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase opacity-70">Nombre del insumo</label>
+                <input
+                  required
+                  type="text"
+                  placeholder="Ej: Harina de trigo, Salsa rosada..."
+                  value={supplyFormData.nombre}
+                  onChange={e => setSupplyFormData({ ...supplyFormData, nombre: e.target.value })}
+                  className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
+                    ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase opacity-70">Unidad de medida</label>
+                {isCreatingUnit ? (
+                  <div className="relative w-full">
+                    <input
+                      autoFocus
+                      type="text"
+                      placeholder="Ej: caja, porción, ml..."
+                      value={newUnitName}
+                      onChange={e => setNewUnitName(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleCreateUnit();
+                        } else if (e.key === 'Escape') {
+                          setIsCreatingUnit(false);
+                          setSupplyFormData(prev => ({ ...prev, unidad: availableUnits[0]?.value || 'unidad' }));
+                          setNewUnitName('');
+                        }
+                      }}
+                      className={`w-full px-4 py-3 pr-12 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
+                      ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                    />
+                    {newUnitName.trim().length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleCreateUnit}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-gold-gradient text-black rounded-lg hover:scale-105 active:scale-95 transition-all shadow-sm"
+                      >
+                        <Check size={16} strokeWidth={3} />
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex gap-2 items-center w-full">
+                    <select
+                      required
+                      value={supplyFormData.unidad}
+                      onChange={e => {
+                        if (e.target.value === '__NEW__') {
+                          setIsCreatingUnit(true);
+                          setSupplyFormData({ ...supplyFormData, unidad: '' });
+                        } else {
+                          setSupplyFormData({ ...supplyFormData, unidad: e.target.value });
+                        }
+                      }}
+                      className={`flex-1 min-w-0 px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 focus:border-gold-500 cursor-pointer appearance-none
+                        ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                    >
+                      <option value="" disabled>Seleccione una unidad</option>
+                      {availableUnits.map(u => (
+                        <option key={u.value} value={u.value}>{u.label}</option>
+                      ))}
+                      <option value="__NEW__" className="font-bold text-gold-500">+ Crear nueva unidad</option>
+                    </select>
+
+                    {supplyFormData.unidad && supplyFormData.unidad !== 'unidad' && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleDeleteUnit(supplyFormData.unidad);
+                        }}
+                        className={`p-3 rounded-xl transition-colors shrink-0 flex items-center justify-center
+                          ${isDark ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-red-50 text-red-500 hover:bg-red-100'}`}
+                        title="Eliminar unidad seleccionada"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase opacity-70">Precio Unitario de Compra ($)</label>
+                <input
+                  required
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Ej: 1500"
+                  value={supplyFormData.precio_unitario}
+                  onChange={e => setSupplyFormData({ ...supplyFormData, precio_unitario: e.target.value })}
+                  className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
+                    ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                />
+              </div>
+
+              {/* Stock Actual + Mínimo — antes del bloque opcional de empaques */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase opacity-70">Stock Actual</label>
+                  <input
+                    required
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0"
+                    value={supplyFormData.stock_actual}
+                    onChange={e => setSupplyFormData({ ...supplyFormData, stock_actual: e.target.value })}
+                    className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
+                      ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase opacity-70">Stock Mínimo</label>
+                  <input
+                    required
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    placeholder="1"
+                    value={supplyFormData.stock_minimo}
+                    onChange={e => setSupplyFormData({ ...supplyFormData, stock_minimo: e.target.value })}
+                    className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
+                      ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                  />
+                </div>
+              </div>
+
+              {/* Configuración de Empaques (Opcional) */}
+              <div className={`p-4 rounded-2xl border-2 transition-all ${
+                supplyFormData.hasPackagingConfig 
+                  ? 'border-gold-500 bg-gold-500/5' 
+                  : isDark ? 'border-dark-border bg-dark-card/30' : 'border-light-border bg-light-surface/30'
+              }`}>
+                <div className="flex items-center gap-2.5 select-none">
+                  <input
+                    type="checkbox"
+                    id="hasPackagingConfigCheckbox"
+                    checked={supplyFormData.hasPackagingConfig}
+                    onChange={e => setSupplyFormData(prev => ({ ...prev, hasPackagingConfig: e.target.checked }))}
+                    className="w-4 h-4 rounded text-gold-500 focus:ring-gold-500 border-gray-300 dark:border-dark-border cursor-pointer"
+                  />
+                  <label htmlFor="hasPackagingConfigCheckbox" className="text-xs font-bold uppercase opacity-85 select-none cursor-pointer">
+                    ¿Se compra por Cajas/Paquetes?
+                  </label>
+                </div>
+
+                {supplyFormData.hasPackagingConfig && (
+                  <div className="mt-4 space-y-4 animate-fade-in text-left">
+                    {/* Empaque Mediano */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold uppercase opacity-75">Empaque Mediano (ej: Paquete, Bolsa)</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          placeholder="Unidad (ej: paquete)"
+                          value={supplyFormData.pack_medium_unit}
+                          onChange={e => setSupplyFormData({ ...supplyFormData, pack_medium_unit: e.target.value })}
+                          className={`w-full px-3 py-2 rounded-xl text-xs font-semibold outline-none border transition focus:border-gold-500
+                            ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                        />
+                        <input
+                          type="number"
+                          min="1"
+                          placeholder="Equivale a... (ej: 10)"
+                          value={supplyFormData.pack_medium_ratio}
+                          onChange={e => setSupplyFormData({ ...supplyFormData, pack_medium_ratio: e.target.value })}
+                          className={`w-full px-3 py-2 rounded-xl text-xs font-semibold outline-none border transition focus:border-gold-500
+                            ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                        />
+                      </div>
+                      <p className="text-[9px] text-gray-500">Cuántas unidades base ({supplyFormData.unidad || 'und'}) contiene un empaque mediano.</p>
+                    </div>
+
+                    {/* Empaque Grande */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold uppercase opacity-75">Empaque Grande (ej: Caja, Bulto, Saco)</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          placeholder="Unidad (ej: caja)"
+                          value={supplyFormData.pack_large_unit}
+                          onChange={e => setSupplyFormData({ ...supplyFormData, pack_large_unit: e.target.value })}
+                          className={`w-full px-3 py-2 rounded-xl text-xs font-semibold outline-none border transition focus:border-gold-500
+                            ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                        />
+                        <input
+                          type="number"
+                          min="1"
+                          placeholder="Equivale a... (ej: 100)"
+                          value={supplyFormData.pack_large_ratio}
+                          onChange={e => setSupplyFormData({ ...supplyFormData, pack_large_ratio: e.target.value })}
+                          className={`w-full px-3 py-2 rounded-xl text-xs font-semibold outline-none border transition focus:border-gold-500
+                            ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                        />
+                      </div>
+                      <p className="text-[9px] text-gray-500">Cuántas unidades base ({supplyFormData.unidad || 'und'}) contiene un empaque grande.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </form>
+            </div>
+
+            {/* Footer sticky con el botón de envío */}
+            <div className={`px-6 pb-6 pt-4 shrink-0 border-t ${isDark ? 'border-dark-border/40' : 'border-gray-100'}`}>
+              <button
+                type="submit"
+                form="supply-form"
+                className="w-full py-3.5 rounded-2xl font-bold text-sm tracking-wider uppercase bg-gold-gradient text-dark-bg hover:scale-[1.02] active:scale-[0.98] transition-all shadow-gold-md"
+              >
+                {editingSupplyItem ? 'Guardar Cambios' : 'Crear Insumo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal - Ajuste Manual Rápido */}
+      {isAdjustModalOpen && adjustingSupplyItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsAdjustModalOpen(false)} />
+          <div className={`relative w-full max-w-sm p-6 rounded-3xl shadow-2xl animate-slide-in-up border
+            ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
+
+            <button onClick={() => setIsAdjustModalOpen(false)} className={`absolute top-6 right-6 p-2 rounded-full transition-colors
+              ${isDark ? 'hover:bg-dark-card text-gray-400 hover:text-white' : 'hover:bg-light-surface text-gray-500 hover:text-gray-900'}`}>
+              <X size={18} />
+            </button>
+
+            <h3 className="font-display font-bold text-lg mb-2">Ajuste de Stock Físico</h3>
+            <p className={`text-xs mb-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              Corrige directamente el inventario actual para <span className="font-bold text-gold-500">{adjustingSupplyItem.nombre}</span>.
+            </p>
+
+            <form onSubmit={handleAdjustSubmit} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase opacity-70">Nuevo Stock ({adjustingSupplyItem.unidad})</label>
+                <input
+                  required
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  autoFocus
+                  value={adjustNewStock}
+                  onChange={e => setAdjustNewStock(e.target.value)}
+                  className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 focus:border-gold-500
+                    ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                />
+              </div>
+
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsAdjustModalOpen(false)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-colors
+                    ${isDark ? 'bg-dark-card hover:bg-dark-surface text-gray-400' : 'bg-gray-100 hover:bg-gray-250 text-gray-600'}`}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl text-xs font-bold uppercase bg-gold-gradient text-dark-bg hover:scale-105 active:scale-95 transition-all shadow-sm"
+                >
+                  Confirmar Stock
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal - Ingreso de Mercancía (Stock Entry) */}
+      {isEntryModalOpen && entryTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsEntryModalOpen(false)} />
+          <div className={`relative w-full max-w-sm p-6 rounded-3xl shadow-2xl animate-slide-in-up border
+            ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
+
+            <button onClick={() => setIsEntryModalOpen(false)} className={`absolute top-5 right-5 p-2 rounded-full transition-colors
+              ${isDark ? 'hover:bg-dark-card text-gray-400 hover:text-white' : 'hover:bg-light-surface text-gray-500 hover:text-gray-900'}`}>
+              <X size={18} />
+            </button>
+
+            {/* Header with icon */}
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                <PackagePlus size={20} className="text-emerald-500" />
+              </div>
+              <div>
+                <h3 className="font-display font-bold text-lg leading-tight">Registrar Entrada</h3>
+                <p className={`text-xs font-medium truncate max-w-[200px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {entryTarget.item.nombre}
+                </p>
+              </div>
+            </div>
+
+            {/* Current stock preview */}
+            <div className={`flex items-center justify-between px-4 py-3 rounded-2xl mb-5
+              ${isDark ? 'bg-dark-card border border-dark-border' : 'bg-light-surface border border-light-border'}`}>
+              <span className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock actual</span>
+              <span className={`font-display font-extrabold text-lg ${isDark ? 'text-gold-400' : 'text-gold-600'} text-right`}>
+                {entryTarget.type === 'supply'
+                  ? formatStockWithPackages(entryTarget.item.stock_actual, entryTarget.item)
+                  : `${entryTarget.item.stock_actual ?? 0} und`}
+              </span>
+            </div>
+
+            <form onSubmit={handleStockEntrySubmit} className="space-y-4">
+              {entryTarget.type === 'supply' && (entryTarget.item.pack_medium_unit || entryTarget.item.pack_large_unit) && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider opacity-70">Presentación a ingresar</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEntryUnitType('base')}
+                      className={`py-2 rounded-xl text-xs font-bold transition-all border
+                        ${entryUnitType === 'base'
+                          ? 'border-gold-500 bg-gold-500/10 text-gold-500'
+                          : isDark ? 'border-dark-border bg-dark-card text-gray-400 hover:text-white' : 'border-light-border bg-light-surface text-gray-600 hover:text-gray-900'}`}
+                    >
+                      {entryTarget.item.unidad || 'Unidad'}
+                    </button>
+                    {entryTarget.item.pack_medium_unit && (
+                      <button
+                        type="button"
+                        onClick={() => setEntryUnitType('medium')}
+                        className={`py-2 rounded-xl text-xs font-bold transition-all border
+                          ${entryUnitType === 'medium'
+                            ? 'border-gold-500 bg-gold-500/10 text-gold-500'
+                            : isDark ? 'border-dark-border bg-dark-card text-gray-400 hover:text-white' : 'border-light-border bg-light-surface text-gray-600 hover:text-gray-900'}`}
+                      >
+                        {entryTarget.item.pack_medium_unit} ({entryTarget.item.pack_medium_ratio})
+                      </button>
+                    )}
+                    {entryTarget.item.pack_large_unit && (
+                      <button
+                        type="button"
+                        onClick={() => setEntryUnitType('large')}
+                        className={`py-2 rounded-xl text-xs font-bold transition-all border
+                          ${entryUnitType === 'large'
+                            ? 'border-gold-500 bg-gold-500/10 text-gold-500'
+                            : isDark ? 'border-dark-border bg-dark-card text-gray-400 hover:text-white' : 'border-light-border bg-light-surface text-gray-600 hover:text-gray-900'}`}
+                      >
+                        {entryTarget.item.pack_large_unit} ({entryTarget.item.pack_large_ratio})
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider opacity-70">
+                  Cantidad a ingresar (en {
+                    entryTarget.type === 'supply'
+                      ? (entryUnitType === 'medium' ? entryTarget.item.pack_medium_unit : entryUnitType === 'large' ? entryTarget.item.pack_large_unit : (entryTarget.item.unidad || 'unidades'))
+                      : 'unidades'
+                  })
+                </label>
+                <input
+                  required
+                  autoFocus
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  placeholder="Ej: 10"
+                  value={entryQty}
+                  onChange={e => {
+                    const val = e.target.value
+                    setEntryQty(val)
+                    const qty = parseFloat(val) || 0
+                    const uPrice = parseFloat(entryUnitPrice) || 0
+                    if (qty > 0 && uPrice > 0) {
+                      setEntryTotalCost((qty * uPrice).toFixed(0))
+                    } else {
+                      setEntryTotalCost('')
+                    }
+                  }}
+                  className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-emerald-500
+                    ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                />
+              </div>
+
+              {/* Toggle to record expense */}
+              <div className="flex items-center gap-2.5 py-1">
+                <input
+                  type="checkbox"
+                  id="recordExpenseCheckbox"
+                  checked={entryRecordExpense}
+                  onChange={e => setEntryRecordExpense(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500 border-gray-300 dark:border-dark-border cursor-pointer"
+                />
+                <label htmlFor="recordExpenseCheckbox" className="text-xs font-bold uppercase opacity-85 select-none cursor-pointer">
+                  ¿Registrar gasto en Finanzas?
+                </label>
+              </div>
+
+              {/* Cost settings - collapsed if unchecked */}
+              {entryRecordExpense && (
+                <div className="space-y-3 p-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 animate-fade-in text-left">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold uppercase opacity-75">Costo Unitario ($)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="Ej: 1500"
+                        value={entryUnitPrice}
+                        onChange={e => {
+                          const val = e.target.value
+                          setEntryUnitPrice(val)
+                          const qty = parseFloat(entryQty) || 0
+                          const uPrice = parseFloat(val) || 0
+                          if (qty > 0 && uPrice > 0) {
+                            setEntryTotalCost((qty * uPrice).toFixed(0))
+                          } else {
+                            setEntryTotalCost('')
+                          }
+                        }}
+                        className={`w-full px-3 py-2 rounded-xl text-xs font-semibold outline-none border transition-all focus:border-emerald-500
+                          ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold uppercase opacity-75">Costo Total ($)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="Ej: 15000"
+                        value={entryTotalCost}
+                        onChange={e => {
+                          const val = e.target.value
+                          setEntryTotalCost(val)
+                          const qty = parseFloat(entryQty) || 0
+                          const total = parseFloat(val) || 0
+                          if (qty > 0 && total > 0) {
+                            setEntryUnitPrice((total / qty).toFixed(2))
+                          } else {
+                            setEntryUnitPrice('')
+                          }
+                        }}
+                        className={`w-full px-3 py-2 rounded-xl text-xs font-semibold outline-none border transition-all focus:border-emerald-500
+                          ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold uppercase opacity-75">Categoría de Gasto</label>
+                    <select
+                      value={entryCategory}
+                      onChange={e => setEntryCategory(e.target.value)}
+                      className={`w-full px-3 py-2 rounded-xl text-xs font-semibold outline-none border transition-all focus:border-emerald-500 cursor-pointer
+                        ${isDark ? 'bg-dark-card border-dark-border text-white font-semibold' : 'bg-light-surface border-light-border text-gray-900'}`}
+                    >
+                      <option value="Insumos">Insumos</option>
+                      <option value="Servicios">Servicios</option>
+                      <option value="Arriendo">Arriendo</option>
+                      <option value="Otros">Otros</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* New total preview */}
+              {entryQty && !isNaN(parseFloat(entryQty)) && parseFloat(entryQty) > 0 && (() => {
+                const qtyVal = parseFloat(entryQty)
+                let baseQty = qtyVal
+                if (entryTarget.type === 'supply') {
+                  const s = entryTarget.item
+                  if (entryUnitType === 'medium' && s.pack_medium_ratio) {
+                    baseQty = qtyVal * (parseFloat(s.pack_medium_ratio) || 1)
+                  } else if (entryUnitType === 'large' && s.pack_large_ratio) {
+                    baseQty = qtyVal * (parseFloat(s.pack_large_ratio) || 1)
+                  }
+                }
+                const newTotal = (entryTarget.item.stock_actual || 0) + baseQty
+                return (
+                  <div className={`flex items-center justify-between px-4 py-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/5`}>
+                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-500">Nuevo total</span>
+                    <span className="font-display font-extrabold text-lg text-emerald-500 text-right">
+                      {entryTarget.type === 'supply'
+                        ? formatStockWithPackages(newTotal, entryTarget.item)
+                        : `${newTotal} und`}
+                    </span>
+                  </div>
+                )
+              })()}
+
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsEntryModalOpen(false)}
+                  className={`flex-1 py-3 rounded-2xl text-xs font-bold uppercase transition-colors
+                    ${isDark ? 'bg-dark-card hover:bg-dark-surface text-gray-400' : 'bg-gray-100 hover:bg-gray-250 text-gray-600'}`}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-3 rounded-2xl text-xs font-bold uppercase bg-emerald-500 hover:bg-emerald-600 text-white hover:scale-[1.02] active:scale-[0.98] transition-all shadow-sm flex items-center justify-center gap-2"
+                >
+                  <PackagePlus size={15} />
+                  Confirmar Entrada
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
