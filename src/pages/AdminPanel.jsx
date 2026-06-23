@@ -153,7 +153,9 @@ export default function AdminPanel() {
         days_remaining: 30
       }
       try {
+        console.log("INSERTANDO NEGOCIO - OBJETO ENVIADO:", newBusiness)
         const { data, error } = await supabase.from('businesses').insert(newBusiness).select().single()
+        console.log("RESULTADO INSERT NEGOCIO - DATA:", data, "ERROR:", error)
         if (error) {
           console.error("Supabase Error en AdminPanel:", error)
           insertLog({ type: 'error', action: 'create_business', business_id: 'master', username: 'Superadmin', message: `Error al crear negocio: ${error.message}` })
