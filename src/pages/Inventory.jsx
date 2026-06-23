@@ -74,7 +74,8 @@ export default function Inventory() {
     pack_large_ratio: 1,
     pack_medium_unit: '',
     pack_medium_ratio: 1,
-    hasPackagingConfig: false
+    hasPackagingConfig: false,
+    ubicacion: ''
   })
   const [supplyErrorMsg, setSupplyErrorMsg] = useState('')
   const [supplyActiveTab, setSupplyActiveTab] = useState('general') // 'general' | 'packaging'
@@ -487,7 +488,8 @@ export default function Inventory() {
         pack_large_ratio: ratio,
         pack_medium_unit: '',
         pack_medium_ratio: 1,
-        hasPackagingConfig: true
+        hasPackagingConfig: true,
+        ubicacion: item.ubicacion || ''
       })
     } else {
       setEditingSupplyItem(null)
@@ -504,7 +506,8 @@ export default function Inventory() {
         pack_large_ratio: 1,
         pack_medium_unit: '',
         pack_medium_ratio: 1,
-        hasPackagingConfig: false
+        hasPackagingConfig: false,
+        ubicacion: ''
       })
     }
     setIsSupplyModalOpen(true)
@@ -535,7 +538,8 @@ export default function Inventory() {
       pack_large_ratio: ratio,
       pack_medium_unit: '',
       pack_medium_ratio: 1,
-      hasPackagingConfig: true
+      hasPackagingConfig: true,
+      ubicacion: item.ubicacion || ''
     })
     setIsSupplyModalOpen(true)
   }
@@ -746,7 +750,8 @@ export default function Inventory() {
         pack_large_unit: supplyFormData.pack_large_unit || 'unidad',
         pack_large_ratio: packRatio,
         pack_medium_unit: null,
-        pack_medium_ratio: 1
+        pack_medium_ratio: 1,
+        ubicacion: supplyFormData.ubicacion?.trim() || null
       }
       if (editingSupplyItem) {
         await updateSupplyItem(editingSupplyItem.id, itemData)
@@ -1080,6 +1085,7 @@ export default function Inventory() {
                     <th className="px-6 py-4 font-semibold text-right">Precio Unitario</th>
                     <th className="px-6 py-4 font-semibold text-center">Stock Actual</th>
                     <th className="px-6 py-4 font-semibold text-center">Stock Mínimo</th>
+                    <th className="px-6 py-4 font-semibold text-center">Ubicación</th>
                     <th className="px-6 py-4 font-semibold text-center">Estado</th>
                     <th className="px-6 py-4 font-semibold text-right">Acciones</th>
                   </tr>
@@ -1087,7 +1093,7 @@ export default function Inventory() {
                 <tbody>
                   {filteredSupplies.length === 0 ? (
                     <tr>
-                      <td colSpan="8" className={`px-6 py-8 text-center text-sm font-medium
+                      <td colSpan="9" className={`px-6 py-8 text-center text-sm font-medium
                         ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                         No se encontraron insumos en bodega.
                       </td>
@@ -1172,6 +1178,15 @@ export default function Inventory() {
                                 </span>
                               )}
                             </div>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-center font-medium">
+                            {item.ubicacion ? (
+                              <span className={isDark ? 'text-gray-300 font-semibold' : 'text-gray-700 font-semibold'}>
+                                {item.ubicacion}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 dark:text-gray-650">-</span>
+                            )}
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex justify-center">
@@ -1934,6 +1949,20 @@ export default function Inventory() {
                       </div>
                     )
                   })()}
+
+                  {/* 6. Ubicación */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider opacity-70">Ubicación (Opcional)</label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Nevera principal, Estante 2, Cajón mostrador..."
+                      value={supplyFormData.ubicacion || ''}
+                      onChange={e => setSupplyFormData({ ...supplyFormData, ubicacion: e.target.value })}
+                      className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
+                        ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                    />
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 px-1">Indica dónde se almacena físicamente este insumo.</p>
+                  </div>
                 </div>
               </form>
             </div>
