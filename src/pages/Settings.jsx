@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTheme, useSettings, useAuth } from '../context/AppContext'
-import { Settings as SettingsIcon, Save, Building2, FileText, MapPin, Hash, DollarSign, Bell, Users, UserPlus, Trash2, KeyRound, ShieldCheck, CheckSquare, Square, Calendar, User, Pencil } from 'lucide-react'
+import { Settings as SettingsIcon, Save, Building2, FileText, MapPin, Hash, DollarSign, Bell, Users, UserPlus, Trash2, KeyRound, ShieldCheck, CheckSquare, Square, Calendar, User, Pencil, Sparkles } from 'lucide-react'
 
 const defaultPermissions = {
   CAJERO: ['/pos', '/deliveries', '/inventory'],
@@ -25,11 +26,13 @@ export default function Settings() {
   const isDark = theme === 'dark'
   const { user, changePassword } = useAuth()
   const { settings, updateSettings, staff, addStaff, deleteStaff, changeStaffPassword, updateStaffInfo, updateStaffPermissions, isConfigured } = useSettings()
+  const navigate = useNavigate()
 
   const [formData, setFormData] = useState(settings)
   const [isSaved, setIsSaved] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [settingsError, setSettingsError] = useState('')
+  const [showCongratsModal, setShowCongratsModal] = useState(false)
   const [newStaff, setNewStaff] = useState({ name: '', username: '', password: '', role: 'CAJERO', permissions: defaultPermissions.CAJERO })
   const [isAddingStaff, setIsAddingStaff] = useState(false)
   const [staffError, setStaffError] = useState('')
@@ -70,11 +73,16 @@ export default function Settings() {
     setIsSaving(true)
     setSettingsError('')
     setIsSaved(false)
+    const wasNotConfiguredBefore = !isConfigured
     const res = await updateSettings(formData)
     setIsSaving(false)
     if (res?.success) {
-      setIsSaved(true)
-      setTimeout(() => setIsSaved(false), 3000)
+      if (wasNotConfiguredBefore) {
+        setShowCongratsModal(true)
+      } else {
+        setIsSaved(true)
+        setTimeout(() => setIsSaved(false), 3000)
+      }
     } else {
       setSettingsError(res?.error || 'Error al guardar los cambios.')
     }
@@ -723,6 +731,45 @@ export default function Settings() {
           </button>
         </div>
       </form>
+
+      {/* Modal de Felicitaciones - Configuración inicial completada */}
+      {showCongratsModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
+          <div className={`w-full max-w-md p-8 rounded-4xl border text-center shadow-2xl animate-scale-in relative overflow-hidden
+            ${isDark ? 'bg-dark-surface border-gold-500/30' : 'bg-white border-gold-500/30'}`}>
+            
+            {/* Background glowing sphere */}
+            <div className="absolute top-[-100px] left-1/2 -translate-x-1/2 w-[300px] h-[300px] rounded-full pointer-events-none"
+              style={{ background: 'radial-gradient(circle, rgba(255,215,0,0.15) 0%, transparent 70%)' }} />
+
+            <div className="w-20 h-20 rounded-3xl mx-auto mb-6 bg-gold-gradient text-dark-bg flex items-center justify-center shadow-gold-md relative z-10 animate-bounce">
+              <Sparkles size={40} className="text-black" />
+            </div>
+
+            <h3 className="font-display font-black text-3xl tracking-tight gold-text mb-3 uppercase relative z-10">
+              ¡Felicidades!
+            </h3>
+            
+            <p className={`text-base font-semibold mb-2 relative z-10 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              {formData.ownerName || 'Propietario'}, tu negocio ya está listo para comenzar.
+            </p>
+            
+            <p className={`text-sm mb-8 relative z-10 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              Hemos configurado con éxito la información de <strong className="text-gold-500">{formData.businessName}</strong>. Ahora puedes acceder a todas las herramientas premium del sistema.
+            </p>
+
+            <button
+              onClick={() => {
+                setShowCongratsModal(false)
+                navigate('/')
+              }}
+              className="w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest bg-gold-gradient text-dark-bg shadow-gold-md hover:scale-[1.02] active:scale-[0.98] transition-all relative z-10"
+            >
+              Comenzar ahora
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
