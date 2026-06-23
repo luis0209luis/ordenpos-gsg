@@ -51,26 +51,25 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Credenciales incorrectas. Verifique usuario y contraseña.' }
       }
       try {
-        const { data: staffMatch } = await supabase
-          .from('staff')
-          .select('*')
-          .eq('business_id', businessId)
-          .eq('username', username)
-          .eq('password', password)
-          .eq('role', 'admin')
-          .single()
+        const { data: staffResults } = await supabase
+          .rpc('verify_staff_login', {
+            p_username: username,
+            p_password: password,
+            p_business_id: businessId
+          })
+        const staffMatch = staffResults?.[0] || null
 
-        const { data: bizMatch } = await supabase
-          .from('businesses')
-          .select('*')
-          .eq('id', businessId)
-          .eq('password_hash', password)
-          .single()
+        const { data: bizResults } = await supabase
+          .rpc('verify_business_login', {
+            p_business_id: businessId,
+            p_password: password
+          })
+        const bizMatch = bizResults?.[0] || null
 
         const match = staffMatch || bizMatch
         
         if (match) {
-          const requiresPasswordChange = password === match.cedula
+          const requiresPasswordChange = bizMatch ? password === bizMatch.cedula : false
           const userData = { 
             username: 'admin', 
             businessId: match.id || match.business_id, 
@@ -96,13 +95,13 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      const { data: staffMatch, error } = await supabase
-        .from('staff')
-        .select('*')
-        .eq('business_id', businessId)
-        .eq('username', username)
-        .eq('password', password)
-        .single()
+      const { data: staffResults, error } = await supabase
+        .rpc('verify_staff_login', {
+          p_username: username,
+          p_password: password,
+          p_business_id: businessId
+        })
+      const staffMatch = staffResults?.[0] || null
 
       if (staffMatch && !error) {
         const { data: matchBiz } = await supabase
