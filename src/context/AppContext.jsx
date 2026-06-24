@@ -15,19 +15,19 @@ export function AuthProvider({ children }) {
     if (businessNameOrId.toLowerCase() === 'smok' || businessNameOrId.toLowerCase() === 'ordenpos') {
       return { success: true, business: { id: 'master', name: 'ORDENPOS Master' } }
     }
-
     try {
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(businessNameOrId);
-      const query = isUUID ? `id.eq.${businessNameOrId},name.ilike.${businessNameOrId}` : `name.ilike.${businessNameOrId}`;
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(businessNameOrId)
+      const query = isUUID
+        ? `id.eq.${businessNameOrId},name.ilike.${businessNameOrId}`
+        : `name.ilike.${businessNameOrId}`
 
       const { data, error } = await supabase
         .from('businesses')
-        .select('*')
+        .select('id, name, owner_name, days_remaining, force_phase')
         .or(query)
         .single()
 
       if (error || !data) return { success: false, error: 'Negocio no encontrado.' }
-      
       return { success: true, business: data }
     } catch (e) {
       console.error(e)
@@ -142,10 +142,15 @@ export function AuthProvider({ children }) {
   const changePassword = async (tempUser, newPassword) => {
     if (!isValidUUID(tempUser?.businessId)) return false
     try {
-      await supabase
+      const { error } = await supabase
         .from('businesses')
         .update({ password_hash: newPassword })
         .eq('id', tempUser.businessId)
+      
+      if (error) {
+        console.error('Error cambiando contraseña:', error)
+        return false
+      }
 
       localStorage.setItem('ordenpos_user', JSON.stringify(tempUser))
       setUser(tempUser)
