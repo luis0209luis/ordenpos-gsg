@@ -5,7 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { AlertTriangle, Pause, X, Heart, Settings, CalendarX, CreditCard, ShieldCheck } from 'lucide-react'
 
 export default function SubscriptionWrapper({ children }) {
-  const { phase = 0, daysRemaining = 0 } = useSubscription() || {}
+  const { phase = 0, daysRemaining = 0, loading = false } = useSubscription() || {}
   const { theme } = useTheme() || {}
   const { user } = useAuth() || {}
   const isDark = theme === 'dark'

@@ -63,7 +63,6 @@ export function SubscriptionProvider({ children }) {
   const myBiz = businesses.find(b => b.id === bid)
 
   const computeExpirationDate = (biz) => {
-    console.log('BIZ EN COMPUTE:', biz)
     if (!biz || !biz.startDate) {
       const defaultDate = new Date();
       defaultDate.setDate(defaultDate.getDate() + 2); // Default active
@@ -171,9 +170,10 @@ export function SubscriptionProvider({ children }) {
 
   return (
     <SubscriptionContext.Provider value={{ 
-      fechaVencimiento, 
-      daysRemaining, 
-      phase, 
+      // While loading, export safe defaults so consumers never react to stale data
+      fechaVencimiento: loading ? null : fechaVencimiento,
+      daysRemaining:    loading ? null : daysRemaining,
+      phase:            loading ? 0    : phase,
       simulateDateChange,
       forceBlock,
       forceUnblock,

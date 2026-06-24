@@ -9,7 +9,7 @@ import { insertLog } from '../utils/logger'
 import { supabase } from '../lib/supabase'
 
 export default function BillingModule() {
-  const { fechaVencimiento, daysRemaining, phase, addMonth } = useSubscription()
+  const { fechaVencimiento, daysRemaining, phase, addMonth, loading } = useSubscription()
   const { theme } = useTheme();
   const { user } = useAuth();
   const isDark = theme === 'dark'
@@ -297,7 +297,9 @@ export default function BillingModule() {
               </div>
 
               <h2 className={`text-4xl font-display font-black mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                {`${daysRemaining} días`} <span className="text-lg font-medium opacity-60 font-sans tracking-normal">restantes</span>
+                {loading || daysRemaining === null
+                  ? <span className="inline-block w-28 h-10 rounded-xl bg-white/10 animate-pulse align-middle" />
+                  : <>{`${daysRemaining} días`} <span className="text-lg font-medium opacity-60 font-sans tracking-normal">restantes</span></>}
               </h2>
 
               <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
