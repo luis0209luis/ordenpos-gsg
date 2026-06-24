@@ -68,6 +68,54 @@ export default function Settings() {
     setSettingsError('')
   }
 
+  const handleLogoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 250;
+          const MAX_HEIGHT = 250;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Compress image to WebP format
+          const dataUrl = canvas.toDataURL('image/webp', 0.8);
+
+          setFormData(prev => ({ ...prev, logoUrl: dataUrl }));
+          setIsSaved(false);
+          setSettingsError('');
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    setFormData(prev => ({ ...prev, logoUrl: null }));
+    setIsSaved(false);
+    setSettingsError('');
+  };
+
   const handleSave = async (e) => {
     e.preventDefault()
     setIsSaving(true)
@@ -335,6 +383,69 @@ export default function Settings() {
                 className={`w-full px-4 py-3 rounded-xl outline-none border-2 transition-all focus:border-gold-500
                   ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
               />
+            </div>
+
+            {/* Logotipo del Negocio */}
+            <div className="space-y-2 md:col-span-2 pt-4 border-t border-gray-500/10">
+              <label className={`text-sm font-semibold flex items-center gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                <Building2 size={16} /> Logotipo del Negocio
+              </label>
+              
+              <div className="flex flex-col md:flex-row items-center gap-6 mt-2">
+                {/* Logo Preview */}
+                <div className={`relative w-28 h-28 rounded-2xl flex items-center justify-center border-2 border-dashed overflow-hidden shrink-0
+                  ${isDark ? 'bg-dark-card border-dark-border' : 'bg-light-surface border-light-border'}`}>
+                  {formData.logoUrl ? (
+                    <>
+                      <img 
+                        src={formData.logoUrl} 
+                        alt="Previsualización del Logo" 
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRemoveLogo}
+                        className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center text-red-400 font-semibold text-xs"
+                      >
+                        Eliminar
+                      </button>
+                    </>
+                  ) : (
+                    <div className="text-center p-2 text-gray-500 flex flex-col items-center gap-1">
+                      <Building2 size={24} className="opacity-40" />
+                      <span className="text-[10px]">Sin Logo</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Upload Controls */}
+                <div className="flex-grow space-y-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className={`px-4 py-2 rounded-xl border font-bold text-xs uppercase tracking-wider cursor-pointer transition-all hover:bg-gold-500/10 hover:border-gold-500/40
+                      ${isDark ? 'bg-white/5 border-white/10 text-gold-400' : 'bg-black/5 border-black/10 text-gold-600'}`}>
+                      Seleccionar Imagen
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={handleLogoUpload} 
+                      />
+                    </label>
+                    {formData.logoUrl && (
+                      <button
+                        type="button"
+                        onClick={handleRemoveLogo}
+                        className="px-4 py-2 rounded-xl border border-red-500/30 text-red-500 font-bold text-xs uppercase tracking-wider hover:bg-red-500/10 transition-all"
+                      >
+                        Eliminar Logo
+                      </button>
+                    )}
+                  </div>
+                  <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                    Recomendado: Imagen cuadrada (PNG, JPG o WEBP) de al menos 200x200px. La imagen se optimizará automáticamente.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

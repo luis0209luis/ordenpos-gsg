@@ -288,7 +288,15 @@ export default function Dashboard() {
             <div className="relative group">
               <div className={`absolute inset-0 rounded-2xl blur-xl transition-all duration-500
                 ${isDark ? 'bg-gold-500/20 group-hover:bg-gold-500/40' : 'bg-gold-400/20 group-hover:bg-gold-400/40'}`} />
-              <OrdenposLogo size={80} className="relative z-10 drop-shadow-2xl transition-transform duration-500 group-hover:scale-105" />
+              {settings?.logoUrl ? (
+                <img 
+                  src={settings.logoUrl} 
+                  alt="Logo del Negocio" 
+                  className="relative z-10 w-20 h-20 rounded-2xl object-cover drop-shadow-2xl border border-white/10 transition-transform duration-500 group-hover:scale-105"
+                />
+              ) : (
+                <OrdenposLogo size={80} className="relative z-10 drop-shadow-2xl transition-transform duration-500 group-hover:scale-105" />
+              )}
             </div>
             <div>
               <h1 className={`font-display font-black text-4xl tracking-tight mb-2 uppercase
