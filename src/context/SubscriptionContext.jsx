@@ -63,6 +63,7 @@ export function SubscriptionProvider({ children }) {
   const myBiz = businesses.find(b => b.id === bid)
 
   const computeExpirationDate = (biz) => {
+    console.log('BIZ EN COMPUTE:', biz)
     if (!biz || !biz.startDate) {
       const defaultDate = new Date();
       defaultDate.setDate(defaultDate.getDate() + 2); // Default active
