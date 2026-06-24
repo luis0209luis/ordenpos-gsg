@@ -293,7 +293,7 @@ export default function Dashboard() {
                 <div className="absolute inset-0 rounded-2xl blur-xl bg-gold-500/20 group-hover:bg-gold-500/40 transition-all duration-500" />
               )}
               
-              <div className={`relative z-10 w-20 h-20 rounded-2xl flex items-center justify-center p-2 border shadow-md transition-all duration-500 group-hover:scale-105
+              <div className={`relative z-10 w-20 h-20 rounded-2xl flex items-center justify-center p-0 overflow-hidden border shadow-md transition-all duration-500 group-hover:scale-105
                 ${isDark 
                   ? 'bg-neutral-900/90 border-white/10 shadow-black/50' 
                   : 'bg-white border-neutral-200/50 shadow-neutral-100/50'}`}>
@@ -301,7 +301,7 @@ export default function Dashboard() {
                   <img 
                     src={currentLogo} 
                     alt="Logo del Negocio" 
-                    className="w-full h-full object-contain rounded-xl"
+                    className="w-full h-full object-cover"
                   />
                 ) : (
                   <OrdenposLogo size={60} className="drop-shadow-sm" />
