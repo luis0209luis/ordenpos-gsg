@@ -276,37 +276,45 @@ export default function Dashboard() {
   return (
     <div className="space-y-8 animate-fade-in pb-8">
       {/* Dynamic Header (The Hero Section) */}
-      <div className={`relative p-8 md:p-10 rounded-3xl overflow-hidden border-b-[1px] shadow-2xl transition-colors duration-500
+      <div className={`relative p-8 md:p-10 rounded-3xl overflow-hidden border shadow-xl transition-colors duration-500
         ${isDark 
-          ? 'bg-gradient-to-br from-black via-[#1a1a1a] to-[#262626] border-gold-500/40' 
-          : 'bg-gradient-to-br from-gold-50 via-white to-gray-50 border-gold-400/30'}`}>
+          ? 'bg-gradient-to-br from-black via-[#1a1a1a] to-[#262626] border-gold-500/40 shadow-black/40' 
+          : 'bg-gradient-to-br from-white via-slate-50/50 to-slate-100/70 border-neutral-200/70 shadow-neutral-100/30'}`}>
         
         {/* Subtle glow effect */}
         {isDark && <div className="absolute top-0 left-1/4 w-96 h-96 bg-gold-500/10 rounded-full blur-[100px] pointer-events-none" />}
-        {!isDark && <div className="absolute top-0 left-1/4 w-96 h-96 bg-white/50 rounded-full blur-[100px] pointer-events-none" />}
+        {!isDark && <div className="absolute top-0 left-1/4 w-96 h-96 bg-slate-200/30 rounded-full blur-[100px] pointer-events-none" />}
         
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="flex items-center gap-6">
-            <div className="relative group">
-              <div className={`absolute inset-0 rounded-2xl blur-xl transition-all duration-500
-                ${isDark ? 'bg-gold-500/20 group-hover:bg-gold-500/40' : 'bg-gold-400/20 group-hover:bg-gold-400/40'}`} />
-              {currentLogo ? (
-                <img 
-                  src={currentLogo} 
-                  alt="Logo del Negocio" 
-                  className="relative z-10 w-20 h-20 rounded-2xl object-cover drop-shadow-2xl border border-white/10 transition-transform duration-500 group-hover:scale-105"
-                />
-              ) : (
-                <OrdenposLogo size={80} className="relative z-10 drop-shadow-2xl transition-transform duration-500 group-hover:scale-105" />
+            <div className="relative group shrink-0">
+              {/* Gold glow only in dark mode */}
+              {isDark && (
+                <div className="absolute inset-0 rounded-2xl blur-xl bg-gold-500/20 group-hover:bg-gold-500/40 transition-all duration-500" />
               )}
+              
+              <div className={`relative z-10 w-20 h-20 rounded-2xl flex items-center justify-center p-2 border shadow-md transition-all duration-500 group-hover:scale-105
+                ${isDark 
+                  ? 'bg-neutral-900/90 border-white/10 shadow-black/50' 
+                  : 'bg-white border-neutral-200/50 shadow-neutral-100/50'}`}>
+                {currentLogo ? (
+                  <img 
+                    src={currentLogo} 
+                    alt="Logo del Negocio" 
+                    className="w-full h-full object-contain rounded-xl"
+                  />
+                ) : (
+                  <OrdenposLogo size={60} className="drop-shadow-sm" />
+                )}
+              </div>
             </div>
             <div>
               <h1 className={`font-display font-black text-4xl tracking-tight mb-2 uppercase
-                ${isDark ? 'gold-text' : 'text-gold-700 drop-shadow-sm'}`}>
+                ${isDark ? 'gold-text' : 'text-neutral-900 drop-shadow-sm'}`}>
                 {displayBusinessName}
               </h1>
-              <p className={`text-lg md:text-xl font-light ${isDark ? 'text-neutral-300' : 'text-gray-600'}`}>
-                {greeting}, <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{user?.username || 'Usuario'}</span>. Así va el pulso de tu negocio hoy.
+              <p className={`text-lg md:text-xl font-light ${isDark ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                {greeting}, <span className={`font-semibold ${isDark ? 'text-white' : 'text-neutral-900'}`}>{user?.username || 'Usuario'}</span>. Así va el pulso de tu negocio hoy.
               </p>
             </div>
           </div>
