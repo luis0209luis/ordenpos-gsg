@@ -71,6 +71,8 @@ export default function Dashboard() {
     ? settings.businessName 
     : (user?.businessName || 'Mi Negocio')
 
+  const currentLogo = !isDark && settings?.logoLightUrl ? settings.logoLightUrl : (settings?.logoUrl || null)
+
   const greeting = useMemo(() => {
     const hour = new Date().getHours()
     if (hour < 12) return 'Buenos días'
@@ -288,9 +290,9 @@ export default function Dashboard() {
             <div className="relative group">
               <div className={`absolute inset-0 rounded-2xl blur-xl transition-all duration-500
                 ${isDark ? 'bg-gold-500/20 group-hover:bg-gold-500/40' : 'bg-gold-400/20 group-hover:bg-gold-400/40'}`} />
-              {settings?.logoUrl ? (
+              {currentLogo ? (
                 <img 
-                  src={settings.logoUrl} 
+                  src={currentLogo} 
                   alt="Logo del Negocio" 
                   className="relative z-10 w-20 h-20 rounded-2xl object-cover drop-shadow-2xl border border-white/10 transition-transform duration-500 group-hover:scale-105"
                 />

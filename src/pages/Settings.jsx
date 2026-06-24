@@ -68,7 +68,7 @@ export default function Settings() {
     setSettingsError('')
   }
 
-  const handleLogoUpload = (e) => {
+  const handleLogoUpload = (e, field) => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
@@ -100,7 +100,7 @@ export default function Settings() {
           // Compress image to WebP format
           const dataUrl = canvas.toDataURL('image/webp', 0.8);
 
-          setFormData(prev => ({ ...prev, logoUrl: dataUrl }));
+          setFormData(prev => ({ ...prev, [field]: dataUrl }));
           setIsSaved(false);
           setSettingsError('');
         };
@@ -110,8 +110,8 @@ export default function Settings() {
     }
   };
 
-  const handleRemoveLogo = () => {
-    setFormData(prev => ({ ...prev, logoUrl: null }));
+  const handleRemoveLogo = (field) => {
+    setFormData(prev => ({ ...prev, [field]: null }));
     setIsSaved(false);
     setSettingsError('');
   };
@@ -385,67 +385,118 @@ export default function Settings() {
               />
             </div>
 
-            {/* Logotipo del Negocio */}
-            <div className="space-y-2 md:col-span-2 pt-4 border-t border-gray-500/10">
+            {/* Logotipos del Negocio */}
+            <div className="space-y-4 md:col-span-2 pt-4 border-t border-gray-500/10">
               <label className={`text-sm font-semibold flex items-center gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                <Building2 size={16} /> Logotipo del Negocio
+                <Building2 size={16} /> Logotipos del Negocio (Tema Oscuro y Claro)
               </label>
               
-              <div className="flex flex-col md:flex-row items-center gap-6 mt-2">
-                {/* Logo Preview */}
-                <div className={`relative w-28 h-28 rounded-2xl flex items-center justify-center border-2 border-dashed overflow-hidden shrink-0
-                  ${isDark ? 'bg-dark-card border-dark-border' : 'bg-light-surface border-light-border'}`}>
-                  {formData.logoUrl ? (
-                    <>
-                      <img 
-                        src={formData.logoUrl} 
-                        alt="Previsualización del Logo" 
-                        className="w-full h-full object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleRemoveLogo}
-                        className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center text-red-400 font-semibold text-xs"
-                      >
-                        Eliminar
-                      </button>
-                    </>
-                  ) : (
-                    <div className="text-center p-2 text-gray-500 flex flex-col items-center gap-1">
-                      <Building2 size={24} className="opacity-40" />
-                      <span className="text-[10px]">Sin Logo</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
+                {/* Logo Principal / Oscuro */}
+                <div className="flex flex-col gap-3">
+                  <span className={`text-xs font-semibold ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Logo Principal (Recomendado para Tema Oscuro)</span>
+                  <div className="flex items-center gap-4">
+                    <div className={`relative w-24 h-24 rounded-2xl flex items-center justify-center border-2 border-dashed overflow-hidden shrink-0 bg-neutral-900 border-neutral-700`}>
+                      {formData.logoUrl ? (
+                        <>
+                          <img 
+                            src={formData.logoUrl} 
+                            alt="Logo Tema Oscuro" 
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveLogo('logoUrl')}
+                            className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center text-red-400 font-semibold text-xs"
+                          >
+                            Eliminar
+                          </button>
+                        </>
+                      ) : (
+                        <div className="text-center p-2 text-neutral-500 flex flex-col items-center gap-1">
+                          <Building2 size={20} className="opacity-40" />
+                          <span className="text-[9px]">Sin Logo Oscuro</span>
+                        </div>
+                      )}
                     </div>
-                  )}
+                    <div className="space-y-2">
+                      <label className={`px-3 py-1.5 rounded-xl border font-bold text-[10px] uppercase tracking-wider cursor-pointer transition-all hover:bg-gold-500/10 hover:border-gold-500/40
+                        ${isDark ? 'bg-white/5 border-white/10 text-gold-400' : 'bg-black/5 border-black/10 text-gold-600'}`}>
+                        Subir Logo Oscuro
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={(e) => handleLogoUpload(e, 'logoUrl')} 
+                        />
+                      </label>
+                      {formData.logoUrl && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveLogo('logoUrl')}
+                          className="block text-[10px] text-red-500 hover:underline font-bold uppercase tracking-wider mt-1 text-left"
+                        >
+                          Eliminar Logo
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                {/* Upload Controls */}
-                <div className="flex-grow space-y-2">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <label className={`px-4 py-2 rounded-xl border font-bold text-xs uppercase tracking-wider cursor-pointer transition-all hover:bg-gold-500/10 hover:border-gold-500/40
-                      ${isDark ? 'bg-white/5 border-white/10 text-gold-400' : 'bg-black/5 border-black/10 text-gold-600'}`}>
-                      Seleccionar Imagen
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        className="hidden" 
-                        onChange={handleLogoUpload} 
-                      />
-                    </label>
-                    {formData.logoUrl && (
-                      <button
-                        type="button"
-                        onClick={handleRemoveLogo}
-                        className="px-4 py-2 rounded-xl border border-red-500/30 text-red-500 font-bold text-xs uppercase tracking-wider hover:bg-red-500/10 transition-all"
-                      >
-                        Eliminar Logo
-                      </button>
-                    )}
+                {/* Logo Claro */}
+                <div className="flex flex-col gap-3">
+                  <span className={`text-xs font-semibold ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Logo Alternativo (Opcional - para Tema Claro)</span>
+                  <div className="flex items-center gap-4">
+                    <div className={`relative w-24 h-24 rounded-2xl flex items-center justify-center border-2 border-dashed overflow-hidden shrink-0 bg-white border-gray-200`}>
+                      {formData.logoLightUrl ? (
+                        <>
+                          <img 
+                            src={formData.logoLightUrl} 
+                            alt="Logo Tema Claro" 
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveLogo('logoLightUrl')}
+                            className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center text-red-400 font-semibold text-xs"
+                          >
+                            Eliminar
+                          </button>
+                        </>
+                      ) : (
+                        <div className="text-center p-2 text-gray-400 flex flex-col items-center gap-1">
+                          <Building2 size={20} className="opacity-40" />
+                          <span className="text-[9px]">Sin Logo Claro</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <label className={`px-3 py-1.5 rounded-xl border font-bold text-[10px] uppercase tracking-wider cursor-pointer transition-all hover:bg-gold-500/10 hover:border-gold-500/40
+                        ${isDark ? 'bg-white/5 border-white/10 text-gold-400' : 'bg-black/5 border-black/10 text-gold-600'}`}>
+                        Subir Logo Claro
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={(e) => handleLogoUpload(e, 'logoLightUrl')} 
+                        />
+                      </label>
+                      {formData.logoLightUrl && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveLogo('logoLightUrl')}
+                          className="block text-[10px] text-red-500 hover:underline font-bold uppercase tracking-wider mt-1 text-left"
+                        >
+                          Eliminar Logo
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                    Recomendado: Imagen cuadrada (PNG, JPG o WEBP) de al menos 200x200px. La imagen se optimizará automáticamente.
-                  </p>
                 </div>
               </div>
+              <p className={`text-[11px] mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                Si no se configura un logo claro alternativo, el sistema usará el logo principal en ambos temas. Las imágenes se optimizan automáticamente a formato WebP.
+              </p>
             </div>
           </div>
         </div>

@@ -218,7 +218,8 @@ const defaultSettings = {
   payrollBiweeklyDay1: 15,
   payrollBiweeklyDay2: 30,
   categoryOrder: [],
-  logoUrl: null
+  logoUrl: null,
+  logoLightUrl: null
 }
 
 export function SettingsProvider({ children }) {
@@ -265,10 +266,11 @@ export function SettingsProvider({ children }) {
             payrollBiweeklyDay1: db.payroll_biweekly_day1 || defaultSettings.payrollBiweeklyDay1,
             payrollBiweeklyDay2: db.payroll_biweekly_day2 || defaultSettings.payrollBiweeklyDay2,
             categoryOrder: db.category_order || localCatOrder,
-            logoUrl: db.logo_url || null
+            logoUrl: db.logo_url || null,
+            logoLightUrl: db.logo_light_url || null
           })
         } else {
-          setSettings({ ...defaultSettings, businessName: user?.businessName || 'Mi Negocio', categoryOrder: localCatOrder, logoUrl: null })
+          setSettings({ ...defaultSettings, businessName: user?.businessName || 'Mi Negocio', categoryOrder: localCatOrder, logoUrl: null, logoLightUrl: null })
         }
         
         if (feedbacksRes.data) setFeedbacks(feedbacksRes.data)
@@ -311,7 +313,8 @@ export function SettingsProvider({ children }) {
           payroll_monthly_day: updated.payrollMonthlyDay,
           payroll_biweekly_day1: updated.payrollBiweeklyDay1,
           payroll_biweekly_day2: updated.payrollBiweeklyDay2,
-          logo_url: updated.logoUrl || null
+          logo_url: updated.logoUrl || null,
+          logo_light_url: updated.logoLightUrl || null
         }
         const { error } = await supabase.from('settings').upsert(dbPayload, { onConflict: 'business_id' })
         if (error) {
