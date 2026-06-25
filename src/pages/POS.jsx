@@ -10,7 +10,7 @@ import { getPaddedTurnNumber } from '../utils/turnHelper'
 export default function POS() {
   const { theme } = useTheme() || {}
   const isDark = theme === 'dark'
-  const { products = [], processSale, salesHistory = [], getEstimatedStock, customizationOptions = [], getProductOptions } = useInventory() || {}
+  const { products = [], processSale, salesHistory = [], getEstimatedStock, supplyItems = [] } = useInventory() || {}
   const { settings = {}, staff = [], updateCategoryOrder } = useSettings() || {}
   const { user } = useAuth() || {}
 
@@ -57,8 +57,8 @@ export default function POS() {
   const [mobileCartOpen, setMobileCartOpen] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [notes, setNotes] = useState('')
-  const [customizingProduct, setCustomizingProduct] = useState(null)
-  const [selectedOptionsForCustom, setSelectedOptionsForCustom] = useState([])
+  const [blendProduct, setBlendProduct] = useState(null)
+  const [selectedBlendFlavors, setSelectedBlendFlavors] = useState([])
 
   // Reorder Categories State
   const [isReorderModalOpen, setIsReorderModalOpen] = useState(false)
@@ -111,27 +111,26 @@ export default function POS() {
 
   const getEffectiveStock = (product) => {
     if (product.inventory_mode === 'unlimited') return Infinity
-    if (product.inventory_mode === 'recipe') {
+    if (product.inventory_mode === 'recipe' || product.inventory_mode === 'blend') {
       return getEstimatedStock ? (getEstimatedStock(product.id) ?? 0) : 0
     }
     return product.stock_actual ?? 0
   }
 
-  const addCustomProductToCart = (product, selectedOpts) => {
-    const extraPrice = selectedOpts.reduce((sum, o) => sum + (o.extra_price || 0), 0)
-    const finalPrice = product.precio + extraPrice
+  const addBlendProductToCart = (product, selectedFlavors) => {
+    if (selectedFlavors.length === 0) return
+
+    // Sort flavor IDs for a consistent cart item ID
+    const sortedFlavors = [...selectedFlavors].sort()
     
-    const sortedOpts = [...selectedOpts].sort((a, b) => {
-      const idA = a.id || 0
-      const idB = b.id || 0
-      return idA > idB ? 1 : -1
-    })
-    const optionLabels = sortedOpts.map(o => o.label).join(', ')
-    const customLabel = optionLabels ? `${product.nombre} (${optionLabels})` : product.nombre
-    
-    const cartItemId = selectedOpts.length > 0 
-      ? `${product.id}-${sortedOpts.map(o => o.id || Math.random()).join(',')}`
-      : product.id
+    // Build names list for the item description
+    const flavorNames = sortedFlavors.map(id => {
+      const supply = supplyItems.find(s => s.id === id)
+      return supply ? supply.nombre : 'Sabor'
+    }).join(' + ')
+
+    const customLabel = `${product.nombre} (${flavorNames})`
+    const cartItemId = `${product.id}-${sortedFlavors.join(',')}`
 
     setCart(prev => {
       const existing = prev.find(item => item.id === cartItemId)
@@ -141,26 +140,23 @@ export default function POS() {
         return prev.map(item => item.id === cartItemId ? { ...item, quantity: item.quantity + 1 } : item)
       }
       if (stockLimit <= 0) return prev
-      return [...prev, { 
-        ...product, 
+      return [...prev, {
+        ...product,
         id: cartItemId,
         productId: product.id,
         nombre: customLabel,
-        precio: finalPrice,
-        selectedOptions: sortedOpts,
-        quantity: 1 
+        precio: product.precio,
+        blendSelections: sortedFlavors,
+        quantity: 1
       }]
     })
   }
 
   const addToCart = (product) => {
-    if (product.is_customizable) {
-      const opts = getProductOptions ? getProductOptions(product.id) : []
-      if (opts.length > 0) {
-        setCustomizingProduct(product)
-        setSelectedOptionsForCustom([])
-        return
-      }
+    if (product.inventory_mode === 'blend') {
+      setBlendProduct(product)
+      setSelectedBlendFlavors([])
+      return
     }
 
     setCart(prev => {
@@ -965,10 +961,10 @@ export default function POS() {
         </div>
       )}
 
-      {/* CUSTOMIZATION OPTIONS MODAL */}
-      {customizingProduct && (
+      {/* BLEND SELECTION MODAL */}
+      {blendProduct && blendProduct.blend_config && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setCustomizingProduct(null)} />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setBlendProduct(null)} />
           
           <div className={`relative w-full max-w-md rounded-3xl shadow-2xl animate-slide-in-up border flex flex-col max-h-[85vh]
             ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
@@ -976,7 +972,7 @@ export default function POS() {
             {/* Header */}
             <div className="px-6 pt-6 pb-2 shrink-0 relative">
               <button 
-                onClick={() => setCustomizingProduct(null)} 
+                onClick={() => setBlendProduct(null)} 
                 className={`absolute top-6 right-6 p-2 rounded-full transition-colors
                   ${isDark ? 'hover:bg-dark-card text-gray-400 hover:text-white' : 'hover:bg-light-surface text-gray-500 hover:text-gray-900'}`}
               >
@@ -984,82 +980,112 @@ export default function POS() {
               </button>
 
               <h3 className="font-display font-bold text-xl pr-8">
-                Personalizar: {customizingProduct.nombre}
+                Combinar: {blendProduct.nombre}
               </h3>
               <p className={`text-xs mt-1 font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                Elige hasta {customizingProduct.max_selections} {customizingProduct.max_selections === 1 ? 'opción' : 'opciones'}.
+                Capacidad total del vaso: {blendProduct.blend_config.cup_capacity} oz
               </p>
             </div>
 
-            {/* Options List */}
-            <div className="overflow-y-auto flex-1 px-6 pb-2 max-h-[300px]">
-              <div className="space-y-2 mt-2">
-                {getProductOptions(customizingProduct.id).map(opt => {
-                  const isChecked = selectedOptionsForCustom.some(o => o.id === opt.id)
-                  const atLimit = selectedOptionsForCustom.length >= (customizingProduct.max_selections || 1)
-                  
-                  const handleToggleOption = () => {
-                    if (isChecked) {
-                      setSelectedOptionsForCustom(prev => prev.filter(o => o.id !== opt.id))
-                    } else {
-                      if (customizingProduct.max_selections === 1) {
-                        setSelectedOptionsForCustom([opt])
-                      } else if (!atLimit) {
-                        setSelectedOptionsForCustom(prev => [...prev, opt])
-                      }
+            {/* Flavors List */}
+            <div className="overflow-y-auto flex-1 px-6 pb-2">
+              <p className={`text-[11px] font-semibold uppercase tracking-wider mb-2 ${isDark ? 'text-gold-400' : 'text-gold-600'}`}>
+                Selecciona los sabores a mezclar:
+              </p>
+              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                {Array.isArray(blendProduct.blend_config.flavor_ids) &&
+                  blendProduct.blend_config.flavor_ids.map(flavorId => {
+                    const supply = supplyItems.find(s => s.id === flavorId)
+                    if (!supply) return null
+                    
+                    const isChecked = selectedBlendFlavors.includes(flavorId)
+                    const handleToggleFlavor = () => {
+                      setSelectedBlendFlavors(prev =>
+                        isChecked ? prev.filter(id => id !== flavorId) : [...prev, flavorId]
+                      )
                     }
-                  }
 
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={handleToggleOption}
-                      disabled={!isChecked && atLimit && customizingProduct.max_selections > 1}
-                      className={`w-full p-4 rounded-2xl border-2 flex items-center justify-between transition-all duration-200 text-left
-                        ${isChecked 
-                          ? 'border-gold-500 bg-gold-500/10 text-gold-500' 
-                          : (!isChecked && atLimit && customizingProduct.max_selections > 1)
-                            ? 'opacity-50 cursor-not-allowed border-transparent'
+                    const supplyLimit = Math.floor(Number(supply.stock_actual) || 0)
+                    const isOutOfStock = supplyLimit <= 0
+
+                    return (
+                      <button
+                        key={flavorId}
+                        type="button"
+                        onClick={handleToggleFlavor}
+                        disabled={isOutOfStock}
+                        className={`w-full p-4 rounded-2xl border-2 flex items-center justify-between transition-all duration-200 text-left
+                          ${isOutOfStock ? 'opacity-40 cursor-not-allowed border-transparent' : ''}
+                          ${isChecked 
+                            ? 'border-gold-500 bg-gold-500/10 text-gold-500 font-bold' 
                             : isDark 
                               ? 'bg-dark-card border-dark-border hover:border-gray-700 text-gray-300' 
                               : 'bg-gray-50 border-gray-100 hover:border-gray-300 text-gray-700'}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all
-                          ${isChecked 
-                            ? 'border-gold-500 bg-gold-500 text-dark-bg' 
-                            : isDark ? 'border-gray-600' : 'border-gray-300'}`}>
-                          {isChecked && <Plus size={14} strokeWidth={3} />}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all
+                            ${isChecked 
+                              ? 'border-gold-500 bg-gold-500 text-dark-bg' 
+                              : isDark ? 'border-gray-600' : 'border-gray-300'}`}>
+                            {isChecked && <Check size={14} strokeWidth={3} />}
+                          </div>
+                          <span className="text-sm font-semibold truncate">{supply.nombre}</span>
                         </div>
-                        <span className="font-bold text-sm">{opt.label}</span>
-                      </div>
-                      
-                      {opt.extra_price > 0 && (
-                        <span className={`font-semibold text-xs ${isChecked ? 'text-gold-400' : 'text-gray-400'}`}>
-                          + ${Number(opt.extra_price).toLocaleString('es-CO')}
+                        
+                        <span className={`text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded
+                          ${isOutOfStock 
+                            ? 'bg-red-500/10 text-red-500 border border-red-500/20' 
+                            : supplyLimit < 10 
+                              ? 'bg-gold-500/10 text-gold-500 border border-gold-500/20'
+                              : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'}`}>
+                          {isOutOfStock ? 'Agotado' : `Bodega: ${(Number(supply.stock_actual) || 0).toFixed(2)} L`}
                         </span>
-                      )}
-                    </button>
-                  )
-                })}
+                      </button>
+                    )
+                  })}
               </div>
             </div>
 
-            {/* Footer sticky con el botón de agregar */}
+            {/* Calculations & Summary */}
             <div className={`px-6 pb-6 pt-4 shrink-0 border-t ${isDark ? 'border-dark-border/40' : 'border-gray-100'}`}>
-              <div className="flex items-center justify-between mb-4">
-                <span className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Precio Unitario Total:
-                </span>
-                <span className={`font-display font-black text-xl ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  ${Number(customizingProduct.precio + selectedOptionsForCustom.reduce((sum, o) => sum + (o.extra_price || 0), 0)).toLocaleString('es-CO')}
-                </span>
+              <div className="space-y-2.5 mb-4">
+                {selectedBlendFlavors.length > 0 ? (
+                  <div className={`p-3 rounded-2xl text-xs font-semibold space-y-1.5
+                    ${isDark ? 'bg-dark-card/50 text-gray-300' : 'bg-gray-50 text-gray-700'}`}>
+                    <div className="flex justify-between">
+                      <span>Sabores seleccionados:</span>
+                      <span className="font-bold text-gold-500">{selectedBlendFlavors.length}</span>
+                    </div>
+                    <div className="flex justify-between border-t border-dashed border-gray-200 dark:border-dark-border pt-1.5">
+                      <span>Cantidad por sabor:</span>
+                      <span className="font-bold">
+                        {((blendProduct.blend_config.cup_capacity || 16) / selectedBlendFlavors.length).toFixed(2)} oz
+                        <span className="opacity-75 font-normal ml-1">
+                          ({(((blendProduct.blend_config.cup_capacity || 16) / selectedBlendFlavors.length) * 0.02957).toFixed(3)} L)
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-red-400 font-semibold text-center py-2 animate-pulse">
+                    ⚠ Elige al menos 1 sabor para continuar.
+                  </p>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Precio:
+                  </span>
+                  <span className={`font-display font-black text-xl ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    ${Number(blendProduct.precio).toLocaleString('es-CO')}
+                  </span>
+                </div>
               </div>
+
               <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => setCustomizingProduct(null)}
+                  onClick={() => setBlendProduct(null)}
                   className={`flex-1 py-3 rounded-xl text-xs font-bold uppercase transition-colors
                     ${isDark ? 'bg-dark-card hover:bg-dark-surface text-gray-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-600 border border-gray-200'}`}
                 >
@@ -1067,11 +1093,12 @@ export default function POS() {
                 </button>
                 <button
                   type="button"
+                  disabled={selectedBlendFlavors.length === 0}
                   onClick={() => {
-                    addCustomProductToCart(customizingProduct, selectedOptionsForCustom)
-                    setCustomizingProduct(null)
+                    addBlendProductToCart(blendProduct, selectedBlendFlavors)
+                    setBlendProduct(null)
                   }}
-                  className="flex-[2] py-3 rounded-xl text-xs font-bold uppercase bg-gold-gradient text-dark-bg hover:scale-[1.02] active:scale-[0.98] transition-all shadow-gold-md"
+                  className="flex-[2] py-3 rounded-xl text-xs font-bold uppercase bg-gold-gradient text-dark-bg hover:scale-[1.02] active:scale-[0.98] transition-all shadow-gold-md disabled:opacity-50 disabled:pointer-events-none"
                 >
                   Agregar al Pedido
                 </button>

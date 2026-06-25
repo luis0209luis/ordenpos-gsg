@@ -302,7 +302,7 @@ export function InventoryProvider({ children }) {
       return product
     }))
 
-    // Optimistically update supply items stock locally for recipe products
+    // Optimistically update supply items stock locally for recipe and blend products
     setSupplyItems(prev => {
       let updated = [...prev]
       for (const item of cartItems) {
@@ -317,29 +317,50 @@ export function InventoryProvider({ children }) {
               return s
             })
           }
-        }
-        // Deduct from customizable product selectedOptions
-        if (item.selectedOptions?.length > 0) {
-          const totalSelected = item.selectedOptions.length
-          for (const opt of item.selectedOptions) {
-            if (!opt.supply_item_id) continue
-            let deduct = 0
-            if (opt.discount_mode === 'split') {
-              deduct = (Number(opt.cantidad_base) / totalSelected) * item.quantity
-            } else {
-              deduct = Number(opt.cantidad_base) * item.quantity
-            }
+        } else if (product && product.inventory_mode === 'blend' && product.blend_config) {
+          const config = product.blend_config
+          // 1. Cup supply deduction
+          if (config.cup_supply_id) {
             updated = updated.map(s => {
-              if (s.id === opt.supply_item_id) {
-                return { ...s, stock_actual: Math.max(0, Number(s.stock_actual) - deduct) }
+              if (s.id === config.cup_supply_id) {
+                return { ...s, stock_actual: Math.max(0, Number(s.stock_actual) - (1 * item.quantity)) }
               }
               return s
             })
+          }
+          // 2. Fixed supplies deduction
+          if (Array.isArray(config.fixed_supplies)) {
+            for (const fs of config.fixed_supplies) {
+              if (!fs.supply_item_id) continue
+              updated = updated.map(s => {
+                if (s.id === fs.supply_item_id) {
+                  return { ...s, stock_actual: Math.max(0, Number(s.stock_actual) - (Number(fs.cantidad) * item.quantity)) }
+                }
+                return s
+              })
+            }
+          }
+          // 3. Flavor deduction
+          if (Array.isArray(item.blendSelections) && item.blendSelections.length > 0) {
+            const numFlavors = item.blendSelections.length
+            const capacityOz = Number(config.cup_capacity) || 16
+            const litersPerFlavor = (capacityOz / numFlavors) * 0.02957
+            const totalDeductL = litersPerFlavor * item.quantity
+
+            for (const flavorId of item.blendSelections) {
+              updated = updated.map(s => {
+                if (s.id === flavorId) {
+                  return { ...s, stock_actual: Math.max(0, Number(s.stock_actual) - totalDeductL) }
+                }
+                return s
+              })
+            }
           }
         }
       }
       return updated
     })
+
 
     // Build the record — do NOT include created_at, Supabase generates it automatically
     const dbSaleRecord = {
@@ -456,30 +477,63 @@ export function InventoryProvider({ children }) {
               setSupplyItems(prev => prev.map(s => s.id === supply.id ? { ...s, stock_actual: newStock } : s))
             }
           }
-        }
-
-        // Deduct from supply items for customizable product selectedOptions (ADDITIVE to any recipe deductions above)
-        if (item.selectedOptions?.length > 0) {
-          const totalSelected = item.selectedOptions.length
-          for (const opt of item.selectedOptions) {
-            if (!opt.supply_item_id) continue
-            const supply = supplyItems.find(s => s.id === opt.supply_item_id)
-            if (!supply) continue
-            let deduct = 0
-            if (opt.discount_mode === 'split') {
-              deduct = (Number(opt.cantidad_base) / totalSelected) * item.quantity
-            } else {
-              deduct = Number(opt.cantidad_base) * item.quantity
+        } else if (product.inventory_mode === 'blend' && product.blend_config) {
+          const config = product.blend_config
+          
+          // 1. Cup supply deduction
+          if (config.cup_supply_id) {
+            const supply = supplyItems.find(s => s.id === config.cup_supply_id)
+            if (supply) {
+              const newStock = Math.max(0, Number(supply.stock_actual) - (1 * item.quantity))
+              await supabase
+                .from('supply_items')
+                .update({ stock_actual: newStock })
+                .eq('id', supply.id)
+              
+              setSupplyItems(prev => prev.map(s => s.id === supply.id ? { ...s, stock_actual: newStock } : s))
             }
-            const newStock = Math.max(0, Number(supply.stock_actual) - deduct)
-            await supabase
-              .from('supply_items')
-              .update({ stock_actual: newStock })
-              .eq('id', supply.id)
-            setSupplyItems(prev => prev.map(s => s.id === supply.id ? { ...s, stock_actual: newStock } : s))
+          }
+
+          // 2. Fixed supplies deduction
+          if (Array.isArray(config.fixed_supplies)) {
+            for (const fs of config.fixed_supplies) {
+              if (!fs.supply_item_id) continue
+              const supply = supplyItems.find(s => s.id === fs.supply_item_id)
+              if (supply) {
+                const newStock = Math.max(0, Number(supply.stock_actual) - (Number(fs.cantidad) * item.quantity))
+                await supabase
+                  .from('supply_items')
+                  .update({ stock_actual: newStock })
+                  .eq('id', supply.id)
+                
+                setSupplyItems(prev => prev.map(s => s.id === supply.id ? { ...s, stock_actual: newStock } : s))
+              }
+            }
+          }
+
+          // 3. Flavor deduction
+          if (Array.isArray(item.blendSelections) && item.blendSelections.length > 0) {
+            const numFlavors = item.blendSelections.length
+            const capacityOz = Number(config.cup_capacity) || 16
+            const litersPerFlavor = (capacityOz / numFlavors) * 0.02957
+            const totalDeductL = litersPerFlavor * item.quantity
+
+            for (const flavorId of item.blendSelections) {
+              const supply = supplyItems.find(s => s.id === flavorId)
+              if (supply) {
+                const newStock = Math.max(0, Number(supply.stock_actual) - totalDeductL)
+                await supabase
+                  .from('supply_items')
+                  .update({ stock_actual: newStock })
+                  .eq('id', supply.id)
+                
+                setSupplyItems(prev => prev.map(s => s.id === supply.id ? { ...s, stock_actual: newStock } : s))
+              }
+            }
           }
         }
       }
+
 
       return mappedData
 
@@ -523,7 +577,7 @@ export function InventoryProvider({ children }) {
     setSupplyItems(prev => {
       let updated = [...prev]
       for (const item of sale.items) {
-        const product = products.find(p => p.id === item.id)
+        const product = products.find(p => p.id === item.id || p.id === item.productId)
         if (product && product.inventory_mode === 'recipe') {
           const recipe = productRecipes.filter(r => r.product_id === product.id)
           for (const recipeItem of recipe) {
@@ -533,6 +587,45 @@ export function InventoryProvider({ children }) {
               }
               return s
             })
+          }
+        } else if (product && product.inventory_mode === 'blend' && product.blend_config) {
+          const config = product.blend_config
+          // 1. Cup restore
+          if (config.cup_supply_id) {
+            updated = updated.map(s => {
+              if (s.id === config.cup_supply_id) {
+                return { ...s, stock_actual: Number(s.stock_actual) + (1 * item.quantity) }
+              }
+              return s
+            })
+          }
+          // 2. Fixed restore
+          if (Array.isArray(config.fixed_supplies)) {
+            for (const fs of config.fixed_supplies) {
+              if (!fs.supply_item_id) continue
+              updated = updated.map(s => {
+                if (s.id === fs.supply_item_id) {
+                  return { ...s, stock_actual: Number(s.stock_actual) + (Number(fs.cantidad) * item.quantity) }
+                }
+                return s
+              })
+            }
+          }
+          // 3. Flavors restore
+          if (Array.isArray(item.blendSelections) && item.blendSelections.length > 0) {
+            const numFlavors = item.blendSelections.length
+            const capacityOz = Number(config.cup_capacity) || 16
+            const litersPerFlavor = (capacityOz / numFlavors) * 0.02957
+            const totalDeductL = litersPerFlavor * item.quantity
+
+            for (const flavorId of item.blendSelections) {
+              updated = updated.map(s => {
+                if (s.id === flavorId) {
+                  return { ...s, stock_actual: Number(s.stock_actual) + totalDeductL }
+                }
+                return s
+              })
+            }
           }
         }
       }
@@ -546,14 +639,14 @@ export function InventoryProvider({ children }) {
     try {
       await supabase.from('sales').delete().eq('id', saleId)
       for (const item of sale.items) {
-        const product = products.find(p => p.id === item.id)
+        const product = products.find(p => p.id === item.id || p.id === item.productId)
         if (!product) continue
 
         if (product.inventory_mode === 'finished' || !product.inventory_mode) {
           await supabase
             .from('products')
             .update({ stock_actual: product.stock_actual + item.quantity })
-            .eq('id', item.id)
+            .eq('id', product.id)
         } else if (product.inventory_mode === 'recipe') {
           const recipe = productRecipes.filter(r => r.product_id === product.id)
           for (const recipeItem of recipe) {
@@ -564,6 +657,54 @@ export function InventoryProvider({ children }) {
                 .from('supply_items')
                 .update({ stock_actual: newStock })
                 .eq('id', supply.id)
+            }
+          }
+        } else if (product.inventory_mode === 'blend' && product.blend_config) {
+          const config = product.blend_config
+
+          // 1. Cup restore
+          if (config.cup_supply_id) {
+            const supply = supplyItems.find(s => s.id === config.cup_supply_id)
+            if (supply) {
+              const newStock = Number(supply.stock_actual) + (1 * item.quantity)
+              await supabase
+                .from('supply_items')
+                .update({ stock_actual: newStock })
+                .eq('id', supply.id)
+            }
+          }
+
+          // 2. Fixed restore
+          if (Array.isArray(config.fixed_supplies)) {
+            for (const fs of config.fixed_supplies) {
+              if (!fs.supply_item_id) continue
+              const supply = supplyItems.find(s => s.id === fs.supply_item_id)
+              if (supply) {
+                const newStock = Number(supply.stock_actual) + (Number(fs.cantidad) * item.quantity)
+                await supabase
+                  .from('supply_items')
+                  .update({ stock_actual: newStock })
+                  .eq('id', supply.id)
+              }
+            }
+          }
+
+          // 3. Flavors restore
+          if (Array.isArray(item.blendSelections) && item.blendSelections.length > 0) {
+            const numFlavors = item.blendSelections.length
+            const capacityOz = Number(config.cup_capacity) || 16
+            const litersPerFlavor = (capacityOz / numFlavors) * 0.02957
+            const totalDeductL = litersPerFlavor * item.quantity
+
+            for (const flavorId of item.blendSelections) {
+              const supply = supplyItems.find(s => s.id === flavorId)
+              if (supply) {
+                const newStock = Number(supply.stock_actual) + totalDeductL
+                await supabase
+                  .from('supply_items')
+                  .update({ stock_actual: newStock })
+                  .eq('id', supply.id)
+              }
             }
           }
         }
@@ -648,6 +789,57 @@ export function InventoryProvider({ children }) {
   }
 
   const getEstimatedStock = (productId) => {
+    const product = products.find(p => p.id === productId)
+    if (!product) return null
+
+    if (product.inventory_mode === 'blend' && product.blend_config) {
+      const config = product.blend_config
+      const limits = []
+      
+      // 1. Cup supply limit
+      if (config.cup_supply_id) {
+        const cupSupply = supplyItems.find(s => s.id === config.cup_supply_id)
+        if (cupSupply) {
+          limits.push(Math.floor(Number(cupSupply.stock_actual) || 0))
+        } else {
+          limits.push(0)
+        }
+      }
+
+      // 2. Fixed supplies limits
+      if (Array.isArray(config.fixed_supplies)) {
+        for (const fs of config.fixed_supplies) {
+          const supply = supplyItems.find(s => s.id === fs.supply_item_id)
+          if (supply && fs.cantidad > 0) {
+            limits.push(Math.floor((Number(supply.stock_actual) || 0) / Number(fs.cantidad)))
+          } else if (!supply) {
+            limits.push(0)
+          }
+        }
+      }
+
+      // 3. Flavors capacity limit (conservative estimate based on total available flavor stock)
+      if (Array.isArray(config.flavor_ids) && config.flavor_ids.length > 0) {
+        let totalFlavorStock = 0
+        for (const fid of config.flavor_ids) {
+          const supply = supplyItems.find(s => s.id === fid)
+          if (supply) {
+            totalFlavorStock += Number(supply.stock_actual) || 0
+          }
+        }
+        const capacityLiters = (Number(config.cup_capacity) || 16) * 0.02957
+        if (capacityLiters > 0) {
+          limits.push(Math.floor(totalFlavorStock / capacityLiters))
+        } else {
+          limits.push(0)
+        }
+      } else {
+        limits.push(0)
+      }
+
+      return limits.length > 0 ? Math.min(...limits) : 0
+    }
+
     const recipe = productRecipes.filter(r => r.product_id === productId)
     if (recipe.length === 0) return null
     const limits = recipe.map(r => {
@@ -657,6 +849,7 @@ export function InventoryProvider({ children }) {
     })
     return Math.min(...limits)
   }
+
 
   return (
     <InventoryContext.Provider value={{

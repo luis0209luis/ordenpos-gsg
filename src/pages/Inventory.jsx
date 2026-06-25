@@ -36,9 +36,7 @@ export default function Inventory() {
     deleteSupplyItem,
     productRecipes = [],
     saveProductRecipe,
-    getEstimatedStock,
-    saveCustomizationOptions,
-    getProductOptions
+    getEstimatedStock
   } = useInventory() || {}
   const { settings = {} } = useSettings() || {}
   const { addExpense } = useFinance() || {}
@@ -55,7 +53,12 @@ export default function Inventory() {
     nombre: '', precio: '', stock_actual: '', stock_minimo: '', categoria: '', image_url: '', inventory_mode: 'finished'
   })
   const [recipeItems, setRecipeItems] = useState([])
-  const [customOptionsList, setCustomOptionsList] = useState([])
+  const [blendConfig, setBlendConfig] = useState({
+    cup_supply_id: '',
+    cup_capacity: 16,
+    fixed_supplies: [],
+    flavor_ids: []
+  })
 
   // Supply Items Modal & Adjustment
   const [supplySearchTerm, setSupplySearchTerm] = useState('')
@@ -415,23 +418,28 @@ export default function Inventory() {
         inventory_mode: product.inventory_mode || 'finished',
         stock_actual: product.stock_actual || 0,
         stock_minimo: product.stock_minimo || 10,
-        is_customizable: product.is_customizable || false,
-        max_selections: product.max_selections || 1
       })
       // Load recipe items
       const existing = (productRecipes || []).filter(r => r.product_id === product.id)
       setRecipeItems(existing.map(r => ({ supply_item_id: r.supply_item_id, cantidad: Number(r.cantidad) })))
       
-      // Load customization options
-      const existingOptions = getProductOptions ? getProductOptions(product.id) : []
-      setCustomOptionsList(existingOptions.map(o => ({
-        id: o.id || Math.random(),
-        supply_item_id: o.supply_item_id || '',
-        label: o.label || '',
-        cantidad_base: o.cantidad_base || 0,
-        discount_mode: o.discount_mode || 'split',
-        extra_price: o.extra_price || 0
-      })))
+      // Load blend config
+      if (product.inventory_mode === 'blend' && product.blend_config) {
+        setBlendConfig({
+          cup_supply_id: product.blend_config.cup_supply_id || '',
+          cup_capacity: Number(product.blend_config.cup_capacity) || 16,
+          fixed_supplies: Array.isArray(product.blend_config.fixed_supplies) ? product.blend_config.fixed_supplies : [],
+          flavor_ids: Array.isArray(product.blend_config.flavor_ids) ? product.blend_config.flavor_ids : []
+        })
+      } else {
+        const defaultCup = supplyItems.find(s => s.nombre.toLowerCase().includes('vaso') || s.nombre.toLowerCase().includes('copa'))?.id || supplyItems[0]?.id || ''
+        setBlendConfig({
+          cup_supply_id: defaultCup,
+          cup_capacity: 16,
+          fixed_supplies: [],
+          flavor_ids: []
+        })
+      }
       
       setCustomImage(product.image_url?.startsWith('data:image') ? product.image_url : null)
     } else {
@@ -444,11 +452,15 @@ export default function Inventory() {
         categoria: availableCategories[0] || 'Sin Categoría',
         inventory_mode: 'finished',
         image_url: '',
-        is_customizable: false,
-        max_selections: 1
       })
       setRecipeItems([])
-      setCustomOptionsList([])
+      const defaultCup = supplyItems.find(s => s.nombre.toLowerCase().includes('vaso') || s.nombre.toLowerCase().includes('copa'))?.id || supplyItems[0]?.id || ''
+      setBlendConfig({
+        cup_supply_id: defaultCup,
+        cup_capacity: 16,
+        fixed_supplies: [],
+        flavor_ids: []
+      })
       setCustomImage(null)
     }
     setIsCreatingCategory(false)
@@ -458,7 +470,12 @@ export default function Inventory() {
   const closeModal = () => {
     setIsModalOpen(false)
     setEditingProduct(null)
-    setCustomOptionsList([])
+    setBlendConfig({
+      cup_supply_id: '',
+      cup_capacity: 16,
+      fixed_supplies: [],
+      flavor_ids: []
+    })
     setErrorMsg('')
   }
 
@@ -655,23 +672,43 @@ export default function Inventory() {
     setRecipeItems(prev => prev.map((item, i) => i === index ? { ...item, [field]: value } : item))
   }
 
-  const handleAddCustomOption = () => {
-    setCustomOptionsList(prev => [...prev, {
-      id: Math.random(),
-      supply_item_id: '',
-      label: '',
-      cantidad_base: 0,
-      discount_mode: 'split',
-      extra_price: 0
-    }])
+  const handleAddBlendFixedSupply = () => {
+    const unused = supplyItems.find(s => s.id !== blendConfig.cup_supply_id && !blendConfig.fixed_supplies.some(fs => fs.supply_item_id === s.id))
+    const defaultId = unused ? unused.id : (supplyItems[0]?.id || '')
+    if (!defaultId) {
+      alert("Primero debes crear insumos en la sección de Bodega.")
+      return
+    }
+    setBlendConfig(prev => ({
+      ...prev,
+      fixed_supplies: [...prev.fixed_supplies, { supply_item_id: defaultId, cantidad: 1 }]
+    }))
   }
 
-  const handleRemoveCustomOption = (id) => {
-    setCustomOptionsList(prev => prev.filter(o => o.id !== id))
+  const handleRemoveBlendFixedSupply = (index) => {
+    setBlendConfig(prev => ({
+      ...prev,
+      fixed_supplies: prev.fixed_supplies.filter((_, i) => i !== index)
+    }))
   }
 
-  const handleCustomOptionChange = (id, field, value) => {
-    setCustomOptionsList(prev => prev.map(o => o.id === id ? { ...o, [field]: value } : o))
+  const handleBlendFixedSupplyChange = (index, field, value) => {
+    setBlendConfig(prev => ({
+      ...prev,
+      fixed_supplies: prev.fixed_supplies.map((item, i) => i === index ? { ...item, [field]: value } : item)
+    }))
+  }
+
+  const handleBlendFlavorToggle = (flavorId) => {
+    setBlendConfig(prev => {
+      const exists = prev.flavor_ids.includes(flavorId)
+      return {
+        ...prev,
+        flavor_ids: exists 
+          ? prev.flavor_ids.filter(id => id !== flavorId) 
+          : [...prev.flavor_ids, flavorId]
+      }
+    })
   }
 
   const handleSubmit = async (e) => {
@@ -685,7 +722,13 @@ export default function Inventory() {
       
       const isFinished = formData.inventory_mode === 'finished' || !formData.inventory_mode
       const isRecipe = formData.inventory_mode === 'recipe'
+      const isBlend = formData.inventory_mode === 'blend'
       const isUnlimited = formData.inventory_mode === 'unlimited'
+
+      if (isBlend && (!blendConfig.cup_supply_id || blendConfig.flavor_ids.length === 0)) {
+        setErrorMsg("Para el modo mezclado debes configurar el vaso/envase y al menos un sabor disponible.")
+        return
+      }
 
       const productData = {
         ...formData,
@@ -696,8 +739,14 @@ export default function Inventory() {
         stock_actual: isFinished ? (parseInt(formData.stock_actual) || 0) : 0,
         stock_minimo: isUnlimited ? 0 : (parseInt(formData.stock_minimo) || 0),
         inventory_mode: formData.inventory_mode || 'finished',
-        is_customizable: !!formData.is_customizable,
-        max_selections: formData.is_customizable ? (parseInt(formData.max_selections) || 1) : 1
+        is_customizable: false,
+        max_selections: 1,
+        blend_config: isBlend ? {
+          cup_supply_id: blendConfig.cup_supply_id || null,
+          cup_capacity: parseFloat(blendConfig.cup_capacity) || 16,
+          fixed_supplies: blendConfig.fixed_supplies.filter(fs => fs.supply_item_id && fs.cantidad > 0),
+          flavor_ids: blendConfig.flavor_ids
+        } : null
       }
 
       if (isNaN(productData.stock_minimo)) {
@@ -719,14 +768,6 @@ export default function Inventory() {
         } else {
           // Si cambió de receta a otro modo, eliminar la receta existente
           await saveProductRecipe(savedProduct.id, [])
-        }
-
-        // Guardar opciones de personalización
-        if (formData.is_customizable && saveCustomizationOptions) {
-          const cleanOptions = customOptionsList.filter(o => o.label?.trim() !== '')
-          await saveCustomizationOptions(savedProduct.id, cleanOptions)
-        } else if (saveCustomizationOptions) {
-          await saveCustomizationOptions(savedProduct.id, [])
         }
       }
 
@@ -954,10 +995,11 @@ export default function Inventory() {
                         : (settings?.globalMinStock || 10)
 
                       const isRecipe = product.inventory_mode === 'recipe'
+                      const isBlend = product.inventory_mode === 'blend'
                       const isUnlimited = product.inventory_mode === 'unlimited'
 
-                      const estimatedStock = isRecipe && getEstimatedStock ? getEstimatedStock(product.id) : null
-                      const displayStock = isRecipe
+                      const estimatedStock = (isRecipe || isBlend) && getEstimatedStock ? getEstimatedStock(product.id) : null
+                      const displayStock = (isRecipe || isBlend)
                         ? (estimatedStock !== null ? estimatedStock : 0)
                         : (product.stock_actual ?? 0)
 
@@ -973,9 +1015,9 @@ export default function Inventory() {
                                 Receta
                               </span>
                             )}
-                            {product.is_customizable && (
-                              <span className="ml-2 text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20">
-                                Personalizable
+                            {isBlend && (
+                              <span className="ml-2 text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                                Mezclado
                               </span>
                             )}
                           </td>
@@ -989,8 +1031,8 @@ export default function Inventory() {
                               <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-white/5 border border-white/10 text-gray-400">
                                 Ilimitado
                               </span>
-                            ) : isRecipe ? (
-                              <span title="Stock estimado en base a insumos de receta">
+                            ) : (isRecipe || isBlend) ? (
+                              <span title={isRecipe ? "Stock estimado en base a insumos de receta" : "Stock estimado en base a insumos de mezclado"}>
                                 ~{displayStock} <span className="text-[10px] font-sans font-normal opacity-75">unds est.</span>
                               </span>
                             ) : (
@@ -1385,10 +1427,11 @@ export default function Inventory() {
                   {/* Tipo de Inventario */}
                   <div className="space-y-2">
                     <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Tipo de inventario</label>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       {[
                         { mode: 'finished', icon: '📦', title: 'Stock fijo', desc: 'Tengo el producto listo. Se descuenta al vender.' },
                         { mode: 'recipe', icon: '🧪', title: 'Por receta', desc: 'Lo preparo al momento. Se descuentan insumos.' },
+                        { mode: 'blend', icon: '🍹', title: 'Mezclado', desc: 'Bebida combinada. El cliente elige sabores.' },
                         { mode: 'unlimited', icon: '♾️', title: 'Sin inventario', desc: 'Servicio o producto ilimitado.' }
                       ].map(opt => (
                         <button
@@ -1427,6 +1470,23 @@ export default function Inventory() {
                   )}
 
                   {formData.inventory_mode === 'recipe' && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5 opacity-80">
+                        <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock Estimado</label>
+                        <input readOnly type="text" value={`~${editingProduct ? (getEstimatedStock ? (getEstimatedStock(editingProduct.id) ?? 0) : 0) : 0} (Calculado)`}
+                          className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 cursor-not-allowed
+                          ${isDark ? 'bg-dark-card/40 border-dark-border text-gray-400' : 'bg-light-surface/50 border-light-border text-gray-500'}`} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock Mínimo</label>
+                        <input required type="number" min="0" value={formData.stock_minimo} onChange={e => setFormData({ ...formData, stock_minimo: e.target.value })}
+                          className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-gold-500
+                          ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`} />
+                      </div>
+                    </div>
+                  )}
+
+                  {formData.inventory_mode === 'blend' && (
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1.5 opacity-80">
                         <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock Estimado</label>
@@ -1504,165 +1564,142 @@ export default function Inventory() {
                     </div>
                   )}
 
-                  {/* Producto Personalizable / Combinado */}
-                  <div className={`p-4 rounded-2xl border-2 transition-all ${
-                    formData.is_customizable 
-                      ? 'border-gold-500 bg-gold-500/5' 
-                      : isDark ? 'border-dark-border bg-dark-card/30' : 'border-light-border bg-light-surface/30'
-                  }`}>
-                    <div className="flex items-center justify-between select-none">
-                      <div className="flex items-center gap-2.5">
-                        <input
-                          type="checkbox"
-                          id="is_customizable"
-                          checked={!!formData.is_customizable}
-                          onChange={e => setFormData(prev => ({ ...prev, is_customizable: e.target.checked }))}
-                          className="w-4 h-4 rounded text-gold-500 focus:ring-gold-500 border-gray-300 dark:border-dark-border cursor-pointer"
-                        />
-                        <label htmlFor="is_customizable" className="text-xs font-bold uppercase opacity-85 select-none cursor-pointer">
-                          🎨 ¿Es producto personalizable / combinado?
-                        </label>
-                      </div>
-                      
-                      {formData.is_customizable && (
-                        <div className="flex items-center gap-2">
-                          <label className="text-[10px] font-bold uppercase opacity-70">Selecciones máx:</label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={formData.max_selections || 1}
-                            onChange={e => setFormData(prev => ({ ...prev, max_selections: parseInt(e.target.value) || 1 }))}
-                            className={`w-16 px-2 py-1 text-center rounded-lg text-xs font-semibold outline-none border focus:border-gold-500
-                              ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
-                          />
+                  {/* Mezclado Config for Blend mode */}
+                  {formData.inventory_mode === 'blend' && (
+                    <div className="space-y-4">
+                      {/* Vaso y Capacidad */}
+                      <div className="p-4 rounded-2xl border-2 border-dashed border-gold-500/20 bg-gold-500/5 space-y-4 text-left">
+                        <h4 className="text-xs font-bold uppercase text-gold-500 flex items-center gap-1.5">
+                          🥤 Vaso / Envase Base
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className={`text-[10px] font-bold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Seleccionar Vaso/Envase</label>
+                            <select
+                              value={blendConfig.cup_supply_id}
+                              onChange={e => setBlendConfig(prev => ({ ...prev, cup_supply_id: e.target.value }))}
+                              className={`w-full px-3 py-2 rounded-xl text-xs font-medium outline-none border-2 focus:border-gold-500 cursor-pointer
+                                ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                            >
+                              <option value="">-- Seleccionar --</option>
+                              {supplyItems.map(s => (
+                                <option key={s.id} value={s.id}>{s.nombre} ({s.unidad})</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className={`text-[10px] font-bold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Capacidad del Vaso (oz)</label>
+                            <input
+                              type="number"
+                              min="1"
+                              step="0.1"
+                              value={blendConfig.cup_capacity}
+                              onChange={e => setBlendConfig(prev => ({ ...prev, cup_capacity: parseFloat(e.target.value) || 0 }))}
+                              className={`w-full px-3 py-2 rounded-xl text-xs font-medium outline-none border-2 focus:border-gold-500
+                                ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                            />
+                          </div>
                         </div>
-                      )}
-                    </div>
+                      </div>
 
-                    {formData.is_customizable && (
-                      <div className="mt-4 space-y-4 animate-fade-in text-left">
-                        <div className="flex justify-between items-center border-b pb-2 border-gold-500/20">
-                          <span className="text-[11px] font-bold uppercase text-gold-500">Opciones de Personalización</span>
+                      {/* Insumos Fijos */}
+                      <div className="p-4 rounded-2xl border-2 border-dashed border-gold-500/20 bg-gold-500/5 space-y-4 text-left">
+                        <div className="flex justify-between items-center">
+                          <h4 className="text-xs font-bold uppercase text-gold-500 flex items-center gap-1.5">
+                            ➕ Insumos Fijos Adicionales
+                          </h4>
                           <button
                             type="button"
-                            onClick={handleAddCustomOption}
+                            onClick={handleAddBlendFixedSupply}
                             className="px-2.5 py-1 bg-gold-gradient text-black text-[10px] font-bold rounded-lg hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-1"
                           >
-                            <Plus size={12} /> Agregar Opción
+                            <Plus size={12} /> Agregar Fijo
                           </button>
                         </div>
-
-                        {customOptionsList.length === 0 ? (
-                          <p className={`text-[11px] text-center py-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                            No has agregado opciones. Ej: Sabores, toppings, salsas extras.
+                        {blendConfig.fixed_supplies.length === 0 ? (
+                          <p className={`text-[11px] text-center py-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                            No hay insumos fijos adicionales configurados (ej: pitillo, tapa).
                           </p>
                         ) : (
-                          <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
-                            {customOptionsList.map((opt) => {
-                              const selectedSupply = supplyItems.find(s => s.id === opt.supply_item_id)
+                          <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
+                            {blendConfig.fixed_supplies.map((item, idx) => {
+                              const supply = supplyItems.find(s => s.id === item.supply_item_id)
                               return (
-                                <div key={opt.id} className={`p-3 rounded-xl border space-y-2 relative transition-all
-                                  ${isDark ? 'bg-dark-card/60 border-dark-border' : 'bg-gray-50 border-gray-200'}`}>
-                                  
-                                  {/* Delete option button top-right */}
+                                <div key={idx} className="flex gap-2 items-center">
+                                  <select
+                                    value={item.supply_item_id}
+                                    onChange={e => handleBlendFixedSupplyChange(idx, 'supply_item_id', e.target.value)}
+                                    className={`flex-1 px-3 py-2 rounded-xl text-xs font-medium outline-none border-2 focus:border-gold-500
+                                      ${isDark ? 'bg-dark-card border-dark-border text-white font-semibold' : 'bg-light-surface border-light-border text-gray-900'}`}
+                                  >
+                                    {supplyItems.map(s => (
+                                      <option key={s.id} value={s.id}>{s.nombre} ({s.unidad})</option>
+                                    ))}
+                                  </select>
+                                  <input
+                                    type="number"
+                                    step="0.001"
+                                    min="0.001"
+                                    required
+                                    value={item.cantidad}
+                                    placeholder="Cant."
+                                    onChange={e => handleBlendFixedSupplyChange(idx, 'cantidad', parseFloat(e.target.value) || 0)}
+                                    className={`w-24 px-3 py-2 rounded-xl text-xs font-medium outline-none border-2 focus:border-gold-500
+                                      ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                                  />
+                                  <span className={`text-xs font-bold w-12 truncate ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    {supply ? supply.unidad : ''}
+                                  </span>
                                   <button
                                     type="button"
-                                    onClick={() => handleRemoveCustomOption(opt.id)}
-                                    className="absolute top-2 right-2 p-1 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors"
-                                    title="Eliminar opción"
+                                    onClick={() => handleRemoveBlendFixedSupply(idx)}
+                                    className="p-2 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors"
                                   >
-                                    <X size={14} />
+                                    <Trash2 size={16} />
                                   </button>
-
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-6">
-                                    {/* Label / Nombre */}
-                                    <div className="space-y-1">
-                                      <label className="text-[9px] font-bold uppercase opacity-70">Nombre Opción</label>
-                                      <input
-                                        type="text"
-                                        required
-                                        placeholder="Ej: Fresa, Arequipe, Chispas"
-                                        value={opt.label}
-                                        onChange={e => handleCustomOptionChange(opt.id, 'label', e.target.value)}
-                                        className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold outline-none border focus:border-gold-500
-                                          ${isDark ? 'bg-dark-bg border-dark-border text-white' : 'bg-white border-gray-300 text-gray-900'}`}
-                                      />
-                                    </div>
-
-                                    {/* Precio Extra */}
-                                    <div className="space-y-1">
-                                      <label className="text-[9px] font-bold uppercase opacity-70">Precio Adicional ($)</label>
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        placeholder="0"
-                                        value={opt.extra_price}
-                                        onChange={e => handleCustomOptionChange(opt.id, 'extra_price', parseFloat(e.target.value) || 0)}
-                                        className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold outline-none border focus:border-gold-500
-                                          ${isDark ? 'bg-dark-bg border-dark-border text-white' : 'bg-white border-gray-300 text-gray-900'}`}
-                                      />
-                                    </div>
-                                  </div>
-
-                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-dashed border-gray-200 dark:border-dark-border">
-                                    {/* Vinculo Insumo Bodega */}
-                                    <div className="space-y-0.5">
-                                      <label className="text-[8px] font-bold uppercase opacity-60">Insumo Bodega (Opcional)</label>
-                                      <select
-                                        value={opt.supply_item_id}
-                                        onChange={e => handleCustomOptionChange(opt.id, 'supply_item_id', e.target.value)}
-                                        className={`w-full px-2 py-1 rounded-lg text-[10px] font-medium outline-none border focus:border-gold-500 cursor-pointer
-                                          ${isDark ? 'bg-dark-bg border-dark-border text-white font-semibold' : 'bg-white border-gray-300 text-gray-900'}`}
-                                      >
-                                        <option value="">-- No descontar --</option>
-                                        {supplyItems.map(s => (
-                                          <option key={s.id} value={s.id}>{s.nombre} ({s.unidad})</option>
-                                        ))}
-                                      </select>
-                                    </div>
-
-                                    {/* Cantidad Base */}
-                                    <div className="space-y-0.5">
-                                      <label className="text-[8px] font-bold uppercase opacity-60">
-                                        Cant. Base {selectedSupply ? `(${selectedSupply.unidad})` : ''}
-                                      </label>
-                                      <input
-                                        type="number"
-                                        step="0.001"
-                                        min="0"
-                                        disabled={!opt.supply_item_id}
-                                        placeholder="0.0"
-                                        value={opt.cantidad_base}
-                                        onChange={e => handleCustomOptionChange(opt.id, 'cantidad_base', parseFloat(e.target.value) || 0)}
-                                        className={`w-full px-2 py-1 rounded-lg text-[10px] font-semibold outline-none border focus:border-gold-500 disabled:opacity-50 disabled:cursor-not-allowed
-                                          ${isDark ? 'bg-dark-bg border-dark-border text-white' : 'bg-white border-gray-300 text-gray-900'}`}
-                                      />
-                                    </div>
-
-                                    {/* Modo de Descuento */}
-                                    <div className="space-y-0.5">
-                                      <label className="text-[8px] font-bold uppercase opacity-60">Modo de Descuento</label>
-                                      <select
-                                        disabled={!opt.supply_item_id}
-                                        value={opt.discount_mode}
-                                        onChange={e => handleCustomOptionChange(opt.id, 'discount_mode', e.target.value)}
-                                        className={`w-full px-2 py-1 rounded-lg text-[10px] font-medium outline-none border focus:border-gold-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed
-                                          ${isDark ? 'bg-dark-bg border-dark-border text-white font-semibold' : 'bg-white border-gray-300 text-gray-900'}`}
-                                      >
-                                        <option value="split">Dividir entre selecciones</option>
-                                        <option value="per_selection">Fijo por selección</option>
-                                      </select>
-                                    </div>
-                                  </div>
-
                                 </div>
                               )
                             })}
                           </div>
                         )}
                       </div>
-                    )}
-                  </div>
+
+                      {/* Sabores líquidos */}
+                      <div className="p-4 rounded-2xl border-2 border-dashed border-gold-500/20 bg-gold-500/5 space-y-3 text-left">
+                        <h4 className="text-xs font-bold uppercase text-gold-500 flex items-center gap-1.5">
+                          🍹 Sabores Seleccionables (Líquidos en Bodega)
+                        </h4>
+                        <p className={`text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2`}>
+                          Elige los insumos (medidos en litros) de bodega que se podrán mezclar para este producto.
+                        </p>
+                        
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[160px] overflow-y-auto pr-1">
+                          {supplyItems
+                            .filter(s => s.id !== blendConfig.cup_supply_id)
+                            .map(s => {
+                              const isChecked = blendConfig.flavor_ids.includes(s.id)
+                              return (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  onClick={() => handleBlendFlavorToggle(s.id)}
+                                  className={`p-2 rounded-xl border text-left flex items-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99]
+                                    ${isChecked 
+                                      ? 'border-gold-500 bg-gold-500/10 text-gold-500 font-bold' 
+                                      : isDark ? 'border-dark-border bg-dark-card text-gray-400 hover:text-white' : 'border-gray-200 bg-white text-gray-600 hover:text-gray-900'}`}
+                                >
+                                  <span className={`w-3.5 h-3.5 rounded-md flex items-center justify-center border text-[9px] font-bold
+                                    ${isChecked ? 'border-gold-500 bg-gold-500 text-black' : 'border-gray-400'}`}>
+                                    {isChecked && '✓'}
+                                  </span>
+                                  <span className="text-[10px] font-semibold truncate leading-tight flex-1">{s.nombre}</span>
+                                </button>
+                              )
+                            })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <button type="submit" className="w-full py-4 mt-6 rounded-2xl font-bold text-sm tracking-wider uppercase
                     bg-gold-gradient text-dark-bg shadow-gold-md hover:shadow-gold-lg hover:scale-[1.02] active:scale-[0.98] transition-all">

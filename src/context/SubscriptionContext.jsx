@@ -31,19 +31,19 @@ export function SubscriptionProvider({ children }) {
         if (!isMaster) {
           query = query.eq('id', bid)
         }
-        
+
         const { data, error } = await query
         if (error) console.error("Error businesses:", error.message)
         if (data) {
           const normalized = data.map(b => ({
             ...b,
-            startDate:     b.start_date     ?? b.startDate     ?? null,
+            startDate: b.start_date ?? b.startDate ?? null,
             daysRemaining: b.days_remaining ?? b.daysRemaining ?? 0,
-            forcePhase:    b.force_phase    ?? b.forcePhase    ?? null,
+            forcePhase: b.force_phase ?? b.forcePhase ?? null,
           }))
           setBusinesses(normalized)
           setForcedState(null)
-          
+
           if (!isMaster) {
             const biz = normalized.find(b => b.id === bid)
             const fVencimiento = computeExpirationDate(biz)
@@ -122,13 +122,13 @@ export function SubscriptionProvider({ children }) {
       await supabase.from('businesses').update({ force_phase: null }).eq('id', bid)
     }
   }
-  
+
   const addMonth = async (days = 30) => {
     setForcedState(null)
     const currentDays = myBiz?.daysRemaining || myBiz?.days_remaining || 0
     const newDays = currentDays + days
     setBusinesses(prev => prev.map(b => b.id === bid ? { ...b, daysRemaining: newDays, days_remaining: newDays } : b))
-    
+
     if (!isMaster && isValidUUID(bid)) {
       try {
         await supabase.from('businesses').update({ days_remaining: newDays }).eq('id', bid)
@@ -143,7 +143,7 @@ export function SubscriptionProvider({ children }) {
     const currentDays = myBiz?.daysRemaining || myBiz?.days_remaining || 0
     const newDays = Math.max(0, currentDays - 30)
     setBusinesses(prev => prev.map(b => b.id === bid ? { ...b, daysRemaining: newDays, days_remaining: newDays } : b))
-    
+
     if (!isMaster && isValidUUID(bid)) {
       try {
         await supabase.from('businesses').update({ days_remaining: newDays }).eq('id', bid)
@@ -158,7 +158,7 @@ export function SubscriptionProvider({ children }) {
     const currentDays = myBiz?.daysRemaining || myBiz?.days_remaining || 0
     const newDays = currentDays + daysOffset
     setBusinesses(prev => prev.map(b => b.id === bid ? { ...b, daysRemaining: newDays, days_remaining: newDays } : b))
-    
+
     if (!isMaster && isValidUUID(bid)) {
       try {
         await supabase.from('businesses').update({ days_remaining: newDays }).eq('id', bid)
@@ -169,11 +169,11 @@ export function SubscriptionProvider({ children }) {
   }
 
   return (
-    <SubscriptionContext.Provider value={{ 
+    <SubscriptionContext.Provider value={{
       // While loading, export safe defaults so consumers never react to stale data
       fechaVencimiento: loading ? null : fechaVencimiento,
-      daysRemaining:    loading ? null : daysRemaining,
-      phase:            loading ? 0    : phase,
+      daysRemaining: loading ? null : daysRemaining,
+      phase: loading ? 0 : phase,
       simulateDateChange,
       forceBlock,
       forceUnblock,

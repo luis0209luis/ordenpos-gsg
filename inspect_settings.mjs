@@ -5,9 +5,9 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 async function inspect() {
-  // Try calling postgres RPC or querying information_schema
-  const { data, error } = await supabase.rpc('get_tables') // check if get_tables RPC exists
-  console.log("get_tables RPC response:", data, error)
+  const { data, error } = await supabase.from('businesses').select('*').limit(1)
+  console.log("Businesses row data:", data)
+  console.log("Businesses query error:", error)
 }
 
 inspect()
