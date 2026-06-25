@@ -322,7 +322,7 @@ export function InventoryProvider({ children }) {
           // 1. Cup supply deduction
           if (config.cup_supply_id) {
             updated = updated.map(s => {
-              if (s.id === config.cup_supply_id) {
+              if (String(s.id) === String(config.cup_supply_id)) {
                 return { ...s, stock_actual: Math.max(0, Number(s.stock_actual) - (1 * item.quantity)) }
               }
               return s
@@ -333,7 +333,7 @@ export function InventoryProvider({ children }) {
             for (const fs of config.fixed_supplies) {
               if (!fs.supply_item_id) continue
               updated = updated.map(s => {
-                if (s.id === fs.supply_item_id) {
+                if (String(s.id) === String(fs.supply_item_id)) {
                   return { ...s, stock_actual: Math.max(0, Number(s.stock_actual) - (Number(fs.cantidad) * item.quantity)) }
                 }
                 return s
@@ -349,7 +349,7 @@ export function InventoryProvider({ children }) {
 
             for (const flavorId of item.blendSelections) {
               updated = updated.map(s => {
-                if (s.id === flavorId) {
+                if (String(s.id) === String(flavorId)) {
                   return { ...s, stock_actual: Math.max(0, Number(s.stock_actual) - totalDeductL) }
                 }
                 return s
@@ -482,7 +482,7 @@ export function InventoryProvider({ children }) {
           
           // 1. Cup supply deduction
           if (config.cup_supply_id) {
-            const supply = supplyItems.find(s => s.id === config.cup_supply_id)
+            const supply = supplyItems.find(s => String(s.id) === String(config.cup_supply_id))
             if (supply) {
               const newStock = Math.max(0, Number(supply.stock_actual) - (1 * item.quantity))
               await supabase
@@ -498,7 +498,7 @@ export function InventoryProvider({ children }) {
           if (Array.isArray(config.fixed_supplies)) {
             for (const fs of config.fixed_supplies) {
               if (!fs.supply_item_id) continue
-              const supply = supplyItems.find(s => s.id === fs.supply_item_id)
+              const supply = supplyItems.find(s => String(s.id) === String(fs.supply_item_id))
               if (supply) {
                 const newStock = Math.max(0, Number(supply.stock_actual) - (Number(fs.cantidad) * item.quantity))
                 await supabase
@@ -519,7 +519,7 @@ export function InventoryProvider({ children }) {
             const totalDeductL = litersPerFlavor * item.quantity
 
             for (const flavorId of item.blendSelections) {
-              const supply = supplyItems.find(s => s.id === flavorId)
+              const supply = supplyItems.find(s => String(s.id) === String(flavorId))
               if (supply) {
                 const newStock = Math.max(0, Number(supply.stock_actual) - totalDeductL)
                 await supabase
@@ -593,7 +593,7 @@ export function InventoryProvider({ children }) {
           // 1. Cup restore
           if (config.cup_supply_id) {
             updated = updated.map(s => {
-              if (s.id === config.cup_supply_id) {
+              if (String(s.id) === String(config.cup_supply_id)) {
                 return { ...s, stock_actual: Number(s.stock_actual) + (1 * item.quantity) }
               }
               return s
@@ -604,7 +604,7 @@ export function InventoryProvider({ children }) {
             for (const fs of config.fixed_supplies) {
               if (!fs.supply_item_id) continue
               updated = updated.map(s => {
-                if (s.id === fs.supply_item_id) {
+                if (String(s.id) === String(fs.supply_item_id)) {
                   return { ...s, stock_actual: Number(s.stock_actual) + (Number(fs.cantidad) * item.quantity) }
                 }
                 return s
@@ -620,7 +620,7 @@ export function InventoryProvider({ children }) {
 
             for (const flavorId of item.blendSelections) {
               updated = updated.map(s => {
-                if (s.id === flavorId) {
+                if (String(s.id) === String(flavorId)) {
                   return { ...s, stock_actual: Number(s.stock_actual) + totalDeductL }
                 }
                 return s
@@ -664,7 +664,7 @@ export function InventoryProvider({ children }) {
 
           // 1. Cup restore
           if (config.cup_supply_id) {
-            const supply = supplyItems.find(s => s.id === config.cup_supply_id)
+            const supply = supplyItems.find(s => String(s.id) === String(config.cup_supply_id))
             if (supply) {
               const newStock = Number(supply.stock_actual) + (1 * item.quantity)
               await supabase
@@ -678,7 +678,7 @@ export function InventoryProvider({ children }) {
           if (Array.isArray(config.fixed_supplies)) {
             for (const fs of config.fixed_supplies) {
               if (!fs.supply_item_id) continue
-              const supply = supplyItems.find(s => s.id === fs.supply_item_id)
+              const supply = supplyItems.find(s => String(s.id) === String(fs.supply_item_id))
               if (supply) {
                 const newStock = Number(supply.stock_actual) + (Number(fs.cantidad) * item.quantity)
                 await supabase
@@ -697,7 +697,7 @@ export function InventoryProvider({ children }) {
             const totalDeductL = litersPerFlavor * item.quantity
 
             for (const flavorId of item.blendSelections) {
-              const supply = supplyItems.find(s => s.id === flavorId)
+              const supply = supplyItems.find(s => String(s.id) === String(flavorId))
               if (supply) {
                 const newStock = Number(supply.stock_actual) + totalDeductL
                 await supabase
@@ -798,7 +798,7 @@ export function InventoryProvider({ children }) {
       
       // 1. Cup supply limit
       if (config.cup_supply_id) {
-        const cupSupply = supplyItems.find(s => s.id === config.cup_supply_id)
+        const cupSupply = supplyItems.find(s => String(s.id) === String(config.cup_supply_id))
         if (cupSupply) {
           limits.push(Math.floor(Number(cupSupply.stock_actual) || 0))
         } else {
@@ -809,7 +809,7 @@ export function InventoryProvider({ children }) {
       // 2. Fixed supplies limits
       if (Array.isArray(config.fixed_supplies)) {
         for (const fs of config.fixed_supplies) {
-          const supply = supplyItems.find(s => s.id === fs.supply_item_id)
+          const supply = supplyItems.find(s => String(s.id) === String(fs.supply_item_id))
           if (supply && fs.cantidad > 0) {
             limits.push(Math.floor((Number(supply.stock_actual) || 0) / Number(fs.cantidad)))
           } else if (!supply) {
@@ -818,11 +818,11 @@ export function InventoryProvider({ children }) {
         }
       }
 
-      // 3. Flavors capacity limit (conservative estimate based on total available flavor stock)
+      // 3. Flavors capacity limit (total available flavor stock / capacity per cup)
       if (Array.isArray(config.flavor_ids) && config.flavor_ids.length > 0) {
         let totalFlavorStock = 0
         for (const fid of config.flavor_ids) {
-          const supply = supplyItems.find(s => s.id === fid)
+          const supply = supplyItems.find(s => String(s.id) === String(fid))
           if (supply) {
             totalFlavorStock += Number(supply.stock_actual) || 0
           }
