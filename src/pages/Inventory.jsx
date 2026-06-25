@@ -467,6 +467,38 @@ export default function Inventory() {
     setIsModalOpen(true)
   }
 
+  const handleDuplicateProduct = (product) => {
+    setErrorMsg('')
+    setEditingProduct(null)
+    setFormData({
+      ...product,
+      nombre: product.nombre ? `Copia de ${product.nombre}` : 'Copia de Producto',
+      stock_actual: product.inventory_mode === 'finished' ? (product.stock_actual || 0) : '',
+      stock_minimo: product.stock_minimo || 10,
+      image_url: product.image_url || '',
+      inventory_mode: product.inventory_mode || 'finished',
+      categoria: product.categoria || (availableCategories[0] || 'Sin Categoría'),
+    })
+    // Copy recipe if recipe mode
+    const existing = (productRecipes || []).filter(r => r.product_id === product.id)
+    setRecipeItems(existing.map(r => ({ supply_item_id: r.supply_item_id, cantidad: Number(r.cantidad) })))
+    // Copy blend config if blend mode
+    if (product.inventory_mode === 'blend' && product.blend_config) {
+      setBlendConfig({
+        cup_supply_id: product.blend_config.cup_supply_id || '',
+        cup_capacity: Number(product.blend_config.cup_capacity) || 16,
+        fixed_supplies: Array.isArray(product.blend_config.fixed_supplies) ? [...product.blend_config.fixed_supplies] : [],
+        flavor_ids: Array.isArray(product.blend_config.flavor_ids) ? [...product.blend_config.flavor_ids] : []
+      })
+    } else {
+      const defaultCup = supplyItems.find(s => s.nombre.toLowerCase().includes('vaso') || s.nombre.toLowerCase().includes('copa'))?.id || supplyItems[0]?.id || ''
+      setBlendConfig({ cup_supply_id: defaultCup, cup_capacity: 16, fixed_supplies: [], flavor_ids: [] })
+    }
+    setCustomImage(product.image_url?.startsWith('data:image') ? product.image_url : null)
+    setIsCreatingCategory(false)
+    setIsModalOpen(true)
+  }
+
   const closeModal = () => {
     setIsModalOpen(false)
     setEditingProduct(null)
@@ -1075,6 +1107,15 @@ export default function Inventory() {
                                   <PackagePlus size={18} />
                                 </button>
                               )}
+                              <button
+                                onClick={() => handleDuplicateProduct(product)}
+                                title="Copiar/Duplicar producto"
+                                className={`p-2 rounded-xl transition-all
+                                  ${isDark ? 'hover:bg-blue-500/10 text-gray-400 hover:text-blue-400'
+                                    : 'hover:bg-blue-50 text-gray-500 hover:text-blue-500'}`}
+                              >
+                                <Copy size={18} />
+                              </button>
                               <button onClick={() => openModal(product)} className={`p-2 rounded-xl transition-all
                                 ${isDark ? 'hover:bg-dark-card text-gray-400 hover:text-white'
                                   : 'hover:bg-light-surface text-gray-500 hover:text-gray-900'}`}>
