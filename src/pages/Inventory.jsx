@@ -726,7 +726,7 @@ export default function Inventory() {
       const isUnlimited = formData.inventory_mode === 'unlimited'
 
       if (isBlend && (!blendConfig.cup_supply_id || blendConfig.flavor_ids.length === 0)) {
-        setErrorMsg("Para el modo mezclado debes configurar el vaso/envase y al menos un sabor disponible.")
+        setErrorMsg("Para el modo combinado debes configurar el vaso/envase y al menos un sabor disponible.")
         return
       }
 
@@ -1017,7 +1017,7 @@ export default function Inventory() {
                             )}
                             {isBlend && (
                               <span className="ml-2 text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                                Mezclado
+                                Combinado
                               </span>
                             )}
                           </td>
@@ -1032,7 +1032,7 @@ export default function Inventory() {
                                 Ilimitado
                               </span>
                             ) : (isRecipe || isBlend) ? (
-                              <span title={isRecipe ? "Stock estimado en base a insumos de receta" : "Stock estimado en base a insumos de mezclado"}>
+                              <span title={isRecipe ? "Stock estimado en base a insumos de receta" : "Stock estimado en base a insumos de combinado"}>
                                 ~{displayStock} <span className="text-[10px] font-sans font-normal opacity-75">unds est.</span>
                               </span>
                             ) : (
@@ -1431,7 +1431,7 @@ export default function Inventory() {
                       {[
                         { mode: 'finished', icon: '📦', title: 'Stock fijo', desc: 'Tengo el producto listo. Se descuenta al vender.' },
                         { mode: 'recipe', icon: '🧪', title: 'Por receta', desc: 'Lo preparo al momento. Se descuentan insumos.' },
-                        { mode: 'blend', icon: '🍹', title: 'Mezclado', desc: 'Bebida combinada. El cliente elige sabores.' },
+                        { mode: 'blend', icon: '🍹', title: 'Combinado', desc: 'Bebida combinada. El cliente elige sabores.' },
                         { mode: 'unlimited', icon: '♾️', title: 'Sin inventario', desc: 'Servicio o producto ilimitado.' }
                       ].map(opt => (
                         <button
@@ -1564,7 +1564,7 @@ export default function Inventory() {
                     </div>
                   )}
 
-                  {/* Mezclado Config for Blend mode */}
+                  {/* Combinado Config for Blend mode */}
                   {formData.inventory_mode === 'blend' && (
                     <div className="space-y-4">
                       {/* Vaso y Capacidad */}
