@@ -553,8 +553,25 @@ export default function Inventory() {
   const openEntryModal = (type, item) => {
     setEntryTarget({ type, item })
     setEntryQty('')
-    setEntryUnitType('base')
-    const defaultPrice = type === 'supply' ? (item.precio_unitario || 0) : 0
+    // Default to package presentation: prefer medium (bolsa/paquete), then large (saco/caja),
+    // only fall back to base (litro/unidad) if no packaging is configured.
+    const defaultUnitType = type === 'supply' && item.pack_medium_unit
+      ? 'medium'
+      : type === 'supply' && item.pack_large_unit
+        ? 'large'
+        : 'base'
+    setEntryUnitType(defaultUnitType)
+    // Set default price based on chosen unit type
+    let defaultPrice = 0
+    if (type === 'supply') {
+      if (defaultUnitType === 'medium') {
+        defaultPrice = (item.precio_unitario || 0) * (parseFloat(item.pack_medium_ratio) || 1)
+      } else if (defaultUnitType === 'large') {
+        defaultPrice = (item.precio_unitario || 0) * (parseFloat(item.pack_large_ratio) || 1)
+      } else {
+        defaultPrice = item.precio_unitario || 0
+      }
+    }
     setEntryUnitPrice(defaultPrice || '')
     setEntryTotalCost('')
     setEntryRecordExpense(type === 'supply')
