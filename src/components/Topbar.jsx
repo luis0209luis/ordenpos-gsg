@@ -8,7 +8,7 @@ export default function Topbar({ title, onMenuClick }) {
   const { theme, toggleTheme } = useTheme() || {}
   const isDark = theme === 'dark'
   
-  const { products = [], getEstimatedStock } = useInventory() || {}
+  const { products = [], getEstimatedStock, supplyItems = [], productRecipes = [] } = useInventory() || {}
   const { settings = {} } = useSettings() || {}
   const navigate = useNavigate()
 
@@ -59,6 +59,25 @@ export default function Topbar({ title, onMenuClick }) {
       return getEstimatedStock ? (getEstimatedStock(product.id) ?? 0) : 0
     }
     return product.stock_actual ?? 0
+  }
+
+  // Returns the supply item that is the bottleneck for a recipe product
+  const getBottleneckSupply = (product) => {
+    if (product.inventory_mode !== 'recipe') return null
+    const recipe = productRecipes.filter(r => r.product_id === product.id)
+    if (recipe.length === 0) return null
+    let bottleneck = null
+    let lowestRatio = Infinity
+    for (const r of recipe) {
+      const supply = supplyItems.find(s => s.id === r.supply_item_id)
+      if (!supply || r.cantidad === 0) continue
+      const ratio = supply.stock_actual / r.cantidad
+      if (ratio < lowestRatio) {
+        lowestRatio = ratio
+        bottleneck = { name: supply.nombre, stock: supply.stock_actual, needed: r.cantidad, unit: supply.unidad || 'unid.' }
+      }
+    }
+    return bottleneck
   }
 
   // Calculate notifications
@@ -192,11 +211,42 @@ export default function Topbar({ title, onMenuClick }) {
                             <p className={`text-sm font-semibold line-clamp-1 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
                               Stock bajo: {p.nombre}
                             </p>
-                            <p className={`text-xs mt-1 leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                              Solo quedan <span className={`font-bold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-                                {p.inventory_mode === 'recipe' ? `~${getProductStockLimit(p)}` : getProductStockLimit(p)}
-                              </span> unidades. Se recomienda reponer pronto.
-                            </p>
+                            {p.inventory_mode === 'recipe' ? (() => {
+                              const bn = getBottleneckSupply(p)
+                              return bn ? (
+                                <>
+                                  <p className={`text-xs mt-1 leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    Solo se pueden preparar{' '}
+                                    <span className={`font-bold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                                      ~{getProductStockLimit(p)}
+                                    </span>{' '}unidades.
+                                  </p>
+                                  <p className={`text-xs mt-0.5 flex items-center gap-1 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+                                    <span>⚠️</span>
+                                    <span>
+                                      Compra más <span className="font-bold">{bn.name}</span>
+                                      {' '}— solo quedan{' '}
+                                      <span className="font-bold">{bn.stock} {bn.unit}</span>
+                                      {' '}(necesitas {bn.needed} por unidad)
+                                    </span>
+                                  </p>
+                                </>
+                              ) : (
+                                <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                  Solo quedan{' '}
+                                  <span className={`font-bold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                                    ~{getProductStockLimit(p)}
+                                  </span>{' '}unidades estimadas.
+                                </p>
+                              )
+                            })() : (
+                              <p className={`text-xs mt-1 leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                Solo quedan{' '}
+                                <span className={`font-bold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                                  {getProductStockLimit(p)}
+                                </span>{' '}unidades en stock.
+                              </p>
+                            )}
                           </div>
                         </div>
                       ))}
