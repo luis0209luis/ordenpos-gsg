@@ -721,7 +721,11 @@ export function InventoryProvider({ children }) {
     ))
     if (!isValidUUID(bid)) return
     try {
-      await supabase.from('sales').update({ delivery_status: newStatus }).eq('id', saleId)
+      const updateData = { delivery_status: newStatus }
+      if (newStatus === 'Entregado') {
+        updateData.domiciliario_name = user?.name || user?.username || null
+      }
+      await supabase.from('sales').update(updateData).eq('id', saleId)
     } catch (e) {
       console.error(e)
     }
@@ -733,7 +737,11 @@ export function InventoryProvider({ children }) {
     ))
     if (!isValidUUID(bid)) return
     try {
-      await supabase.from('sales').update({ kitchen_status: newStatus }).eq('id', saleId)
+      const updateData = { kitchen_status: newStatus }
+      if (newStatus === 'ready') {
+        updateData.preparador_name = user?.name || user?.username || null
+      }
+      await supabase.from('sales').update(updateData).eq('id', saleId)
     } catch (e) {
       console.error(e)
     }
