@@ -3,6 +3,8 @@ import { Outlet, useLocation, Navigate } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import Topbar  from '../components/Topbar'
 import { useTheme, useSettings, useAuth } from '../context/AppContext'
+import { useCashRegister } from '../context/CashRegisterContext'
+import CashRegisterModal from '../components/CashRegisterModal'
 
 const PAGE_TITLES = {
   '/dashboard':  'Dashboard',
@@ -16,10 +18,13 @@ const PAGE_TITLES = {
   '/settings':   'Configuración',
 }
 
+const CASH_ROLES = ['admin', 'CAJERO']
+
 export default function AppLayout() {
   const { theme } = useTheme()
   const { user } = useAuth() || {}
   const { isConfigured, loading } = useSettings() || {}
+  const { currentRegister, loadingRegister } = useCashRegister() || {}
   const location  = useLocation()
   const isDark    = theme === 'dark'
   const title     = PAGE_TITLES[location.pathname] ?? 'ORDENPOS'
@@ -58,6 +63,10 @@ export default function AppLayout() {
     )
   }
 
+  // Determinar si el rol actual requiere caja
+  const requiresCash = user && CASH_ROLES.includes(user.role)
+  const needsOpenModal = requiresCash && !loadingRegister && !currentRegister && isConfigured
+
   return (
     <div className={`flex h-screen overflow-hidden ${isDark ? 'bg-dark-bg' : 'bg-light-surface'}`}>
       <Sidebar mobileOpen={mobileMenuOpen} setMobileOpen={setMobileMenuOpen} />
@@ -68,6 +77,9 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Modal de apertura de caja — obligatorio para cajeros y admins */}
+      {needsOpenModal && <CashRegisterModal mode="open" />}
     </div>
   )
 }

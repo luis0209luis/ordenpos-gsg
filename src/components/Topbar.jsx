@@ -1,16 +1,23 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useTheme, useSettings } from '../context/AppContext'
+import { useTheme, useSettings, useAuth } from '../context/AppContext'
 import { useInventory } from '../context/InventoryContext'
-import { Sun, Moon, Bell, Search, Menu, AlertTriangle, Package } from 'lucide-react'
+import { useCashRegister } from '../context/CashRegisterContext'
+import CashRegisterModal from './CashRegisterModal'
+import { Sun, Moon, Bell, Search, Menu, AlertTriangle, Package, Lock } from 'lucide-react'
 
 export default function Topbar({ title, onMenuClick }) {
   const { theme, toggleTheme } = useTheme() || {}
   const isDark = theme === 'dark'
+  const { user } = useAuth() || {}
+  const { currentRegister } = useCashRegister() || {}
+  const [showCloseModal, setShowCloseModal] = useState(false)
   
   const { products = [], getEstimatedStock, supplyItems = [], productRecipes = [] } = useInventory() || {}
   const { settings = {} } = useSettings() || {}
   const navigate = useNavigate()
+
+  const CASH_ROLES = ['admin', 'CAJERO']
 
   // Notifications State
   const [showNotifications, setShowNotifications] = useState(false)
@@ -264,6 +271,27 @@ export default function Topbar({ title, onMenuClick }) {
             )}
           </div>
 
+          {/* Cash Register indicator — solo para cajeros y admins */}
+          {user && CASH_ROLES.includes(user.role) && (
+            currentRegister ? (
+              <div className="hidden md:flex items-center gap-2">
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold
+                  ${isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  Caja · {new Date(currentRegister.opened_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+                <button
+                  onClick={() => setShowCloseModal(true)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all hover:scale-105
+                    ${isDark ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20' : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'}`}
+                >
+                  <Lock size={12} />
+                  Cerrar Caja
+                </button>
+              </div>
+            ) : null
+          )}
+
           {/* Theme toggle */}
           <button
             id="topbar-theme-toggle"
@@ -377,6 +405,11 @@ export default function Topbar({ title, onMenuClick }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de cierre de caja */}
+      {showCloseModal && (
+        <CashRegisterModal mode="close" onCancel={() => setShowCloseModal(false)} />
       )}
     </>
   )

@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { format, parseISO, addDays, addWeeks, addMonths, isToday, isThisWeek, isThisMonth, isThisYear } from 'date-fns'
 import * as XLSX from 'xlsx'
 import { useFinance } from '../context/FinanceContext'
 import { useInventory } from '../context/InventoryContext'
 import { useTheme } from '../context/AppContext'
-import { DollarSign, TrendingUp, TrendingDown, Users, Download, Plus, FileText, Briefcase, Calendar, CheckCircle2, Trash2, X, Edit } from 'lucide-react'
+import { useCashRegister } from '../context/CashRegisterContext'
+import { DollarSign, TrendingUp, TrendingDown, Users, Download, Plus, FileText, Briefcase, Calendar, CheckCircle2, Trash2, X, Edit, Archive } from 'lucide-react'
 
 export default function FinanceManager() {
   const { theme } = useTheme()
@@ -23,7 +24,23 @@ export default function FinanceManager() {
   } = useFinance() || {}
   const { salesHistory } = useInventory()
 
-  const [activeTab, setActiveTab] = useState('resumen') // resumen, egresos, nomina
+  const [activeTab, setActiveTab] = useState('resumen') // resumen, egresos, nomina, caja
+
+  // Cash Register History
+  const { fetchRegisterHistory, currentRegister } = useCashRegister() || {}
+  const [registerHistory, setRegisterHistory] = useState([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [cajaTimeFilter, setCajaTimeFilter] = useState('Mes')
+
+  useEffect(() => {
+    if (activeTab === 'caja' && fetchRegisterHistory) {
+      setLoadingHistory(true)
+      fetchRegisterHistory().then(data => {
+        setRegisterHistory(data || [])
+        setLoadingHistory(false)
+      })
+    }
+  }, [activeTab, fetchRegisterHistory, currentRegister])
   
   // Expense Form State
   const [expenseDesc, setExpenseDesc] = useState('')
@@ -361,17 +378,17 @@ export default function FinanceManager() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6 border-b border-gray-500/30 pb-2">
-        {['resumen', 'egresos', 'nomina'].map(tab => (
+      <div className="flex gap-2 mb-6 border-b border-gray-500/30 pb-2 overflow-x-auto">
+        {['resumen', 'egresos', 'nomina', 'caja'].map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 rounded-t-lg font-bold capitalize transition-colors
+            className={`px-4 py-2 rounded-t-lg font-bold capitalize transition-colors whitespace-nowrap
               ${activeTab === tab 
                 ? (isDark ? 'bg-dark-card text-gold-400 border-t-2 border-gold-500' : 'bg-white text-gold-600 border-t-2 border-gold-500')
                 : (isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900')}`}
           >
-            {tab === 'resumen' ? 'Resumen General' : tab === 'egresos' ? 'Gastos / Egresos' : 'Nómina & RH'}
+            {tab === 'resumen' ? 'Resumen General' : tab === 'egresos' ? 'Gastos / Egresos' : tab === 'nomina' ? 'Nómina & RH' : '🗃️ Historial de Caja'}
           </button>
         ))}
       </div>
@@ -649,6 +666,116 @@ export default function FinanceManager() {
               </div>
           </div>
 
+        </div>
+      )}
+
+      {/* Tab Content: Historial de Caja */}
+      {activeTab === 'caja' && (
+        <div>
+          {/* Filtros de fecha */}
+          <div className="flex items-center gap-2 mb-6">
+            <span className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Período:</span>
+            <div className={`flex items-center gap-1 p-1 rounded-xl border
+              ${isDark ? 'bg-dark-card border-dark-border' : 'bg-light-surface border-light-border'}`}>
+              {['Hoy', 'Semana', 'Mes', 'Todo'].map(f => (
+                <button key={f} onClick={() => setCajaTimeFilter(f)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all
+                    ${cajaTimeFilter === f
+                      ? 'bg-gold-gradient text-dark-bg shadow-gold-sm'
+                      : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}>
+                  {f}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className={`rounded-3xl border overflow-hidden ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
+            <div className={`px-6 py-4 border-b flex items-center gap-3 ${isDark ? 'border-dark-border bg-dark-card' : 'border-light-border bg-gray-50'}`}>
+              <Archive size={18} className="text-gold-500" />
+              <h3 className={`font-display font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>Cierres de Caja Registrados</h3>
+            </div>
+
+            {loadingHistory ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gold-500" />
+              </div>
+            ) : (() => {
+              const filtered = registerHistory.filter(r => {
+                if (cajaTimeFilter === 'Todo') return true
+                if (!r.closed_at) return false
+                const d = new Date(r.closed_at)
+                if (cajaTimeFilter === 'Hoy') return isToday(d)
+                if (cajaTimeFilter === 'Semana') return isThisWeek(d)
+                if (cajaTimeFilter === 'Mes') return isThisMonth(d)
+                return true
+              })
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className={`border-b text-xs uppercase tracking-wider
+                        ${isDark ? 'border-dark-border bg-dark-card text-gray-400' : 'border-light-border bg-gray-50 text-gray-500'}`}>
+                        <th className="px-4 py-3 font-semibold">Fecha Cierre</th>
+                        <th className="px-4 py-3 font-semibold">Abrió</th>
+                        <th className="px-4 py-3 font-semibold">Cerró</th>
+                        <th className="px-4 py-3 font-semibold text-right">Monto Inicial</th>
+                        <th className="px-4 py-3 font-semibold text-right">Sistema</th>
+                        <th className="px-4 py-3 font-semibold text-right">Físico</th>
+                        <th className="px-4 py-3 font-semibold text-right">Diferencia</th>
+                        <th className="px-4 py-3 font-semibold">Observaciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.length === 0 ? (
+                        <tr>
+                          <td colSpan="8" className={`px-6 py-12 text-center text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                            No hay cierres de caja en este período.
+                          </td>
+                        </tr>
+                      ) : filtered.map(r => {
+                        const diff = Number(r.difference) || 0
+                        return (
+                          <tr key={r.id} className={`border-b last:border-0 transition-colors
+                            ${isDark ? 'border-dark-border text-gray-300 hover:bg-dark-card' : 'border-light-border text-gray-700 hover:bg-gray-50'}`}>
+                            <td className="px-4 py-3">
+                              <p className={`font-semibold text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                {r.closed_at ? format(parseISO(r.closed_at), 'dd/MM/yyyy') : '—'}
+                              </p>
+                              <p className="text-[10px] text-gray-500">
+                                {r.opened_at ? format(parseISO(r.opened_at), 'HH:mm') : ''} – {r.closed_at ? format(parseISO(r.closed_at), 'HH:mm') : ''}
+                              </p>
+                            </td>
+                            <td className="px-4 py-3 text-xs font-medium">{r.opened_by || '—'}</td>
+                            <td className="px-4 py-3 text-xs font-medium">{r.closed_by || '—'}</td>
+                            <td className="px-4 py-3 text-right text-xs font-bold">
+                              ${Math.round(Number(r.opening_amount) || 0).toLocaleString('es-CO')}
+                            </td>
+                            <td className="px-4 py-3 text-right text-xs font-bold">
+                              ${Math.round(Number(r.closing_amount_system) || 0).toLocaleString('es-CO')}
+                            </td>
+                            <td className="px-4 py-3 text-right text-xs font-bold">
+                              ${Math.round(Number(r.closing_amount_physical) || 0).toLocaleString('es-CO')}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <span className={`px-2 py-1 rounded-lg text-xs font-bold
+                                ${diff >= 0
+                                  ? (isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-700')
+                                  : (isDark ? 'bg-red-500/10 text-red-400' : 'bg-red-50 text-red-700')}`}>
+                                {diff >= 0 ? '+' : ''}${Math.round(Math.abs(diff)).toLocaleString('es-CO')}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-xs text-gray-500 max-w-[160px] truncate">
+                              {r.notes || <span className="italic opacity-50">Sin notas</span>}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            })()}
+          </div>
         </div>
       )}
 

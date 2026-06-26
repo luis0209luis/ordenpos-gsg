@@ -3,6 +3,7 @@ import { AuthProvider, ThemeProvider, SettingsProvider, useAuth } from './contex
 import { InventoryProvider } from './context/InventoryContext'
 import { SubscriptionProvider } from './context/SubscriptionContext'
 import { FinanceProvider } from './context/FinanceContext'
+import { CashRegisterProvider } from './context/CashRegisterContext'
 
 function GlobalProviders({ children }) {
   return (
@@ -10,7 +11,9 @@ function GlobalProviders({ children }) {
       <InventoryProvider>
         <SubscriptionProvider>
           <FinanceProvider>
-            {children}
+            <CashRegisterProvider>
+              {children}
+            </CashRegisterProvider>
           </FinanceProvider>
         </SubscriptionProvider>
       </InventoryProvider>
