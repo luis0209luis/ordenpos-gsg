@@ -97,18 +97,32 @@ export default function Reports() {
   const actividadPorEmpleado = useMemo(() => {
     const grouped = {}
     filteredSales.forEach(sale => {
-      const nombre = sale.cajero_name || 'Sin registrar'
-      if (!grouped[nombre]) {
-        grouped[nombre] = { nombre, ventas: 0, total: 0, productos: {} }
+      const cajero = sale.cajero_name;
+      const preparador = sale.preparador_name;
+      const domiciliario = sale.domiciliario_name;
+
+      const candidates = [];
+      if (cajero) candidates.push(cajero);
+      if (preparador) candidates.push(preparador);
+      if (domiciliario) candidates.push(domiciliario);
+
+      if (candidates.length === 0) {
+        candidates.push('Sin registrar');
       }
-      grouped[nombre].ventas++
-      grouped[nombre].total += sale.total || 0
-      // Contar productos
-      (sale.items || []).forEach(item => {
-        const key = item.name || item.nombre
-        if (key) {
-          grouped[nombre].productos[key] = (grouped[nombre].productos[key] || 0) + (item.quantity || item.cantidad || 1)
+
+      candidates.forEach(nombre => {
+        if (!grouped[nombre]) {
+          grouped[nombre] = { nombre, ventas: 0, total: 0, productos: {} }
         }
+        grouped[nombre].ventas++
+        grouped[nombre].total += sale.total || 0
+        // Contar productos
+        (sale.items || []).forEach(item => {
+          const key = item.name || item.nombre
+          if (key) {
+            grouped[nombre].productos[key] = (grouped[nombre].productos[key] || 0) + (item.quantity || item.cantidad || 1)
+          }
+        })
       })
     })
     
@@ -133,22 +147,46 @@ export default function Reports() {
   const employeeNames = useMemo(() => {
     const names = new Set()
     filteredSales.forEach(sale => {
-      const name = sale.cajero_name || 'Sin registrar'
-      if (selectedRoleFilter === 'Todos' || getStaffRole(name) === selectedRoleFilter) {
-        names.add(name)
-      }
+      const cajero = sale.cajero_name;
+      const preparador = sale.preparador_name;
+      const domiciliario = sale.domiciliario_name;
+
+      const candidates = [];
+      if (cajero) candidates.push(cajero);
+      if (preparador) candidates.push(preparador);
+      if (domiciliario) candidates.push(domiciliario);
+      if (candidates.length === 0) candidates.push('Sin registrar');
+
+      candidates.forEach(name => {
+        if (selectedRoleFilter === 'Todos' || getStaffRole(name) === selectedRoleFilter) {
+          names.add(name)
+        }
+      })
     })
     return ['Todos', ...Array.from(names)]
   }, [filteredSales, selectedRoleFilter])
 
   const detailedSales = useMemo(() => {
     return filteredSales.filter(sale => {
-      const name = sale.cajero_name || 'Sin registrar'
-      if (selectedRoleFilter !== 'Todos' && getStaffRole(name) !== selectedRoleFilter) {
-        return false
+      const cajero = sale.cajero_name;
+      const preparador = sale.preparador_name;
+      const domiciliario = sale.domiciliario_name;
+
+      const candidates = [];
+      if (cajero) candidates.push(cajero);
+      if (preparador) candidates.push(preparador);
+      if (domiciliario) candidates.push(domiciliario);
+      if (candidates.length === 0) candidates.push('Sin registrar');
+
+      // 1. Role Filter check: At least one worker on the sale must match the role filter
+      if (selectedRoleFilter !== 'Todos') {
+        const hasWorkerWithRole = candidates.some(name => getStaffRole(name) === selectedRoleFilter);
+        if (!hasWorkerWithRole) return false;
       }
-      if (selectedEmployeeFilter === 'Todos') return true
-      return name === selectedEmployeeFilter
+
+      // 2. Employee Filter check: At least one worker on the sale must match the selected employee name
+      if (selectedEmployeeFilter === 'Todos') return true;
+      return candidates.includes(selectedEmployeeFilter);
     })
   }, [filteredSales, selectedEmployeeFilter, selectedRoleFilter])
 
