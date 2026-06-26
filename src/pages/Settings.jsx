@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTheme, useSettings, useAuth } from '../context/AppContext'
 import { Settings as SettingsIcon, Save, Building2, FileText, MapPin, Hash, DollarSign, Bell, Users, UserPlus, Trash2, KeyRound, ShieldCheck, CheckSquare, Square, Calendar, User, Pencil, Sparkles } from 'lucide-react'
@@ -43,6 +43,8 @@ export default function Settings() {
   const [customRoles, setCustomRoles] = useState([])
   const [newRoleName, setNewRoleName] = useState('')
   const [newRolePermissions, setNewRolePermissions] = useState([])
+  const customRolesSectionRef = useRef(null)
+  const newRoleNameInputRef = useRef(null)
 
   useEffect(() => {
     if (!user?.businessId) return
@@ -180,6 +182,11 @@ export default function Settings() {
 
   const handleRoleChange = (e) => {
     const role = e.target.value;
+    if (role === '__CREATE_NEW__') {
+      customRolesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setTimeout(() => newRoleNameInputRef.current?.focus(), 400)
+      return
+    }
     const isCustom = customRoles.find(r => r.name.toUpperCase() === role.toUpperCase());
     const permissions = isCustom ? isCustom.permissions : (defaultPermissions[role] || []);
     setNewStaff({ ...newStaff, role, permissions });
@@ -713,6 +720,7 @@ export default function Settings() {
                       {customRoles.map(r => (
                         <option key={r.id} value={r.name.toUpperCase()}>{r.name}</option>
                       ))}
+                      <option value="__CREATE_NEW__">+ Crear nuevo rol</option>
                     </select>
                   </div>
                 </div>
@@ -942,7 +950,7 @@ export default function Settings() {
 
         {/* Bloque: Roles Personalizados (Solo para Admin del local) */}
         {user?.role === 'admin' && (
-          <div className={`p-8 rounded-3xl shadow-soft-lg border mt-6
+          <div ref={customRolesSectionRef} className={`p-8 rounded-3xl shadow-soft-lg border mt-6
             ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
             <h3 className={`font-display font-bold text-lg mb-6 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
               <ShieldCheck size={20} className="text-gold-500" />
@@ -955,6 +963,7 @@ export default function Settings() {
                 <div className="space-y-1.5">
                   <label className={`text-xs font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Nombre del Rol</label>
                   <input 
+                    ref={newRoleNameInputRef}
                     type="text" 
                     value={newRoleName} 
                     onChange={e => setNewRoleName(e.target.value)} 
