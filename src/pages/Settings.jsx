@@ -720,7 +720,6 @@ export default function Settings() {
                       {customRoles.map(r => (
                         <option key={r.id} value={r.name.toUpperCase()}>{r.name}</option>
                       ))}
-                      <option value="__CREATE_NEW__">+ Crear nuevo rol</option>
                     </select>
                   </div>
                 </div>
