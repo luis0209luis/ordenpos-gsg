@@ -527,6 +527,9 @@ export default function Reports() {
               {filteredActividadPorEmpleado.slice(0, 3).map((emp, index) => {
                 const medals = ['🥇', '🥈', '🥉']
                 const borderColors = ['border-gold-500', 'border-gray-400', 'border-amber-700']
+                const role = getStaffRole(emp.nombre).toUpperCase()
+                const isPreparador = role === 'PREPARADOR'
+                const isDomiciliario = role === 'DOMICILIARIO'
                 return (
                   <div key={emp.nombre} className={`p-6 rounded-2xl border-2 flex items-center justify-between relative overflow-hidden group
                     ${borderColors[index]} ${isDark ? 'bg-dark-card' : 'bg-gray-50'}`}>
@@ -540,13 +543,31 @@ export default function Reports() {
                       </p>
                     </div>
                     <div className="text-right">
-                      <span className={`text-[10px] font-bold uppercase ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Ingresos Generados</span>
-                      <h4 className={`font-display font-bold text-xl ${isDark ? 'text-white' : 'text-gray-900'} mt-1`}>
-                        ${Math.round(emp.total).toLocaleString('es-CO')}
-                      </h4>
-                      <span className={`text-[11px] font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {emp.ventas} ventas
-                      </span>
+                      {isPreparador ? (
+                        <>
+                          <span className={`text-[10px] font-bold uppercase ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Órdenes Preparadas</span>
+                          <h4 className={`font-display font-bold text-2xl ${isDark ? 'text-white' : 'text-gray-900'} mt-1`}>
+                            {emp.ventas}
+                          </h4>
+                        </>
+                      ) : isDomiciliario ? (
+                        <>
+                          <span className={`text-[10px] font-bold uppercase ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Pedidos Entregados</span>
+                          <h4 className={`font-display font-bold text-2xl ${isDark ? 'text-white' : 'text-gray-900'} mt-1`}>
+                            {emp.ventas}
+                          </h4>
+                        </>
+                      ) : (
+                        <>
+                          <span className={`text-[10px] font-bold uppercase ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Ingresos Generados</span>
+                          <h4 className={`font-display font-bold text-xl ${isDark ? 'text-white' : 'text-gray-900'} mt-1`}>
+                            ${Math.round(emp.total).toLocaleString('es-CO')}
+                          </h4>
+                          <span className={`text-[11px] font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {emp.ventas} ventas
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 )
@@ -565,47 +586,58 @@ export default function Reports() {
               Resumen de Actividad
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredActividadPorEmpleado.map(emp => (
-                <div key={emp.nombre} className={`p-6 rounded-3xl shadow-soft-lg border relative overflow-hidden group transition-all hover:scale-[1.02]
-                  ${isDark ? 'bg-dark-surface border-dark-border hover:border-gold-500/30' : 'bg-white border-light-border hover:border-gold-500/30'}`}>
-                  <div className="absolute right-0 top-0 w-24 h-24 bg-gold-500/5 rounded-bl-full pointer-events-none" />
-                  
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h4 className={`font-display font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {emp.nombre}
-                      </h4>
-                      <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-gold-500/10 text-gold-400 border border-gold-500/20`}>
-                        {getStaffRole(emp.nombre)}
-                      </span>
+              {filteredActividadPorEmpleado.map(emp => {
+                const role = getStaffRole(emp.nombre).toUpperCase()
+                const isPreparador = role === 'PREPARADOR'
+                const isDomiciliario = role === 'DOMICILIARIO'
+                return (
+                  <div key={emp.nombre} className={`p-6 rounded-3xl shadow-soft-lg border relative overflow-hidden group transition-all hover:scale-[1.02]
+                    ${isDark ? 'bg-dark-surface border-dark-border hover:border-gold-500/30' : 'bg-white border-light-border hover:border-gold-500/30'}`}>
+                    <div className="absolute right-0 top-0 w-24 h-24 bg-gold-500/5 rounded-bl-full pointer-events-none" />
+                    
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h4 className={`font-display font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                          {emp.nombre}
+                        </h4>
+                        <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-gold-500/10 text-gold-400 border border-gold-500/20`}>
+                          {getStaffRole(emp.nombre)}
+                        </span>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="space-y-3 pt-2">
-                    <div className="flex justify-between text-sm">
-                      <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Dinero Generado:</span>
-                      <span className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        ${Math.round(emp.total).toLocaleString('es-CO')}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Ventas Realizadas:</span>
-                      <span className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {emp.ventas}
-                      </span>
-                    </div>
-                    <div className="border-t border-dashed border-gray-500/20 pt-3">
-                      <span className={`text-[10px] font-bold uppercase tracking-wider block ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Producto más vendido</span>
-                      <p className={`text-sm font-semibold mt-1 ${isDark ? 'text-gold-400' : 'text-gold-600'} line-clamp-1`}>
-                        {emp.mostSoldProduct}
-                      </p>
-                      <span className={`text-xs text-gray-500`}>
-                        Cantidad: {emp.mostSoldProductQty} unid.
-                      </span>
+                    <div className="space-y-3 pt-2">
+                      {!(isPreparador || isDomiciliario) && (
+                        <div className="flex justify-between text-sm">
+                          <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Dinero Generado:</span>
+                          <span className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            ${Math.round(emp.total).toLocaleString('es-CO')}
+                          </span>
+                        </div>
+                      )}
+                      
+                      <div className="flex justify-between text-sm">
+                        <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
+                          {isPreparador ? 'Órdenes Preparadas:' : isDomiciliario ? 'Pedidos Entregados:' : 'Ventas Realizadas:'}
+                        </span>
+                        <span className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                          {emp.ventas}
+                        </span>
+                      </div>
+                      
+                      <div className="border-t border-dashed border-gray-500/20 pt-3">
+                        <span className={`text-[10px] font-bold uppercase tracking-wider block ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Producto más vendido</span>
+                        <p className={`text-sm font-semibold mt-1 ${isDark ? 'text-gold-400' : 'text-gold-600'} line-clamp-1`}>
+                          {emp.mostSoldProduct}
+                        </p>
+                        <span className={`text-xs text-gray-500`}>
+                          Cantidad: {emp.mostSoldProductQty} unid.
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
               {filteredActividadPorEmpleado.length === 0 && (
                 <p className={`col-span-3 text-center py-12 text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                   No se encontraron registros de empleados en las ventas de este periodo.
