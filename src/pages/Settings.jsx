@@ -720,6 +720,7 @@ export default function Settings() {
                       {customRoles.map(r => (
                         <option key={r.id} value={r.name.toUpperCase()}>{r.name}</option>
                       ))}
+                      <option value="__CREATE_NEW__">+ Crear nuevo rol</option>
                     </select>
                   </div>
                 </div>
@@ -970,33 +971,6 @@ export default function Settings() {
                     className={`w-full px-3 py-2.5 rounded-xl outline-none border text-sm focus:border-gold-500
                     ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`} 
                   />
-                </div>
-
-                <div className="space-y-2 pt-2">
-                  <label className={`text-xs font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Permisos del Rol</label>
-                  <div className="grid grid-cols-1 gap-1.5">
-                    {availableModules.map(mod => {
-                      const isChecked = newRolePermissions.includes(mod.path);
-                      return (
-                        <button
-                          key={mod.path}
-                          type="button"
-                          onClick={() => {
-                            setNewRolePermissions(prev => 
-                              prev.includes(mod.path) ? prev.filter(p => p !== mod.path) : [...prev, mod.path]
-                            )
-                          }}
-                          className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-[11px] font-semibold transition-all border text-left
-                            ${isChecked 
-                              ? (isDark ? 'bg-gold-500/10 border-gold-500/30 text-gold-400' : 'bg-gold-50 border-gold-300 text-gold-700') 
-                              : (isDark ? 'bg-dark-surface border-dark-border text-gray-500 hover:text-gray-300' : 'bg-light-surface border-light-border text-gray-500 hover:text-gray-700')}`}
-                        >
-                          {isChecked ? <CheckSquare size={14} className="shrink-0" /> : <Square size={14} className="shrink-0" />}
-                          <span className="truncate">{mod.label}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
                 </div>
 
                 <button 
