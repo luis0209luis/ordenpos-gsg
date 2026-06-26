@@ -3,12 +3,13 @@ import { format, parseISO, addDays, addWeeks, addMonths, isToday, isThisWeek, is
 import * as XLSX from 'xlsx'
 import { useFinance } from '../context/FinanceContext'
 import { useInventory } from '../context/InventoryContext'
-import { useTheme } from '../context/AppContext'
+import { useTheme, useAuth } from '../context/AppContext'
 import { useCashRegister } from '../context/CashRegisterContext'
 import { DollarSign, TrendingUp, TrendingDown, Users, Download, Plus, FileText, Briefcase, Calendar, CheckCircle2, Trash2, X, Edit, Archive } from 'lucide-react'
 
 export default function FinanceManager() {
   const { theme } = useTheme()
+  const { user } = useAuth() || {}
   const isDark = theme === 'dark'
   
   const { 
@@ -27,10 +28,21 @@ export default function FinanceManager() {
   const [activeTab, setActiveTab] = useState('resumen') // resumen, egresos, nomina, caja
 
   // Cash Register History
-  const { fetchRegisterHistory, currentRegister } = useCashRegister() || {}
+  const { fetchRegisterHistory, currentRegister, deleteRegister } = useCashRegister() || {}
   const [registerHistory, setRegisterHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [cajaTimeFilter, setCajaTimeFilter] = useState('Mes')
+  const [confirmRegisterDeleteId, setConfirmRegisterDeleteId] = useState(null)
+
+  const handleDeleteRegister = async (id) => {
+    if (!deleteRegister) return
+    const res = await deleteRegister(id)
+    if (res.success) {
+      setRegisterHistory(prev => prev.filter(r => r.id !== id))
+    } else {
+      alert('Error al eliminar registro de caja: ' + res.error)
+    }
+  }
 
   useEffect(() => {
     if (activeTab === 'caja' && fetchRegisterHistory) {
@@ -723,12 +735,13 @@ export default function FinanceManager() {
                         <th className="px-4 py-3 font-semibold text-right">Físico</th>
                         <th className="px-4 py-3 font-semibold text-right">Diferencia</th>
                         <th className="px-4 py-3 font-semibold">Observaciones</th>
+                        {user?.role === 'admin' && <th className="px-4 py-3 font-semibold text-right">Acciones</th>}
                       </tr>
                     </thead>
                     <tbody>
                       {filtered.length === 0 ? (
                         <tr>
-                          <td colSpan="8" className={`px-6 py-12 text-center text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                          <td colSpan={user?.role === 'admin' ? "9" : "8"} className={`px-6 py-12 text-center text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                             No hay cierres de caja en este período.
                           </td>
                         </tr>
@@ -767,6 +780,21 @@ export default function FinanceManager() {
                             <td className="px-4 py-3 text-xs text-gray-500 max-w-[160px] truncate">
                               {r.notes || <span className="italic opacity-50">Sin notas</span>}
                             </td>
+                            {user?.role === 'admin' && (
+                              <td className="px-4 py-3 text-right">
+                                {confirmRegisterDeleteId === r.id ? (
+                                  <div className="flex items-center justify-end gap-1.5 animate-fade-in">
+                                    <span className="text-[10px] text-red-500 font-bold">¿Borrar?</span>
+                                    <button onClick={() => setConfirmRegisterDeleteId(null)} className="px-1.5 py-0.5 text-[10px] rounded bg-gray-500/10 text-gray-500 hover:bg-gray-500/20 font-bold">No</button>
+                                    <button onClick={() => { handleDeleteRegister(r.id); setConfirmRegisterDeleteId(null); }} className="px-1.5 py-0.5 text-[10px] rounded bg-red-600 text-white hover:bg-red-500 font-bold shadow-md">Sí</button>
+                                  </div>
+                                ) : (
+                                  <button onClick={() => setConfirmRegisterDeleteId(r.id)} className={`p-1 rounded-md transition-colors ${isDark ? 'hover:bg-red-500/20 text-red-400' : 'hover:bg-red-50 text-red-600'}`} title="Eliminar Registro">
+                                    <Trash2 size={14} />
+                                  </button>
+                                )}
+                              </td>
+                            )}
                           </tr>
                         )
                       })}

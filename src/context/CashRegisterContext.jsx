@@ -96,6 +96,19 @@ export function CashRegisterProvider({ children }) {
     }
   }
 
+  const deleteRegister = async (registerId) => {
+    try {
+      const { error } = await supabase
+        .from('cash_registers')
+        .delete()
+        .eq('id', registerId)
+      if (error) return { success: false, error: error.message }
+      return { success: true }
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  }
+
   return (
     <CashRegisterContext.Provider value={{
       currentRegister,
@@ -103,6 +116,7 @@ export function CashRegisterProvider({ children }) {
       openCashRegister,
       closeCashRegister,
       fetchRegisterHistory,
+      deleteRegister,
       reloadRegister: loadCurrentRegister
     }}>
       {children}
