@@ -625,15 +625,41 @@ export default function Reports() {
                         </span>
                       </div>
                       
-                      <div className="border-t border-dashed border-gray-500/20 pt-3">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider block ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Producto más vendido</span>
-                        <p className={`text-sm font-semibold mt-1 ${isDark ? 'text-gold-400' : 'text-gold-600'} line-clamp-1`}>
-                          {emp.mostSoldProduct}
-                        </p>
-                        <span className={`text-xs text-gray-500`}>
-                          Cantidad: {emp.mostSoldProductQty} unid.
-                        </span>
-                      </div>
+                      {isPreparador ? (
+                        <div className="border-t border-dashed border-gray-500/20 pt-3">
+                          <span className={`text-[10px] font-bold uppercase tracking-wider block ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Plato más preparado</span>
+                          <p className={`text-sm font-semibold mt-1 ${isDark ? 'text-gold-400' : 'text-gold-600'} line-clamp-1`}>
+                            {emp.mostSoldProduct !== 'Ninguno' ? emp.mostSoldProduct : '—'}
+                          </p>
+                          {emp.mostSoldProductQty > 0 && (
+                            <span className={`text-xs text-gray-500`}>
+                              {emp.mostSoldProductQty} veces preparado
+                            </span>
+                          )}
+                        </div>
+                      ) : isDomiciliario ? (
+                        <div className="border-t border-dashed border-gray-500/20 pt-3">
+                          <span className={`text-[10px] font-bold uppercase tracking-wider block ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Artículo más entregado</span>
+                          <p className={`text-sm font-semibold mt-1 ${isDark ? 'text-gold-400' : 'text-gold-600'} line-clamp-1`}>
+                            {emp.mostSoldProduct !== 'Ninguno' ? emp.mostSoldProduct : '—'}
+                          </p>
+                          {emp.mostSoldProductQty > 0 && (
+                            <span className={`text-xs text-gray-500`}>
+                              {emp.mostSoldProductQty} veces entregado
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="border-t border-dashed border-gray-500/20 pt-3">
+                          <span className={`text-[10px] font-bold uppercase tracking-wider block ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Producto más vendido</span>
+                          <p className={`text-sm font-semibold mt-1 ${isDark ? 'text-gold-400' : 'text-gold-600'} line-clamp-1`}>
+                            {emp.mostSoldProduct}
+                          </p>
+                          <span className={`text-xs text-gray-500`}>
+                            Cantidad: {emp.mostSoldProductQty} unid.
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
@@ -652,7 +678,7 @@ export default function Reports() {
             
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <h3 className={`font-display font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                Registro de Ventas por Empleado
+                Registro de acciones por empleado
               </h3>
               
               <div className="flex items-center gap-2">
