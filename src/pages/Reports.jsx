@@ -17,6 +17,7 @@ export default function Reports() {
   const { products = [], salesHistory = [], deleteSale } = useInventory() || {}
   const [timeFilter, setTimeFilter] = useState('Hoy')
   const [selectedEmployeeFilter, setSelectedEmployeeFilter] = useState('Todos')
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState('Todos')
 
   const handleDeleteSale = (id) => {
     if (confirm('¿Estás seguro? Esta acción afectará el inventario y las estadísticas diarias.')) {
@@ -132,18 +133,37 @@ export default function Reports() {
   const employeeNames = useMemo(() => {
     const names = new Set()
     filteredSales.forEach(sale => {
-      names.add(sale.cajero_name || 'Sin registrar')
+      const name = sale.cajero_name || 'Sin registrar'
+      if (selectedRoleFilter === 'Todos' || getStaffRole(name) === selectedRoleFilter) {
+        names.add(name)
+      }
     })
     return ['Todos', ...Array.from(names)]
-  }, [filteredSales])
+  }, [filteredSales, selectedRoleFilter])
 
   const detailedSales = useMemo(() => {
     return filteredSales.filter(sale => {
-      if (selectedEmployeeFilter === 'Todos') return true
       const name = sale.cajero_name || 'Sin registrar'
+      if (selectedRoleFilter !== 'Todos' && getStaffRole(name) !== selectedRoleFilter) {
+        return false
+      }
+      if (selectedEmployeeFilter === 'Todos') return true
       return name === selectedEmployeeFilter
     })
-  }, [filteredSales, selectedEmployeeFilter])
+  }, [filteredSales, selectedEmployeeFilter, selectedRoleFilter])
+
+  const uniqueRoles = useMemo(() => {
+    const roles = new Set()
+    actividadPorEmpleado.forEach(emp => {
+      roles.add(getStaffRole(emp.nombre))
+    })
+    return ['Todos', ...Array.from(roles)]
+  }, [actividadPorEmpleado])
+
+  const filteredActividadPorEmpleado = useMemo(() => {
+    if (selectedRoleFilter === 'Todos') return actividadPorEmpleado
+    return actividadPorEmpleado.filter(emp => getStaffRole(emp.nombre) === selectedRoleFilter)
+  }, [actividadPorEmpleado, selectedRoleFilter])
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -436,6 +456,29 @@ export default function Reports() {
         </>
       ) : (
         <div className="space-y-6">
+          {/* Filtro de Roles Pills */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <span className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Filtrar por Rol:</span>
+            <div className={`flex flex-wrap items-center gap-1.5 p-1 rounded-2xl border
+              ${isDark ? 'bg-dark-card border-dark-border' : 'bg-light-surface border-light-border'}`}>
+              {uniqueRoles.map(role => (
+                <button
+                  key={role}
+                  onClick={() => {
+                    setSelectedRoleFilter(role)
+                    setSelectedEmployeeFilter('Todos')
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all
+                    ${selectedRoleFilter === role
+                      ? 'bg-gold-gradient text-dark-bg shadow-gold-sm'
+                      : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
+                >
+                  {role}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* C) Ranking: Top 3 Empleados por Ingresos */}
           <div className={`p-6 rounded-3xl shadow-soft-lg border
             ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
@@ -443,7 +486,7 @@ export default function Reports() {
               Podio de Rendimiento (Top 3 Empleados)
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {actividadPorEmpleado.slice(0, 3).map((emp, index) => {
+              {filteredActividadPorEmpleado.slice(0, 3).map((emp, index) => {
                 const medals = ['🥇', '🥈', '🥉']
                 const borderColors = ['border-gold-500', 'border-gray-400', 'border-amber-700']
                 return (
@@ -470,7 +513,7 @@ export default function Reports() {
                   </div>
                 )
               })}
-              {actividadPorEmpleado.length === 0 && (
+              {filteredActividadPorEmpleado.length === 0 && (
                 <p className={`col-span-3 text-center py-6 text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                   No hay datos de ventas disponibles para el ranking.
                 </p>
@@ -484,7 +527,7 @@ export default function Reports() {
               Resumen de Actividad
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {actividadPorEmpleado.map(emp => (
+              {filteredActividadPorEmpleado.map(emp => (
                 <div key={emp.nombre} className={`p-6 rounded-3xl shadow-soft-lg border relative overflow-hidden group transition-all hover:scale-[1.02]
                   ${isDark ? 'bg-dark-surface border-dark-border hover:border-gold-500/30' : 'bg-white border-light-border hover:border-gold-500/30'}`}>
                   <div className="absolute right-0 top-0 w-24 h-24 bg-gold-500/5 rounded-bl-full pointer-events-none" />
@@ -525,7 +568,7 @@ export default function Reports() {
                   </div>
                 </div>
               ))}
-              {actividadPorEmpleado.length === 0 && (
+              {filteredActividadPorEmpleado.length === 0 && (
                 <p className={`col-span-3 text-center py-12 text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                   No se encontraron registros de empleados en las ventas de este periodo.
                 </p>
