@@ -55,7 +55,7 @@ export default function Topbar({ title, onMenuClick }) {
   }, [showSearch])
 
   const getProductStockLimit = (product) => {
-    if (product.inventory_mode === 'recipe') {
+    if (product.inventory_mode === 'recipe' || product.inventory_mode === 'blend') {
       return getEstimatedStock ? (getEstimatedStock(product.id) ?? 0) : 0
     }
     return product.stock_actual ?? 0
@@ -239,7 +239,14 @@ export default function Topbar({ title, onMenuClick }) {
                                   </span>{' '}unidades estimadas.
                                 </p>
                               )
-                            })() : (
+                            })() : p.inventory_mode === 'blend' ? (
+                              <p className={`text-xs mt-1 leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                Solo se pueden preparar{' '}
+                                <span className={`font-bold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                                  ~{getProductStockLimit(p)}
+                                </span>{' '}unidades estimadas.
+                              </p>
+                            ) : (
                               <p className={`text-xs mt-1 leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                 Solo quedan{' '}
                                 <span className={`font-bold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
