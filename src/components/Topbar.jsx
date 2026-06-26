@@ -17,7 +17,7 @@ export default function Topbar({ title, onMenuClick }) {
   const { settings = {} } = useSettings() || {}
   const navigate = useNavigate()
 
-  const CASH_ROLES = ['admin', 'CAJERO']
+  const CASH_ROLES = ['CAJERO']
 
   // Notifications State
   const [showNotifications, setShowNotifications] = useState(false)

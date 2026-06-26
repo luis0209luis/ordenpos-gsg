@@ -18,7 +18,7 @@ const PAGE_TITLES = {
   '/settings':   'Configuración',
 }
 
-const CASH_ROLES = ['admin', 'CAJERO']
+const CASH_ROLES = ['CAJERO']
 
 export default function AppLayout() {
   const { theme } = useTheme()
