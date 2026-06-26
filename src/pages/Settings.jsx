@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTheme, useSettings, useAuth } from '../context/AppContext'
 import { Settings as SettingsIcon, Save, Building2, FileText, MapPin, Hash, DollarSign, Bell, Users, UserPlus, Trash2, KeyRound, ShieldCheck, CheckSquare, Square, Calendar, User, Pencil, Sparkles } from 'lucide-react'
+import { supabase } from '../lib/supabase'
 
 const defaultPermissions = {
   CAJERO: ['/pos', '/deliveries', '/inventory'],
@@ -37,6 +38,24 @@ export default function Settings() {
   const [isAddingStaff, setIsAddingStaff] = useState(false)
   const [staffError, setStaffError] = useState('')
   const [staffSuccess, setStaffSuccess] = useState('')
+  
+  // Custom roles state
+  const [customRoles, setCustomRoles] = useState([])
+  const [newRoleName, setNewRoleName] = useState('')
+  const [newRolePermissions, setNewRolePermissions] = useState([])
+
+  useEffect(() => {
+    if (!user?.businessId) return
+    const loadCustomRoles = async () => {
+      const { data, error } = await supabase
+        .from('custom_roles')
+        .select('*')
+        .eq('business_id', user.businessId)
+        .order('created_at', { ascending: true })
+      if (data) setCustomRoles(data)
+    }
+    loadCustomRoles()
+  }, [user?.businessId])
 
   // Admin password state
   const [adminPass, setAdminPass] = useState({ newPass: '', confirmPass: '' })
@@ -161,7 +180,47 @@ export default function Settings() {
 
   const handleRoleChange = (e) => {
     const role = e.target.value;
-    setNewStaff({ ...newStaff, role, permissions: defaultPermissions[role] || [] });
+    const isCustom = customRoles.find(r => r.name.toUpperCase() === role.toUpperCase());
+    const permissions = isCustom ? isCustom.permissions : (defaultPermissions[role] || []);
+    setNewStaff({ ...newStaff, role, permissions });
+  }
+
+  const handleAddCustomRole = async () => {
+    if (!newRoleName.trim() || !user?.businessId) return
+    const nameUpper = newRoleName.trim().toUpperCase()
+    if (['CAJERO', 'DOMICILIARIO', 'PREPARADOR', 'ADMIN'].includes(nameUpper)) {
+      alert('Este nombre de rol está reservado.')
+      return
+    }
+    const { data, error } = await supabase
+      .from('custom_roles')
+      .insert({
+        business_id: user.businessId,
+        name: newRoleName.trim(),
+        permissions: newRolePermissions
+      })
+      .select()
+      .single()
+    if (error) {
+      alert('Error al crear rol: ' + error.message)
+    } else if (data) {
+      setCustomRoles(prev => [...prev, data])
+      setNewRoleName('')
+      setNewRolePermissions([])
+    }
+  }
+
+  const handleDeleteCustomRole = async (id) => {
+    if (!window.confirm('¿Está seguro de que desea eliminar este rol?')) return
+    const { error } = await supabase
+      .from('custom_roles')
+      .delete()
+      .eq('id', id)
+    if (error) {
+      alert('Error al eliminar rol: ' + error.message)
+    } else {
+      setCustomRoles(prev => prev.filter(r => r.id !== id))
+    }
   }
 
   const handleTogglePermission = (path) => {
@@ -643,16 +702,19 @@ export default function Settings() {
                   <input type="password" value={newStaff.password} onChange={e => setNewStaff({ ...newStaff, password: e.target.value })} placeholder="Contraseña segura"
                     className={`w-full px-3 py-2.5 rounded-xl outline-none border text-sm focus:border-gold-500
                     ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`} />
-                </div>
-                <div className="space-y-1.5">
-                  <label className={`text-xs font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Perfil Sugerido (Rol)</label>
-                  <select value={newStaff.role} onChange={handleRoleChange}
-                    className={`w-full px-3 py-2.5 rounded-xl outline-none border text-sm focus:border-gold-500 appearance-none
-                    ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}>
-                    <option value="CAJERO">Cajero</option>
-                    <option value="DOMICILIARIO">Domiciliario</option>
-                    <option value="PREPARADOR">Preparador</option>
-                  </select>
+                  <div className="space-y-1.5">
+                    <label className={`text-xs font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Perfil Sugerido (Rol)</label>
+                    <select value={newStaff.role} onChange={handleRoleChange}
+                      className={`w-full px-3 py-2.5 rounded-xl outline-none border text-sm focus:border-gold-500 appearance-none
+                      ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}>
+                      <option value="CAJERO">Cajero</option>
+                      <option value="DOMICILIARIO">Domiciliario</option>
+                      <option value="PREPARADOR">Preparador</option>
+                      {customRoles.map(r => (
+                        <option key={r.id} value={r.name.toUpperCase()}>{r.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 
                 <div className="space-y-2 pt-2">
@@ -870,6 +932,123 @@ export default function Settings() {
                           )}
                         </React.Fragment>
                       ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bloque: Roles Personalizados (Solo para Admin del local) */}
+        {user?.role === 'admin' && (
+          <div className={`p-8 rounded-3xl shadow-soft-lg border mt-6
+            ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
+            <h3 className={`font-display font-bold text-lg mb-6 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              <ShieldCheck size={20} className="text-gold-500" />
+              Roles Personalizados
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Formulario de Creación de Rol */}
+              <div className="md:col-span-1 space-y-4">
+                <div className="space-y-1.5">
+                  <label className={`text-xs font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Nombre del Rol</label>
+                  <input 
+                    type="text" 
+                    value={newRoleName} 
+                    onChange={e => setNewRoleName(e.target.value)} 
+                    placeholder="Ej. Bartender"
+                    className={`w-full px-3 py-2.5 rounded-xl outline-none border text-sm focus:border-gold-500
+                    ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`} 
+                  />
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <label className={`text-xs font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Permisos del Rol</label>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {availableModules.map(mod => {
+                      const isChecked = newRolePermissions.includes(mod.path);
+                      return (
+                        <button
+                          key={mod.path}
+                          type="button"
+                          onClick={() => {
+                            setNewRolePermissions(prev => 
+                              prev.includes(mod.path) ? prev.filter(p => p !== mod.path) : [...prev, mod.path]
+                            )
+                          }}
+                          className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-[11px] font-semibold transition-all border text-left
+                            ${isChecked 
+                              ? (isDark ? 'bg-gold-500/10 border-gold-500/30 text-gold-400' : 'bg-gold-50 border-gold-300 text-gold-700') 
+                              : (isDark ? 'bg-dark-surface border-dark-border text-gray-500 hover:text-gray-300' : 'bg-light-surface border-light-border text-gray-500 hover:text-gray-700')}`}
+                        >
+                          {isChecked ? <CheckSquare size={14} className="shrink-0" /> : <Square size={14} className="shrink-0" />}
+                          <span className="truncate">{mod.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <button 
+                  type="button" 
+                  onClick={handleAddCustomRole} 
+                  disabled={!newRoleName.trim()}
+                  className="w-full py-2.5 mt-2 rounded-xl text-xs font-bold uppercase flex items-center justify-center gap-2 bg-gold-gradient text-dark-bg disabled:opacity-50 transition-all hover:scale-[1.02]"
+                >
+                  <UserPlus size={16} />
+                  Crear Rol
+                </button>
+              </div>
+
+              {/* Lista de Roles Creados */}
+              <div className="md:col-span-2">
+                <div className={`rounded-xl border overflow-hidden ${isDark ? 'border-dark-border' : 'border-light-border'}`}>
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className={`border-b ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-200'}`}>
+                        <th className={`px-4 py-3 font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Nombre del Rol</th>
+                        <th className={`px-4 py-3 font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Permisos asignados</th>
+                        <th className="px-4 py-3 text-center">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {customRoles.length === 0 ? (
+                        <tr>
+                          <td colSpan="3" className={`px-4 py-8 text-center text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                            No hay roles personalizados creados aún.
+                          </td>
+                        </tr>
+                      ) : (
+                        customRoles.map(role => (
+                          <tr key={role.id} className={`border-b last:border-0 ${isDark ? 'border-dark-border text-gray-400' : 'border-gray-200 text-gray-600'}`}>
+                            <td className="px-4 py-3 font-medium">{role.name}</td>
+                            <td className="px-4 py-3 text-xs">
+                              <div className="flex flex-wrap gap-1">
+                                {(role.permissions || []).map(path => {
+                                  const mod = availableModules.find(m => m.path === path);
+                                  return (
+                                    <span key={path} className={`px-2 py-0.5 rounded text-[9px] font-semibold ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                                      {mod ? mod.label : path}
+                                    </span>
+                                  )
+                                })}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <button 
+                                type="button" 
+                                onClick={() => handleDeleteCustomRole(role.id)} 
+                                className="p-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors" 
+                                title="Eliminar Rol"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>

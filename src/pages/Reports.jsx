@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { useTheme, useAuth } from '../context/AppContext'
+import { useTheme, useAuth, useSettings } from '../context/AppContext'
 import { useInventory } from '../context/InventoryContext'
 import { getPaddedTurnNumber } from '../utils/turnHelper'
 import { isToday, isThisWeek, isThisMonth, isThisYear, parseISO, format } from 'date-fns'
@@ -12,9 +12,11 @@ import { TrendingUp, Package, DollarSign } from 'lucide-react'
 export default function Reports() {
   const { theme } = useTheme() || {}
   const { user } = useAuth() || {}
+  const { staff = [] } = useSettings() || {}
   const isDark = theme === 'dark'
   const { products = [], salesHistory = [], deleteSale } = useInventory() || {}
   const [timeFilter, setTimeFilter] = useState('Hoy')
+  const [selectedEmployeeFilter, setSelectedEmployeeFilter] = useState('Todos')
 
   const handleDeleteSale = (id) => {
     if (confirm('¿Estás seguro? Esta acción afectará el inventario y las estadísticas diarias.')) {
@@ -84,6 +86,65 @@ export default function Reports() {
     return breakdown
   }, [filteredSales])
 
+  const getStaffRole = (cajeroName) => {
+    const member = (staff || []).find(s => s.name === cajeroName || s.username === cajeroName);
+    if (member) return member.role;
+    if (cajeroName === 'admin' || cajeroName === 'Admin') return 'Administrador';
+    return 'Personal';
+  }
+
+  const actividadPorEmpleado = useMemo(() => {
+    const grouped = {}
+    filteredSales.forEach(sale => {
+      const nombre = sale.cajero_name || 'Sin registrar'
+      if (!grouped[nombre]) {
+        grouped[nombre] = { nombre, ventas: 0, total: 0, productos: {} }
+      }
+      grouped[nombre].ventas++
+      grouped[nombre].total += sale.total || 0
+      // Contar productos
+      (sale.items || []).forEach(item => {
+        const key = item.name || item.nombre
+        if (key) {
+          grouped[nombre].productos[key] = (grouped[nombre].productos[key] || 0) + (item.quantity || item.cantidad || 1)
+        }
+      })
+    })
+    
+    return Object.values(grouped).map(emp => {
+      // Find most sold product
+      let mostSoldProduct = 'Ninguno'
+      let maxQty = 0
+      Object.entries(emp.productos).forEach(([prodName, qty]) => {
+        if (qty > maxQty) {
+          maxQty = qty
+          mostSoldProduct = prodName
+        }
+      })
+      return {
+        ...emp,
+        mostSoldProduct,
+        mostSoldProductQty: maxQty
+      }
+    }).sort((a, b) => b.total - a.total)
+  }, [filteredSales])
+
+  const employeeNames = useMemo(() => {
+    const names = new Set()
+    filteredSales.forEach(sale => {
+      names.add(sale.cajero_name || 'Sin registrar')
+    })
+    return ['Todos', ...Array.from(names)]
+  }, [filteredSales])
+
+  const detailedSales = useMemo(() => {
+    return filteredSales.filter(sale => {
+      if (selectedEmployeeFilter === 'Todos') return true
+      const name = sale.cajero_name || 'Sin registrar'
+      return name === selectedEmployeeFilter
+    })
+  }, [filteredSales, selectedEmployeeFilter])
+
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
@@ -119,7 +180,7 @@ export default function Reports() {
 
         <div className={`flex items-center gap-1 p-1 rounded-xl border
           ${isDark ? 'bg-dark-card border-dark-border' : 'bg-light-surface border-light-border'}`}>
-          {['Hoy', 'Semana', 'Mes', 'Año'].map(filter => (
+          {['Hoy', 'Semana', 'Mes', 'Año', 'Actividad del Personal'].map(filter => (
             <button
               key={filter}
               onClick={() => setTimeFilter(filter)}
@@ -134,244 +195,437 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className={`p-6 rounded-3xl shadow-soft-lg border relative overflow-hidden group
-          ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
-          <div className="absolute right-0 top-0 w-32 h-32 bg-gold-500/5 rounded-bl-full pointer-events-none group-hover:scale-110 transition-transform" />
-          <div className="flex items-center gap-4 mb-4">
-            <div className={`p-3 rounded-2xl ${isDark ? 'bg-dark-card' : 'bg-light-surface'}`}>
-              <DollarSign size={24} className="text-gold-500" />
+      {timeFilter !== 'Actividad del Personal' ? (
+        <>
+          {/* KPI Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className={`p-6 rounded-3xl shadow-soft-lg border relative overflow-hidden group
+              ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
+              <div className="absolute right-0 top-0 w-32 h-32 bg-gold-500/5 rounded-bl-full pointer-events-none group-hover:scale-110 transition-transform" />
+              <div className="flex items-center gap-4 mb-4">
+                <div className={`p-3 rounded-2xl ${isDark ? 'bg-dark-card' : 'bg-light-surface'}`}>
+                  <DollarSign size={24} className="text-gold-500" />
+                </div>
+                <div>
+                  <p className={`text-sm font-semibold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Ingresos Totales</p>
+                  <h3 className={`font-display font-bold text-2xl ${isDark ? 'text-white' : 'text-gray-900'}`}>${Math.round(totalIngresos).toLocaleString('es-CO')}</h3>
+                </div>
+              </div>
             </div>
-            <div>
-              <p className={`text-sm font-semibold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Ingresos Totales</p>
-              <h3 className={`font-display font-bold text-2xl ${isDark ? 'text-white' : 'text-gray-900'}`}>${Math.round(totalIngresos).toLocaleString('es-CO')}</h3>
+            
+            <div className={`p-6 rounded-3xl shadow-soft-lg border relative overflow-hidden group
+              ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
+              <div className="absolute right-0 top-0 w-32 h-32 bg-emerald-500/5 rounded-bl-full pointer-events-none group-hover:scale-110 transition-transform" />
+              <div className="flex items-center gap-4 mb-4">
+                <div className={`p-3 rounded-2xl ${isDark ? 'bg-dark-card' : 'bg-light-surface'}`}>
+                  <TrendingUp size={24} className="text-emerald-500" />
+                </div>
+                <div>
+                  <p className={`text-sm font-semibold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Órdenes Completadas</p>
+                  <h3 className={`font-display font-bold text-2xl ${isDark ? 'text-white' : 'text-gray-900'}`}>{totalOrdenes}</h3>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-        
-        <div className={`p-6 rounded-3xl shadow-soft-lg border relative overflow-hidden group
-          ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
-          <div className="absolute right-0 top-0 w-32 h-32 bg-emerald-500/5 rounded-bl-full pointer-events-none group-hover:scale-110 transition-transform" />
-          <div className="flex items-center gap-4 mb-4">
-            <div className={`p-3 rounded-2xl ${isDark ? 'bg-dark-card' : 'bg-light-surface'}`}>
-              <TrendingUp size={24} className="text-emerald-500" />
-            </div>
-            <div>
-              <p className={`text-sm font-semibold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Órdenes Completadas</p>
-              <h3 className={`font-display font-bold text-2xl ${isDark ? 'text-white' : 'text-gray-900'}`}>{totalOrdenes}</h3>
-            </div>
-          </div>
-        </div>
 
-        <div className={`p-6 rounded-3xl shadow-soft-lg border relative overflow-hidden group
-          ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
-          <div className="absolute right-0 top-0 w-32 h-32 bg-purple-500/5 rounded-bl-full pointer-events-none group-hover:scale-110 transition-transform" />
-          <div className="flex items-center gap-4 mb-4">
-            <div className={`p-3 rounded-2xl ${isDark ? 'bg-dark-card' : 'bg-light-surface'}`}>
-              <Package size={24} className="text-purple-500" />
-            </div>
-            <div>
-              <p className={`text-sm font-semibold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Total en Inventario</p>
-              <h3 className={`font-display font-bold text-2xl ${isDark ? 'text-white' : 'text-gray-900'}`}>{(products || []).length} Items</h3>
+            <div className={`p-6 rounded-3xl shadow-soft-lg border relative overflow-hidden group
+              ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
+              <div className="absolute right-0 top-0 w-32 h-32 bg-purple-500/5 rounded-bl-full pointer-events-none group-hover:scale-110 transition-transform" />
+              <div className="flex items-center gap-4 mb-4">
+                <div className={`p-3 rounded-2xl ${isDark ? 'bg-dark-card' : 'bg-light-surface'}`}>
+                  <Package size={24} className="text-purple-500" />
+                </div>
+                <div>
+                  <p className={`text-sm font-semibold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Total en Inventario</p>
+                  <h3 className={`font-display font-bold text-2xl ${isDark ? 'text-white' : 'text-gray-900'}`}>{(products || []).length} Items</h3>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Arqueo de Caja / Cierre de Turno */}
-      <div className={`p-6 rounded-3xl shadow-soft-lg border
-        ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
-        <div className="flex items-center justify-between mb-4 border-b pb-3 border-dashed border-gray-500/20">
-          <div>
-            <h3 className={`font-display font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              Arqueo de Caja (Cierre por Medio de Pago)
+          {/* Arqueo de Caja / Cierre de Turno */}
+          <div className={`p-6 rounded-3xl shadow-soft-lg border
+            ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
+            <div className="flex items-center justify-between mb-4 border-b pb-3 border-dashed border-gray-500/20">
+              <div>
+                <h3 className={`font-display font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  Arqueo de Caja (Cierre por Medio de Pago)
+                </h3>
+                <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                  Resumen de caja acumulado en el periodo: {timeFilter}.
+                </p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className={`p-4 rounded-2xl border ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-100'}`}>
+                <span className="text-2xl">💵</span>
+                <p className={`text-xs font-semibold mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Efectivo</p>
+                <h4 className={`font-display font-bold text-xl mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  ${Math.round(paymentBreakdown.Efectivo).toLocaleString('es-CO')}
+                </h4>
+              </div>
+
+              <div className={`p-4 rounded-2xl border ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-100'}`}>
+                <span className="text-2xl">📱</span>
+                <p className={`text-xs font-semibold mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Nequi</p>
+                <h4 className={`font-display font-bold text-xl mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  ${Math.round(paymentBreakdown.Nequi).toLocaleString('es-CO')}
+                </h4>
+              </div>
+
+              <div className={`p-4 rounded-2xl border ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-100'}`}>
+                <span className="text-2xl">🏦</span>
+                <p className={`text-xs font-semibold mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Transferencia</p>
+                <h4 className={`font-display font-bold text-xl mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  ${Math.round(paymentBreakdown.Transferencia).toLocaleString('es-CO')}
+                </h4>
+              </div>
+
+              <div className={`p-4 rounded-2xl border ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-100'}`}>
+                <span className="text-2xl">📝</span>
+                <p className={`text-xs font-semibold mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Otros / Sin espec.</p>
+                <h4 className={`font-display font-bold text-xl mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  ${Math.round(paymentBreakdown.Otro).toLocaleString('es-CO')}
+                </h4>
+              </div>
+            </div>
+          </div>
+
+          {/* Main Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Sales Chart */}
+            <div className={`p-6 rounded-3xl shadow-soft-lg border flex flex-col h-[400px]
+              ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
+              <h3 className={`font-display font-bold text-lg mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Tendencia de Ventas ({timeFilter})
+              </h3>
+              <div className="flex-1 w-full">
+                {chartData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#ffd700" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#ffd700" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="name" stroke={isDark ? '#333' : '#e5e5e5'} tick={{ fill: isDark ? '#9ca3af' : '#6b7280', fontSize: 12 }} />
+                      <YAxis stroke={isDark ? '#333' : '#e5e5e5'} tick={{ fill: isDark ? '#9ca3af' : '#6b7280', fontSize: 12 }} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#1f1f1f' : '#f3f4f6'} vertical={false} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Area type="monotone" name="Ventas" dataKey="sales" stroke="#ffd700" strokeWidth={3} fillOpacity={1} fill="url(#colorSales)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-gray-500 font-medium">No hay ventas en este periodo.</div>
+                )}
+              </div>
+            </div>
+
+            {/* Top Products Chart */}
+            <div className={`p-6 rounded-3xl shadow-soft-lg border flex flex-col h-[400px]
+              ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
+              <h3 className={`font-display font-bold text-lg mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Productos Estrella (Ingresos)
+              </h3>
+              <div className="flex-1 w-full">
+                {topProducts.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={topProducts} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#1f1f1f' : '#f3f4f6'} vertical={false} />
+                      <XAxis dataKey="name" stroke={isDark ? '#333' : '#e5e5e5'} tick={{ fill: isDark ? '#9ca3af' : '#6b7280', fontSize: 10 }} />
+                      <YAxis stroke={isDark ? '#333' : '#e5e5e5'} tick={{ fill: isDark ? '#9ca3af' : '#6b7280', fontSize: 12 }} />
+                      <Tooltip content={<CustomTooltip />} cursor={{ fill: isDark ? '#1f1f1f' : '#f3f4f6' }} />
+                      <Bar dataKey="revenue" name="Ingresos" radius={[6, 6, 0, 0]}>
+                        {topProducts.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={index === 0 ? '#ffd700' : isDark ? '#333' : '#e5e5e5'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-gray-500 font-medium">No hay datos suficientes.</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Historial de Ventas */}
+          <div className={`p-6 rounded-3xl shadow-soft-lg border flex flex-col mt-6
+            ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
+            <h3 className={`font-display font-bold text-lg mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              Registro Detallado de Ventas ({timeFilter})
             </h3>
-            <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-              Resumen de caja acumulado en el periodo: {timeFilter}.
-            </p>
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className={`p-4 rounded-2xl border ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-100'}`}>
-            <span className="text-2xl">💵</span>
-            <p className={`text-xs font-semibold mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Efectivo</p>
-            <h4 className={`font-display font-bold text-xl mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              ${Math.round(paymentBreakdown.Efectivo).toLocaleString('es-CO')}
-            </h4>
-          </div>
-
-          <div className={`p-4 rounded-2xl border ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-100'}`}>
-            <span className="text-2xl">📱</span>
-            <p className={`text-xs font-semibold mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Nequi</p>
-            <h4 className={`font-display font-bold text-xl mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              ${Math.round(paymentBreakdown.Nequi).toLocaleString('es-CO')}
-            </h4>
-          </div>
-
-          <div className={`p-4 rounded-2xl border ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-100'}`}>
-            <span className="text-2xl">🏦</span>
-            <p className={`text-xs font-semibold mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Transferencia</p>
-            <h4 className={`font-display font-bold text-xl mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              ${Math.round(paymentBreakdown.Transferencia).toLocaleString('es-CO')}
-            </h4>
-          </div>
-
-          <div className={`p-4 rounded-2xl border ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-100'}`}>
-            <span className="text-2xl">📝</span>
-            <p className={`text-xs font-semibold mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Otros / Sin espec.</p>
-            <h4 className={`font-display font-bold text-xl mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              ${Math.round(paymentBreakdown.Otro).toLocaleString('es-CO')}
-            </h4>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Sales Chart */}
-        <div className={`p-6 rounded-3xl shadow-soft-lg border flex flex-col h-[400px]
-          ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
-          <h3 className={`font-display font-bold text-lg mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            Tendencia de Ventas ({timeFilter})
-          </h3>
-          <div className="flex-1 w-full">
-            {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ffd700" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#ffd700" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="name" stroke={isDark ? '#333' : '#e5e5e5'} tick={{ fill: isDark ? '#9ca3af' : '#6b7280', fontSize: 12 }} />
-                  <YAxis stroke={isDark ? '#333' : '#e5e5e5'} tick={{ fill: isDark ? '#9ca3af' : '#6b7280', fontSize: 12 }} />
-                  <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#1f1f1f' : '#f3f4f6'} vertical={false} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Area type="monotone" name="Ventas" dataKey="sales" stroke="#ffd700" strokeWidth={3} fillOpacity={1} fill="url(#colorSales)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center text-gray-500 font-medium">No hay ventas en este periodo.</div>
-            )}
-          </div>
-        </div>
-
-        {/* Top Products Chart */}
-        <div className={`p-6 rounded-3xl shadow-soft-lg border flex flex-col h-[400px]
-          ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
-          <h3 className={`font-display font-bold text-lg mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            Productos Estrella (Ingresos)
-          </h3>
-          <div className="flex-1 w-full">
-            {topProducts.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={topProducts} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#1f1f1f' : '#f3f4f6'} vertical={false} />
-                  <XAxis dataKey="name" stroke={isDark ? '#333' : '#e5e5e5'} tick={{ fill: isDark ? '#9ca3af' : '#6b7280', fontSize: 10 }} />
-                  <YAxis stroke={isDark ? '#333' : '#e5e5e5'} tick={{ fill: isDark ? '#9ca3af' : '#6b7280', fontSize: 12 }} />
-                  <Tooltip content={<CustomTooltip />} cursor={{ fill: isDark ? '#1f1f1f' : '#f3f4f6' }} />
-                  <Bar dataKey="revenue" name="Ingresos" radius={[6, 6, 0, 0]}>
-                    {topProducts.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={index === 0 ? '#ffd700' : isDark ? '#333' : '#e5e5e5'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center text-gray-500 font-medium">No hay datos suficientes.</div>
-            )}
-          </div>
-        </div>
-
-      </div>
-
-      {/* Historial de Ventas */}
-      <div className={`p-6 rounded-3xl shadow-soft-lg border flex flex-col mt-6
-        ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
-        <h3 className={`font-display font-bold text-lg mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-          Registro Detallado de Ventas ({timeFilter})
-        </h3>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className={`border-b text-xs uppercase tracking-wider
-                ${isDark ? 'border-dark-border bg-dark-card text-gray-400' : 'border-light-border bg-light-surface text-gray-500'}`}>
-                <th className="px-6 py-4 font-semibold">Orden / Fecha</th>
-                <th className="px-6 py-4 font-semibold">Artículos</th>
-                <th className="px-6 py-4 font-semibold text-center">Método de Pago</th>
-                <th className="px-6 py-4 font-semibold text-right">Total</th>
-                <th className="px-6 py-4 font-semibold text-center">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(filteredSales || []).slice().reverse().map(sale => {
-                const method = sale.paymentMethod || 'Efectivo';
-                let methodBadge = 'bg-gray-500/10 text-gray-400 border-gray-500/20';
-                let methodEmoji = '💵';
-                if (method === 'Efectivo') {
-                  methodBadge = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-                  methodEmoji = '💵';
-                } else if (method === 'Nequi') {
-                  methodBadge = 'bg-pink-500/10 text-pink-400 border-pink-500/20';
-                  methodEmoji = '📱';
-                } else if (method === 'Transferencia') {
-                  methodBadge = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-                  methodEmoji = '🏦';
-                }
-
-                return (
-                  <tr key={sale?.id} className={`border-b last:border-0 transition-colors duration-200
-                    ${isDark ? 'border-dark-border text-gray-300 hover:bg-dark-card' : 'border-light-border text-gray-700 hover:bg-gray-50'}`}>
-                    <td className="px-6 py-4">
-                      <p className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Orden #{getPaddedTurnNumber(sale, salesHistory)}</p>
-                      <p className="text-[10px] text-gray-500 font-mono">Ref: #{String(sale?.id || '').slice(-6)}</p>
-                      <p className="text-xs text-gray-500">{new Date(sale?.date).toLocaleString()}</p>
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      {(sale?.items || []).map(item => (
-                        <div key={item.id}>{item.quantity}x {item.nombre}</div>
-                      ))}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${methodBadge}`}>
-                        <span>{methodEmoji}</span> {method}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right font-bold">
-                      ${sale.total.toLocaleString('es-CO')}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      {user?.role === 'admin' ? (
-                        <button onClick={() => handleDeleteSale(sale.id)} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all
-                          ${isDark 
-                            ? 'bg-red-500/10 border-gold-500/30 text-red-400 hover:border-gold-500 hover:bg-red-500/20' 
-                            : 'bg-red-50 border-gold-500/50 text-red-600 hover:border-gold-500 hover:bg-red-100'}`}>
-                          Eliminar Venta
-                        </button>
-                      ) : (
-                        <span className="text-xs italic text-gray-500">Sin permisos</span>
-                      )}
-                    </td>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className={`border-b text-xs uppercase tracking-wider
+                    ${isDark ? 'border-dark-border bg-dark-card text-gray-400' : 'border-light-border bg-light-surface text-gray-500'}`}>
+                    <th className="px-6 py-4 font-semibold">Orden / Fecha</th>
+                    <th className="px-6 py-4 font-semibold">Artículos</th>
+                    <th className="px-6 py-4 font-semibold text-center">Método de Pago</th>
+                    <th className="px-6 py-4 font-semibold text-right">Total</th>
+                    <th className="px-6 py-4 font-semibold text-center">Acciones</th>
                   </tr>
+                </thead>
+                <tbody>
+                  {(filteredSales || []).slice().reverse().map(sale => {
+                    const method = sale.paymentMethod || 'Efectivo';
+                    let methodBadge = 'bg-gray-500/10 text-gray-400 border-gray-500/20';
+                    let methodEmoji = '💵';
+                    if (method === 'Efectivo') {
+                      methodBadge = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+                      methodEmoji = '💵';
+                    } else if (method === 'Nequi') {
+                      methodBadge = 'bg-pink-500/10 text-pink-400 border-pink-500/20';
+                      methodEmoji = '📱';
+                    } else if (method === 'Transferencia') {
+                      methodBadge = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+                      methodEmoji = '🏦';
+                    }
+
+                    return (
+                      <tr key={sale?.id} className={`border-b last:border-0 transition-colors duration-200
+                        ${isDark ? 'border-dark-border text-gray-300 hover:bg-dark-card' : 'border-light-border text-gray-700 hover:bg-gray-50'}`}>
+                        <td className="px-6 py-4">
+                          <p className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Orden #{getPaddedTurnNumber(sale, salesHistory)}</p>
+                          <p className="text-[10px] text-gray-500 font-mono">Ref: #{String(sale?.id || '').slice(-6)}</p>
+                          <p className="text-xs text-gray-500">{new Date(sale?.date).toLocaleString()}</p>
+                        </td>
+                        <td className="px-6 py-4 text-sm">
+                          {(sale?.items || []).map(item => (
+                            <div key={item.id}>{item.quantity}x {item.nombre}</div>
+                          ))}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${methodBadge}`}>
+                            <span>{methodEmoji}</span> {method}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right font-bold">
+                          ${sale.total.toLocaleString('es-CO')}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          {user?.role === 'admin' ? (
+                            <button onClick={() => handleDeleteSale(sale.id)} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all
+                              ${isDark 
+                                ? 'bg-red-500/10 border-gold-500/30 text-red-400 hover:border-gold-500 hover:bg-red-500/20' 
+                                : 'bg-red-50 border-gold-500/50 text-red-600 hover:border-gold-500 hover:bg-red-100'}`}>
+                              Eliminar Venta
+                            </button>
+                          ) : (
+                            <span className="text-xs italic text-gray-500">Sin permisos</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  
+                  {filteredSales.length === 0 && (
+                    <tr>
+                      <td colSpan="5" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                        No hay ventas registradas en este periodo.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="space-y-6">
+          {/* C) Ranking: Top 3 Empleados por Ingresos */}
+          <div className={`p-6 rounded-3xl shadow-soft-lg border
+            ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
+            <h3 className={`font-display font-bold text-lg mb-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              Podio de Rendimiento (Top 3 Empleados)
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {actividadPorEmpleado.slice(0, 3).map((emp, index) => {
+                const medals = ['🥇', '🥈', '🥉']
+                const borderColors = ['border-gold-500', 'border-gray-400', 'border-amber-700']
+                return (
+                  <div key={emp.nombre} className={`p-6 rounded-2xl border-2 flex items-center justify-between relative overflow-hidden group
+                    ${borderColors[index]} ${isDark ? 'bg-dark-card' : 'bg-gray-50'}`}>
+                    <div>
+                      <span className="text-3xl mb-2 block">{medals[index]}</span>
+                      <h4 className={`font-display font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {emp.nombre}
+                      </h4>
+                      <p className={`text-xs mt-0.5 uppercase tracking-wider font-semibold ${isDark ? 'text-gold-400' : 'text-gold-600'}`}>
+                        {getStaffRole(emp.nombre)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className={`text-[10px] font-bold uppercase ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Ingresos Generados</span>
+                      <h4 className={`font-display font-bold text-xl ${isDark ? 'text-white' : 'text-gray-900'} mt-1`}>
+                        ${Math.round(emp.total).toLocaleString('es-CO')}
+                      </h4>
+                      <span className={`text-[11px] font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {emp.ventas} ventas
+                      </span>
+                    </div>
+                  </div>
                 )
               })}
-              
-              {filteredSales.length === 0 && (
-                <tr>
-                  <td colSpan="5" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                    No hay ventas registradas en este periodo.
-                  </td>
-                </tr>
+              {actividadPorEmpleado.length === 0 && (
+                <p className={`col-span-3 text-center py-6 text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                  No hay datos de ventas disponibles para el ranking.
+                </p>
               )}
-            </tbody>
-          </table>
+            </div>
+          </div>
+
+          {/* A) Resumen por empleado */}
+          <div>
+            <h3 className={`font-display font-bold text-lg mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              Resumen de Actividad
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {actividadPorEmpleado.map(emp => (
+                <div key={emp.nombre} className={`p-6 rounded-3xl shadow-soft-lg border relative overflow-hidden group transition-all hover:scale-[1.02]
+                  ${isDark ? 'bg-dark-surface border-dark-border hover:border-gold-500/30' : 'bg-white border-light-border hover:border-gold-500/30'}`}>
+                  <div className="absolute right-0 top-0 w-24 h-24 bg-gold-500/5 rounded-bl-full pointer-events-none" />
+                  
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h4 className={`font-display font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {emp.nombre}
+                      </h4>
+                      <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-gold-500/10 text-gold-400 border border-gold-500/20`}>
+                        {getStaffRole(emp.nombre)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    <div className="flex justify-between text-sm">
+                      <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Dinero Generado:</span>
+                      <span className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        ${Math.round(emp.total).toLocaleString('es-CO')}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Ventas Realizadas:</span>
+                      <span className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {emp.ventas}
+                      </span>
+                    </div>
+                    <div className="border-t border-dashed border-gray-500/20 pt-3">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider block ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Producto más vendido</span>
+                      <p className={`text-sm font-semibold mt-1 ${isDark ? 'text-gold-400' : 'text-gold-600'} line-clamp-1`}>
+                        {emp.mostSoldProduct}
+                      </p>
+                      <span className={`text-xs text-gray-500`}>
+                        Cantidad: {emp.mostSoldProductQty} unid.
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {actividadPorEmpleado.length === 0 && (
+                <p className={`col-span-3 text-center py-12 text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                  No se encontraron registros de empleados en las ventas de este periodo.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* B) Tabla detallada filtrable */}
+          <div className={`p-6 rounded-3xl shadow-soft-lg border flex flex-col mt-6
+            ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
+            
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+              <h3 className={`font-display font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Registro de Ventas por Empleado
+              </h3>
+              
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Filtrar Empleado:</span>
+                <select
+                  value={selectedEmployeeFilter}
+                  onChange={e => setSelectedEmployeeFilter(e.target.value)}
+                  className={`px-3 py-1.5 rounded-xl border outline-none text-xs font-bold transition-all focus:border-gold-500 appearance-none
+                    ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                >
+                  {employeeNames.map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className={`border-b text-xs uppercase tracking-wider
+                    ${isDark ? 'border-dark-border bg-dark-card text-gray-400' : 'border-light-border bg-light-surface text-gray-500'}`}>
+                    <th className="px-6 py-4 font-semibold">Orden / Fecha</th>
+                    <th className="px-6 py-4 font-semibold">Empleado</th>
+                    <th className="px-6 py-4 font-semibold">Artículos</th>
+                    <th className="px-6 py-4 font-semibold text-center">Método de Pago</th>
+                    <th className="px-6 py-4 font-semibold text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detailedSales.slice().reverse().map(sale => {
+                    const method = sale.paymentMethod || 'Efectivo';
+                    let methodBadge = 'bg-gray-500/10 text-gray-400 border-gray-500/20';
+                    let methodEmoji = '💵';
+                    if (method === 'Efectivo') {
+                      methodBadge = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+                      methodEmoji = '💵';
+                    } else if (method === 'Nequi') {
+                      methodBadge = 'bg-pink-500/10 text-pink-400 border-pink-500/20';
+                      methodEmoji = '📱';
+                    } else if (method === 'Transferencia') {
+                      methodBadge = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+                      methodEmoji = '🏦';
+                    }
+
+                    return (
+                      <tr key={sale?.id} className={`border-b last:border-0 transition-colors duration-200
+                        ${isDark ? 'border-dark-border text-gray-300 hover:bg-dark-card' : 'border-light-border text-gray-700 hover:bg-gray-50'}`}>
+                        <td className="px-6 py-4">
+                          <p className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Orden #{getPaddedTurnNumber(sale, salesHistory)}</p>
+                          <p className="text-[10px] text-gray-500 font-mono">Ref: #{String(sale?.id || '').slice(-6)}</p>
+                          <p className="text-xs text-gray-500">{new Date(sale?.date).toLocaleString()}</p>
+                        </td>
+                        <td className="px-6 py-4 text-sm font-semibold">
+                          {sale.cajero_name || 'Sin registrar'}
+                        </td>
+                        <td className="px-6 py-4 text-sm">
+                          {(sale?.items || []).map((item, idx) => (
+                            <div key={idx}>{item.quantity || item.cantidad || 1}x {item.nombre || item.name}</div>
+                          ))}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${methodBadge}`}>
+                            <span>{methodEmoji}</span> {method}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right font-bold">
+                          ${sale.total.toLocaleString('es-CO')}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  
+                  {detailedSales.length === 0 && (
+                    <tr>
+                      <td colSpan="5" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                        No hay ventas registradas para este filtro.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
     </div>
   )

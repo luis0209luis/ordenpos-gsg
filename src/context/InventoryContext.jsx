@@ -372,7 +372,8 @@ export function InventoryProvider({ children }) {
       delivery_status: deliveryData ? 'Pendiente' : null,
       kitchen_status: kitchenStatus || null,
       payment_method: paymentMethod,
-      notes: notes
+      notes: notes,
+      cajero_name: user?.name || user?.username || null
     }
 
     const nowISO = new Date().toISOString()
