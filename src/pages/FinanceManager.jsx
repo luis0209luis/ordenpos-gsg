@@ -3,13 +3,14 @@ import { format, parseISO, addDays, addWeeks, addMonths, isToday, isThisWeek, is
 import * as XLSX from 'xlsx'
 import { useFinance } from '../context/FinanceContext'
 import { useInventory } from '../context/InventoryContext'
-import { useTheme, useAuth } from '../context/AppContext'
+import { useTheme, useAuth, useDeleteConfirmation } from '../context/AppContext'
 import { useCashRegister } from '../context/CashRegisterContext'
 import { DollarSign, TrendingUp, TrendingDown, Users, Download, Plus, FileText, Briefcase, Calendar, CheckCircle2, Trash2, X, Edit, Archive } from 'lucide-react'
 
 export default function FinanceManager() {
   const { theme } = useTheme()
   const { user } = useAuth() || {}
+  const { confirmDelete } = useDeleteConfirmation()
   const isDark = theme === 'dark'
   
   const { 

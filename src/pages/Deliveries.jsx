@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { useTheme, useAuth } from '../context/AppContext'
+import { useTheme, useAuth, useDeleteConfirmation } from '../context/AppContext'
 import { useInventory } from '../context/InventoryContext'
 import { getPaddedTurnNumber } from '../utils/turnHelper'
 import { createPortal } from 'react-dom'
@@ -43,43 +43,50 @@ function formatCOP(value) {
 
 function StatusDropdown({ currentStatus, saleId, onUpdate, isDark }) {
   const [open, setOpen] = useState(false)
-  const styles = STATUS_STYLES[currentStatus] || STATUS_STYLES['Pendiente']
+  const [loading, setLoading] = useState(false)
+  const [selected, setSelected] = useState(currentStatus)
+
+  const handleUpdate = async (status) => {
+    setLoading(true)
+    const success = await onUpdate(saleId, status)
+    if (success) {
+      setSelected(status)
+    }
+    setOpen(false)
+    setLoading(false)
+  }
 
   return (
     <div className="relative">
       <button
-        onClick={() => setOpen(o => !o)}
-        className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all hover:scale-[1.02]
-          ${styles.badge}`}
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all hover:scale-105
+          ${STATUS_STYLES[selected]?.badge || 'bg-gray-500/15 text-gray-500'}`}
       >
-        <span className={`w-2 h-2 rounded-full ${styles.dot}`} />
-        {currentStatus || 'Pendiente'}
-        <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        <span className={`w-1.5 h-1.5 rounded-full ${STATUS_STYLES[selected]?.dot || 'bg-gray-400'}`} />
+        {selected}
+        <ChevronDown size={14} className={`transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
-
       {open && (
         <>
-          <div
-            className="fixed inset-0 z-[99998]"
-            onClick={() => setOpen(false)}
-          />
-          <div
-            className={`absolute right-0 top-full mt-2 z-[99999] rounded-xl shadow-2xl border overflow-hidden min-w-[160px]
-              ${isDark ? 'bg-dark-card border-dark-border' : 'bg-white border-light-border'}`}
-          >
-            {STATUSES.map(s => (
-              <button
-                key={s.key}
-                onClick={() => { onUpdate(saleId, s.key); setOpen(false) }}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold text-left transition-colors
-                  ${s.key === currentStatus
-                    ? (isDark ? 'bg-gold-500/10 text-gold-400' : 'bg-gold-50 text-gold-700')
-                    : (isDark ? 'hover:bg-dark-surface text-gray-300' : 'hover:bg-gray-50 text-gray-700')}`}
-              >
-                <span className={`w-2 h-2 rounded-full ${STATUS_STYLES[s.key]?.dot}`} />
-                {s.label}
-              </button>
-            ))}
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className={`absolute right-0 mt-2 w-40 rounded-2xl shadow-xl border z-50 overflow-hidden animate-fade-in
+            ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
+            <div className="p-1 flex flex-col gap-0.5">
+              {STATUSES.map(s => (
+                <button
+                  key={s.key}
+                  onClick={() => handleUpdate(s.key)}
+                  disabled={loading}
+                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2
+                    ${isDark ? 'hover:bg-dark-card text-gray-300' : 'hover:bg-gray-50 text-gray-700'}
+                    ${selected === s.key ? (isDark ? 'bg-white/5 text-gold-400' : 'bg-gold-50 text-gold-600') : ''}`}
+                >
+                  <s.icon size={14} />
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
         </>
       )}
@@ -91,11 +98,11 @@ function StatusDropdown({ currentStatus, saleId, onUpdate, isDark }) {
 export default function Deliveries() {
   const { theme } = useTheme()
   const { user } = useAuth()
+  const { confirmDelete } = useDeleteConfirmation()
   const isDark = theme === 'dark'
   const { salesHistory, updateDeliveryStatus, deleteSale } = useInventory()
 
   const [filter, setFilter] = useState('Pendiente')
-  const [deleteConfirm, setDeleteConfirm] = useState(null)
 
   // Solo ventas con domicilio, más recientes primero
   const deliveries = useMemo(() =>
@@ -206,7 +213,13 @@ export default function Deliveries() {
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          setDeleteConfirm(delivery.id);
+                          confirmDelete({
+                            title: 'Eliminar Domicilio',
+                            description: '¿Está seguro de eliminar este pedido? Esta acción restaurará los productos al inventario y no se puede deshacer. Se requiere la contraseña del administrador.',
+                            onConfirm: () => {
+                              deleteSale(delivery.id);
+                            }
+                          });
                         }}
                         className={`p-1.5 rounded-lg border transition-all hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/30 relative z-10
                           ${isDark ? 'bg-dark-card border-dark-border text-gray-400' : 'bg-white border-light-border text-gray-500'}`}
@@ -303,45 +316,6 @@ export default function Deliveries() {
         </div>
       )}
 
-      {/* ── Modal de Confirmación de Eliminación ────────────────────────── */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setDeleteConfirm(null)}>
-          <div 
-            className={`p-6 rounded-3xl shadow-2xl max-w-sm w-full border ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex flex-col items-center text-center gap-4">
-              <div className="p-4 rounded-full bg-red-500/10 text-red-500">
-                <Trash2 size={32} />
-              </div>
-              <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                Eliminar Domicilio
-              </h3>
-              <p className={`text-sm leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                ¿Está seguro de eliminar este pedido? Esta acción <strong className="text-red-500">restaurará</strong> los productos al inventario y no se puede deshacer.
-              </p>
-              
-              <div className="flex w-full gap-3 mt-4">
-                <button
-                  onClick={() => setDeleteConfirm(null)}
-                  className={`flex-1 py-3 rounded-xl font-bold transition-all ${isDark ? 'bg-dark-card hover:bg-gray-800 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => {
-                    deleteSale(deleteConfirm);
-                    setDeleteConfirm(null);
-                  }}
-                  className="flex-1 py-3 rounded-xl font-bold bg-red-500 hover:bg-red-600 text-white transition-all shadow-lg shadow-red-500/30"
-                >
-                  Sí, Eliminar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

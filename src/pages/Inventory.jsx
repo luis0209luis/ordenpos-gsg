@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
-import { useTheme, useSettings } from '../context/AppContext'
+import { useTheme, useSettings, useDeleteConfirmation } from '../context/AppContext'
 import { useInventory } from '../context/InventoryContext'
 import { useFinance } from '../context/FinanceContext'
 import { Plus, Edit2, Trash2, AlertTriangle, Search, X, Check, PackagePlus, Copy, GripVertical } from 'lucide-react'
@@ -24,6 +24,7 @@ const DEFAULT_UNITS = [
 
 export default function Inventory() {
   const { theme } = useTheme() || {}
+  const { confirmDelete } = useDeleteConfirmation()
   const isDark = theme === 'dark'
   const {
     products = [],
@@ -40,6 +41,26 @@ export default function Inventory() {
   } = useInventory() || {}
   const { settings = {} } = useSettings() || {}
   const { addExpense } = useFinance() || {}
+
+  const handleDeleteProduct = (product) => {
+    confirmDelete({
+      title: 'Eliminar Producto',
+      description: `¿Estás seguro de que deseas eliminar el producto "${product.nombre}"? Esta acción es irreversible y requiere contraseña del administrador.`,
+      onConfirm: () => {
+        deleteProduct(product.id)
+      }
+    })
+  }
+
+  const handleDeleteSupplyItem = (item) => {
+    confirmDelete({
+      title: 'Eliminar Insumo',
+      description: `¿Estás seguro de que deseas eliminar el insumo "${item.nombre}"? Esta acción es irreversible y requiere contraseña del administrador.`,
+      onConfirm: () => {
+        deleteSupplyItem(item.id)
+      }
+    })
+  }
 
   // Tabs State
   const [activeTab, setActiveTab] = useState('products')
@@ -1121,7 +1142,7 @@ export default function Inventory() {
                                   : 'hover:bg-light-surface text-gray-500 hover:text-gray-900'}`}>
                                 <Edit2 size={18} />
                               </button>
-                              <button onClick={() => deleteProduct(product.id)} className={`p-2 rounded-xl transition-all
+                              <button onClick={() => handleDeleteProduct(product)} className={`p-2 rounded-xl transition-all
                                 ${isDark ? 'hover:bg-red-500/10 text-gray-400 hover:text-red-400'
                                   : 'hover:bg-red-50 text-gray-500 hover:text-red-500'}`}>
                                 <Trash2 size={18} />
@@ -1331,7 +1352,7 @@ export default function Inventory() {
                                   : 'hover:bg-light-surface text-gray-500 hover:text-gray-900'}`}>
                                 <Edit2 size={18} />
                               </button>
-                              <button onClick={() => deleteSupplyItem(item.id)} className={`p-2 rounded-xl transition-all
+                              <button onClick={() => handleDeleteSupplyItem(item)} className={`p-2 rounded-xl transition-all
                                 ${isDark ? 'hover:bg-red-500/10 text-gray-400 hover:text-red-400'
                                   : 'hover:bg-red-50 text-gray-500 hover:text-red-500'}`}>
                                 <Trash2 size={18} />
@@ -1451,7 +1472,13 @@ export default function Inventory() {
                               type="button"
                               onClick={(e) => {
                                 e.preventDefault();
-                                handleDeleteCategory(formData.categoria);
+                                confirmDelete({
+                                  title: 'Eliminar Categoría',
+                                  description: `¿Estás seguro de eliminar la categoría "${formData.categoria}"? Los productos de esta categoría cambiarán a "Sin Categoría". Se requiere contraseña del administrador.`,
+                                  onConfirm: () => {
+                                    handleDeleteCategory(formData.categoria);
+                                  }
+                                });
                               }}
                               className={`p-3 rounded-xl transition-colors shrink-0 flex items-center justify-center
                                 ${isDark ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-red-50 text-red-500 hover:bg-red-100'}`}
@@ -1910,7 +1937,13 @@ export default function Inventory() {
                               type="button"
                               onClick={(e) => {
                                 e.preventDefault();
-                                handleDeleteUnit(supplyFormData.unidad);
+                                confirmDelete({
+                                  title: 'Eliminar Unidad',
+                                  description: `¿Estás seguro de eliminar la unidad "${supplyFormData.unidad}"? Los insumos que usen esta unidad cambiarán a la unidad base "unidad". Se requiere contraseña del administrador.`,
+                                  onConfirm: () => {
+                                    handleDeleteUnit(supplyFormData.unidad);
+                                  }
+                                });
                               }}
                               className={`p-3 rounded-xl transition-colors shrink-0 flex items-center justify-center
                                 ${isDark ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-red-50 text-red-500 hover:bg-red-100'}`}

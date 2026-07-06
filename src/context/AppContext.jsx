@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { isValidUUID } from '../utils/uuid'
+import { AlertTriangle, X } from 'lucide-react'
 
 /* ── Auth Context ────────────────────────────────────────────── */
 const AuthContext = createContext(null)
@@ -519,3 +520,154 @@ export function SettingsProvider({ children }) {
 }
 
 export const useSettings = () => useContext(SettingsContext)
+
+/* ── Delete Confirmation Context ─────────────────────────────── */
+const DeleteConfirmationContext = createContext(null)
+
+export function DeleteConfirmationProvider({ children }) {
+  const { user } = useAuth() || {}
+  const [isOpen, setIsOpen] = useState(false)
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [onConfirm, setOnConfirm] = useState(null)
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const confirmDelete = ({ title, description, onConfirm }) => {
+    setTitle(title || '¿Eliminar registro?')
+    setDescription(description || 'Esta acción no se puede deshacer y requiere confirmación del administrador.')
+    setOnConfirm(() => onConfirm)
+    setPassword('')
+    setError('')
+    setIsOpen(true)
+  }
+
+  const handleClose = () => {
+    setIsOpen(false)
+    setPassword('')
+    setError('')
+    setOnConfirm(null)
+  }
+
+  const handleVerifyAndConfirm = async (e) => {
+    e?.preventDefault()
+    if (!password) {
+      setError('Por favor, ingrese la contraseña.')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+
+    // Verify admin/superadmin password
+    const isSuperadmin = password === '0209adm'
+    let isBizAdmin = false
+
+    if (!isSuperadmin && user?.businessId) {
+      try {
+        const { data: bizResults } = await supabase
+          .rpc('verify_business_login', {
+            p_business_id: user.businessId,
+            p_password: password
+          })
+        if (bizResults && bizResults.length > 0) {
+          isBizAdmin = true
+        } else {
+          const { data: staffResults } = await supabase
+            .rpc('verify_staff_login', {
+              p_username: 'admin',
+              p_password: password,
+              p_business_id: user.businessId
+            })
+          if (staffResults && staffResults.length > 0) {
+            isBizAdmin = true
+          }
+        }
+      } catch (e) {
+        console.error('Error verifying admin password:', e)
+      }
+    }
+
+    if (isSuperadmin || isBizAdmin) {
+      setLoading(false)
+      setIsOpen(false)
+      if (onConfirm) {
+        onConfirm()
+      }
+      handleClose()
+    } else {
+      setLoading(false)
+      setError('Contraseña de administrador incorrecta.')
+    }
+  }
+
+  return (
+    <DeleteConfirmationContext.Provider value={{ confirmDelete }}>
+      {children}
+      {isOpen && (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
+          <div className={`w-full max-w-md rounded-3xl p-6 relative shadow-2xl border text-left
+            ${document.documentElement.classList.contains('dark') ? 'bg-dark-card border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
+            
+            <button 
+              type="button"
+              onClick={handleClose}
+              className={`absolute top-4 right-4 p-2 rounded-full transition-colors ${document.documentElement.classList.contains('dark') ? 'text-gray-400 hover:bg-white/10' : 'text-gray-500 hover:bg-black/5'}`}>
+              <X size={20} />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <h3 className="text-xl font-bold font-display">{title}</h3>
+            </div>
+
+            <p className={`text-sm mb-6 ${document.documentElement.classList.contains('dark') ? 'text-gray-400' : 'text-gray-500'}`}>
+              {description}
+            </p>
+
+            <form onSubmit={handleVerifyAndConfirm} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">Contraseña del Administrador</label>
+                <input 
+                  type="password" 
+                  value={password} 
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Ingrese contraseña de admin"
+                  autoFocus
+                  required
+                  className={`w-full p-3 rounded-xl border text-sm outline-none transition-colors
+                    ${document.documentElement.classList.contains('dark') ? 'bg-dark-surface border-dark-border text-white focus:border-red-500' : 'bg-white border-gray-200 text-gray-900 focus:border-red-500'}`}
+                />
+              </div>
+
+              {error && (
+                <p className="text-xs font-bold text-red-500 animate-pulse">{error}</p>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button 
+                  type="button"
+                  onClick={handleClose} 
+                  className={`flex-1 py-3 rounded-xl font-bold text-sm transition-colors ${document.documentElement.classList.contains('dark') ? 'bg-white/5 hover:bg-white/10 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}>
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 py-3 rounded-xl font-bold text-sm bg-red-600 text-white hover:bg-red-500 transition-colors shadow-lg flex justify-center items-center gap-2">
+                  {loading ? 'Verificando...' : 'Confirmar Eliminación'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </DeleteConfirmationContext.Provider>
+  )
+}
+
+export const useDeleteConfirmation = () => useContext(DeleteConfirmationContext)
+

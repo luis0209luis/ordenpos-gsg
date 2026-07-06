@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { useTheme, useAuth, useSettings } from '../context/AppContext'
+import { useTheme, useAuth, useSettings, useDeleteConfirmation } from '../context/AppContext'
 import { useInventory } from '../context/InventoryContext'
 import { getPaddedTurnNumber } from '../utils/turnHelper'
 import { isToday, isThisWeek, isThisMonth, isThisYear, parseISO, format } from 'date-fns'
@@ -13,6 +13,7 @@ export default function Reports() {
   const { theme } = useTheme() || {}
   const { user } = useAuth() || {}
   const { staff = [] } = useSettings() || {}
+  const { confirmDelete } = useDeleteConfirmation()
   const isDark = theme === 'dark'
   const { products = [], salesHistory = [], deleteSale } = useInventory() || {}
   const [timeFilter, setTimeFilter] = useState('Hoy')
@@ -20,9 +21,13 @@ export default function Reports() {
   const [selectedRoleFilter, setSelectedRoleFilter] = useState('Todos')
 
   const handleDeleteSale = (id) => {
-    if (confirm('¿Estás seguro? Esta acción afectará el inventario y las estadísticas diarias.')) {
-      deleteSale(id)
-    }
+    confirmDelete({
+      title: 'Eliminar Venta',
+      description: '¿Estás seguro de eliminar esta venta? Esta acción afectará el inventario y las estadísticas de negocio. Se requiere la contraseña del administrador.',
+      onConfirm: () => {
+        deleteSale(id)
+      }
+    })
   }
 
   // Filter logic
