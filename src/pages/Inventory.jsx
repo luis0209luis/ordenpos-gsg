@@ -289,6 +289,7 @@ export default function Inventory() {
   }, [entryUnitType])
 
   const formatStockWithPackages = (stockVal, item) => {
+    if (!item) return `${stockVal || 0} und`
     const stock = Number(stockVal || 0)
     if (!item.pack_large_unit && !item.pack_medium_unit) {
       return `${stock} ${item.unidad || 'und'}`
@@ -298,8 +299,9 @@ export default function Inventory() {
     let tempStock = stock
 
     const getPlural = (unit, qty) => {
-      if (qty === 1 || !unit) return unit
-      if (['a', 'e', 'o'].includes(unit.slice(-1).toLowerCase())) {
+      if (qty === 1 || !unit || typeof unit !== 'string') return String(unit || '')
+      const lastChar = unit.slice(-1).toLowerCase()
+      if (['a', 'e', 'o'].includes(lastChar)) {
         return unit + 's'
       }
       return unit
@@ -1193,19 +1195,19 @@ export default function Inventory() {
 
   // Apply custom order: sort supplyItems by stored order, then append any new items at the end
   const orderedSupplies = (() => {
-    const all = supplyItems || []
-    if (supplyOrder.length === 0) return all
+    const all = (supplyItems || []).filter(Boolean)
+    if (!supplyOrder || supplyOrder.length === 0) return all
     const orderMap = {}
-    supplyOrder.forEach((id, idx) => { orderMap[id] = idx })
+    supplyOrder.forEach((id, idx) => { if (id) orderMap[id] = idx })
     return [...all].sort((a, b) => {
-      const ia = orderMap[a.id] ?? 999999
-      const ib = orderMap[b.id] ?? 999999
+      const ia = orderMap[a?.id] ?? 999999
+      const ib = orderMap[b?.id] ?? 999999
       return ia - ib
     })
   })()
 
-  const filteredSupplies = orderedSupplies.filter(s =>
-    (s.nombre || '').toLowerCase().includes(supplySearchTerm.toLowerCase())
+  const filteredSupplies = (orderedSupplies || []).filter(s =>
+    s && (s.nombre || '').toLowerCase().includes((supplySearchTerm || '').toLowerCase())
   )
 
   const handleSupplyDragStart = (e, id) => {
