@@ -22,6 +22,13 @@ const DEFAULT_UNITS = [
   { value: 'lata', label: 'Lata' }
 ]
 
+const safeString = (val) => {
+  if (val === null || val === undefined) return ''
+  if (typeof val === 'string' || typeof val === 'number') return String(val)
+  if (typeof val === 'object') return String(val.label || val.value || val.name || '')
+  return String(val)
+}
+
 export default function Inventory() {
   const { theme } = useTheme() || {}
   const { confirmDelete } = useDeleteConfirmation()
@@ -1581,9 +1588,9 @@ export default function Inventory() {
                             </span>
                           </td>
                           <td className={`px-6 py-4 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                            {item.nombre}
+                            {safeString(item.nombre)}
                           </td>
-                          <td className="px-6 py-4 text-sm text-center capitalize">{item.unidad}</td>
+                          <td className="px-6 py-4 text-sm text-center capitalize">{safeString(item.unidad)}</td>
                           <td className="px-6 py-4 text-sm text-right font-semibold">
                             {/* Show price per package if packaging configured, else per base unit */}
                             {(() => {
@@ -1603,7 +1610,7 @@ export default function Inventory() {
                                   <span>${Number(precioMostrar).toLocaleString('es-CO')}</span>
                                   {ratio > 1 && (
                                     <span className="text-[10px] opacity-50 font-normal">
-                                      por {packUnit}
+                                      por {safeString(packUnit)}
                                     </span>
                                   )}
                                 </div>
@@ -1618,7 +1625,7 @@ export default function Inventory() {
                               </span>
                               {(item.pack_large_unit || item.pack_medium_unit) && (
                                 <span className={`text-[10px] opacity-60 font-semibold mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                  Total: {item.stock_actual} {item.unidad}
+                                  Total: {item.stock_actual} {safeString(item.unidad)}
                                 </span>
                               )}
                             </div>
@@ -1630,7 +1637,7 @@ export default function Inventory() {
                               </span>
                               {(item.pack_large_unit || item.pack_medium_unit) && (
                                 <span className={`text-[10px] opacity-60 font-semibold mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                  Total: {item.stock_minimo} {item.unidad}
+                                  Total: {item.stock_minimo} {safeString(item.unidad)}
                                 </span>
                               )}
                             </div>
@@ -1638,7 +1645,7 @@ export default function Inventory() {
                           <td className="px-6 py-4 text-sm text-center font-medium">
                             {item.ubicacion ? (
                               <span className={isDark ? 'text-gray-300 font-semibold' : 'text-gray-700 font-semibold'}>
-                                {item.ubicacion}
+                                {safeString(item.ubicacion)}
                               </span>
                             ) : (
                               <span className="text-gray-400 dark:text-gray-650">-</span>
