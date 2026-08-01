@@ -71,6 +71,31 @@ export default function Dashboard() {
     ? settings.businessName 
     : (user?.businessName || 'Mi Negocio')
 
+  const displayOwnerName = useMemo(() => {
+    if (settings?.ownerName && settings.ownerName.trim() !== '') {
+      return settings.ownerName.trim()
+    }
+    try {
+      const businesses = JSON.parse(localStorage.getItem('ordenpos_businesses') || '[]')
+      const match = businesses.find(b => b.id === user?.businessId)
+      if (match?.owner && match.owner.trim() !== '') {
+        return match.owner.trim()
+      }
+    } catch {
+      // fallback
+    }
+    if (user?.ownerName && user.ownerName.trim() !== '') {
+      return user.ownerName.trim()
+    }
+    if (user?.name && user.name.trim() !== '' && user.name.toLowerCase() !== 'admin') {
+      return user.name.trim()
+    }
+    if (user?.username && user.username.trim() !== '' && user.username.toLowerCase() !== 'admin') {
+      return user.username.trim()
+    }
+    return 'Propietario'
+  }, [settings, user])
+
   const currentLogo = !isDark && settings?.logoLightUrl ? settings.logoLightUrl : (settings?.logoUrl || null)
 
   const greeting = useMemo(() => {
@@ -314,7 +339,7 @@ export default function Dashboard() {
                 {displayBusinessName}
               </h1>
               <p className={`text-lg md:text-xl font-light ${isDark ? 'text-neutral-300' : 'text-neutral-600'}`}>
-                {greeting}, <span className={`font-semibold ${isDark ? 'text-white' : 'text-neutral-900'}`}>{user?.username || 'Usuario'}</span>. Así va el pulso de tu negocio hoy.
+                {greeting}, <span className={`font-semibold ${isDark ? 'text-white' : 'text-neutral-900'}`}>{displayOwnerName}</span>. Así va el pulso de tu negocio hoy.
               </p>
             </div>
           </div>
