@@ -27,6 +27,8 @@ export default function AdminPanel() {
   const [businessToReset, setBusinessToReset] = useState(null)
   const [businesses, setBusinesses] = useState([])
   const [loading, setLoading] = useState(true)
+  const [giftModal, setGiftModal] = useState(null) // { biz } | null
+  const [giftDays, setGiftDays] = useState(30)
   
   const [formData, setFormData] = useState({ 
     name: '', owner: '', cedula: '', email: '', phone: '', startDate: new Date().toISOString().split('T')[0] 
@@ -253,6 +255,21 @@ export default function AdminPanel() {
     } catch (e) { console.error(e) }
   }
 
+  const handleBizGiftDays = async () => {
+    if (!giftModal) return
+    const { biz } = giftModal
+    const days = parseInt(giftDays) || 0
+    if (days <= 0) return
+    const newDays = (biz?.daysRemaining || biz?.days_remaining || 0) + days
+    setBusinesses(prev => prev.map(b => b.id === biz.id ? { ...b, daysRemaining: newDays, days_remaining: newDays } : b))
+    try {
+      await supabase.from('businesses').update({ days_remaining: newDays }).eq('id', biz.id)
+      insertLog({ type: 'success', action: 'gift_days', business_id: biz.id, username: 'Superadmin', message: `Obsequiados ${days} días gratuitos a ${biz.name} (sin cargo)` })
+    } catch (e) { console.error(e) }
+    setGiftModal(null)
+    setGiftDays(30)
+  }
+
   const getBizPhase = (biz) => {
     if (biz.forcePhase !== undefined && biz.forcePhase !== null) return biz.forcePhase;
     const startDate = new Date(biz.start_date || biz.startDate);
@@ -400,11 +417,14 @@ export default function AdminPanel() {
                                 Vence: {computedDate}
                               </p>
                               <div className="flex items-center gap-1">
-                                <button onClick={() => handleBizAddMonth(biz.id)} className="p-1 rounded bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-colors" title="+ 30 Días">
+                                <button onClick={() => handleBizAddMonth(biz.id)} className="p-1 rounded bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-colors" title="+ 30 Días (registra pago)">
                                   <Plus size={14} />
                                 </button>
                                 <button onClick={() => handleBizRemoveMonth(biz.id)} className="p-1 rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors" title="- 30 Días">
                                   <Undo2 size={14} />
+                                </button>
+                                <button onClick={() => { setGiftModal({ biz }); setGiftDays(30) }} className="p-1 rounded bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors" title="Obsequiar días gratis (sin cargo)">
+                                  <Gift size={14} />
                                 </button>
                                 <span className={`text-[10px] ml-1 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>({biz.daysRemaining}d totales)</span>
                               </div>
@@ -754,6 +774,53 @@ export default function AdminPanel() {
                 {editingBizId ? <><Pencil size={18} /> Guardar Cambios</> : <><Plus size={18} /> Registrar Negocio</>}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🎁 Gift Days Modal */}
+      {giftModal && (
+        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className={`w-full max-w-sm p-8 rounded-3xl border shadow-2xl text-center animate-scale-in
+            ${isDark ? 'bg-dark-surface border-purple-500/30' : 'bg-white border-purple-500/30'}`}>
+            <div className="w-16 h-16 rounded-full mx-auto mb-4 bg-purple-500/10 flex items-center justify-center text-purple-400">
+              <Gift size={32} />
+            </div>
+            <h3 className={`font-display font-bold text-xl mb-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              Obsequiar Días Gratis
+            </h3>
+            <p className={`text-sm mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              Para <strong className="text-purple-400">{giftModal.biz.name}</strong>
+            </p>
+            <p className={`text-xs mb-6 ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
+              Este movimiento <strong>no registra ningún ingreso</strong> en finanzas. Es solo una cortesía.
+            </p>
+            <div className="mb-6 space-y-2 text-left">
+              <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                ¿Cuántos días deseas obsequiar?
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="365"
+                value={giftDays}
+                onChange={e => setGiftDays(e.target.value)}
+                className={`w-full px-4 py-3 rounded-2xl text-center text-2xl font-black outline-none border-2 transition-all focus:border-purple-500
+                  ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+              />
+              <p className={`text-xs text-center ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
+                Días actuales: {giftModal.biz.daysRemaining || giftModal.biz.days_remaining || 0} → Nuevo total: {(giftModal.biz.daysRemaining || giftModal.biz.days_remaining || 0) + (parseInt(giftDays) || 0)}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => { setGiftModal(null); setGiftDays(30) }} className={`flex-1 py-3 rounded-xl font-bold uppercase tracking-wider text-xs border transition-colors
+                ${isDark ? 'border-dark-border hover:bg-white/5 text-gray-400' : 'border-light-border hover:bg-black/5 text-gray-600'}`}>
+                Cancelar
+              </button>
+              <button onClick={handleBizGiftDays} className="flex-1 py-3 rounded-xl font-bold uppercase tracking-wider text-xs bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/20 transition-all flex items-center justify-center gap-2">
+                <Gift size={14} /> Obsequiar
+              </button>
+            </div>
           </div>
         </div>
       )}

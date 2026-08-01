@@ -235,6 +235,9 @@ export function SettingsProvider({ children }) {
   useEffect(() => {
     async function loadData() {
       if (!isValidUUID(bid)) {
+        setSettings(defaultSettings)
+        setStaff([])
+        setFeedbacks([])
         setLoading(false)
         return
       }

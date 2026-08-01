@@ -21,7 +21,12 @@ export function FinanceProvider({ children }) {
 
     async function loadData() {
       if (!isValidUUID(bid)) {
-        if (isMounted) setLoading(false)
+        if (isMounted) {
+          setExpenses([])
+          setEmployees([])
+          setPayrollHistory([])
+          setLoading(false)
+        }
         return
       }
       if (isMounted) setLoading(true)

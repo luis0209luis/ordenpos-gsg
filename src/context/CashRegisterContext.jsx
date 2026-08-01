@@ -12,7 +12,11 @@ export function CashRegisterProvider({ children }) {
   const [loadingRegister, setLoadingRegister] = useState(true)
 
   const loadCurrentRegister = useCallback(async () => {
-    if (!bid) { setLoadingRegister(false); return }
+    if (!bid) {
+      setCurrentRegister(null)
+      setLoadingRegister(false)
+      return
+    }
     setLoadingRegister(true)
     try {
       const { data } = await supabase

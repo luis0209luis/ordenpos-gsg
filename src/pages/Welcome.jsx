@@ -33,7 +33,10 @@ export default function Welcome() {
   }, [user])
 
   const getDisplayName = () => {
-    if (user?.role === 'admin' || user?.role === 'Superadmin') {
+    if (user?.role === 'Superadmin') {
+      return user?.name || user?.username || 'Administrador';
+    }
+    if (user?.role === 'admin') {
       if (settings?.ownerName) return settings.ownerName;
       const businesses = JSON.parse(localStorage.getItem('ordenpos_businesses') || '[]');
       const match = businesses.find(b => b.id === user?.businessId);

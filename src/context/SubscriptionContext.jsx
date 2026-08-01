@@ -17,10 +17,12 @@ export function SubscriptionProvider({ children }) {
   useEffect(() => {
     async function loadData() {
       if (!user) {
+        setBusinesses([])
         setLoading(false)
         return
       }
       if (!isMaster && !isValidUUID(bid)) {
+        setBusinesses([])
         setLoading(false)
         return
       }

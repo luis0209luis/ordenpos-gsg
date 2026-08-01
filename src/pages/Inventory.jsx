@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { useTheme, useSettings, useDeleteConfirmation } from '../context/AppContext'
 import { useInventory } from '../context/InventoryContext'
 import { useFinance } from '../context/FinanceContext'
-import { Plus, Edit2, Trash2, AlertTriangle, Search, X, Check, PackagePlus, Copy, GripVertical } from 'lucide-react'
+import { Plus, Edit2, Trash2, AlertTriangle, Search, X, Check, PackagePlus, Copy, GripVertical, ShoppingCart, Sparkles } from 'lucide-react'
 
 const DEFAULT_UNITS = [
   { value: 'unidad', label: 'Unidad (und)' },
@@ -117,6 +117,15 @@ export default function Inventory() {
   const [entryRecordExpense, setEntryRecordExpense] = useState(true)
   const [entryCategory, setEntryCategory] = useState('Insumos')
   const [entryUnitType, setEntryUnitType] = useState('base') // 'base' | 'medium' | 'large'
+
+  // Batch Stock Restock (Registrar Compras en Lote)
+  const [restockCart, setRestockCart] = useState([])
+  const [restockSearchTerm, setRestockSearchTerm] = useState('')
+  const [restockFilter, setRestockFilter] = useState('all') // 'all' | 'products' | 'supplies' | 'low'
+  const [isRestockingSubmit, setIsRestockingSubmit] = useState(false)
+  const [restockStatus, setRestockStatus] = useState(null) // { type: 'success' | 'error', message: '' }
+  const [restockRecordExpense, setRestockRecordExpense] = useState(true)
+  const [restockCategory, setRestockCategory] = useState('Insumos')
 
   const DEFAULT_CATEGORIES = ['Bebida', 'Comida Rápida', 'Repostería', 'Pan'];
   const [customCategories, setCustomCategories] = useState([]);
@@ -491,9 +500,11 @@ export default function Inventory() {
   const handleDuplicateProduct = (product) => {
     setErrorMsg('')
     setEditingProduct(null)
+    const { id, created_at, business_id, ...productClean } = product || {}
     setFormData({
-      ...product,
+      ...productClean,
       nombre: product.nombre ? `Copia de ${product.nombre}` : 'Copia de Producto',
+      precio: product.precio !== undefined ? product.precio : '',
       stock_actual: product.inventory_mode === 'finished' ? (product.stock_actual || 0) : '',
       stock_minimo: product.stock_minimo || 10,
       image_url: product.image_url || '',
@@ -707,6 +718,266 @@ export default function Inventory() {
     }
   }
 
+  const addToRestockCart = (type, item) => {
+    setRestockCart(prev => {
+      if (prev.some(cartItem => cartItem.id === item.id && cartItem.type === type)) {
+        return prev
+      }
+      
+      const defaultUnitType = type === 'supply' && item.pack_medium_unit
+        ? 'medium'
+        : type === 'supply' && item.pack_large_unit
+          ? 'large'
+          : 'base'
+
+      let defaultPrice = 0
+      if (type === 'supply') {
+        if (defaultUnitType === 'medium') {
+          defaultPrice = (item.precio_unitario || 0) * (parseFloat(item.pack_medium_ratio) || 1)
+        } else if (defaultUnitType === 'large') {
+          defaultPrice = (item.precio_unitario || 0) * (parseFloat(item.pack_large_ratio) || 1)
+        } else {
+          defaultPrice = item.precio_unitario || 0
+        }
+      }
+
+      return [...prev, {
+        id: item.id,
+        type,
+        item,
+        qty: '',
+        unitType: defaultUnitType,
+        unitPrice: defaultPrice || '',
+        totalCost: ''
+      }]
+    })
+  }
+
+  const handleQuickAddEntry = (type, item) => {
+    addToRestockCart(type, item)
+    setActiveTab('entries')
+  }
+
+  const updateRestockCartItem = (index, updates) => {
+    setRestockCart(prev => prev.map((item, idx) => {
+      if (idx !== index) return item
+      const updated = { ...item, ...updates }
+      const qty = parseFloat(updated.qty) || 0
+      
+      if ('qty' in updates || 'unitPrice' in updates) {
+        const uPrice = parseFloat(updated.unitPrice) || 0
+        if (qty > 0 && uPrice > 0) {
+          updated.totalCost = (qty * uPrice).toFixed(0)
+        } else {
+          updated.totalCost = ''
+        }
+      }
+      
+      if ('totalCost' in updates) {
+        const total = parseFloat(updated.totalCost) || 0
+        if (qty > 0 && total > 0) {
+          updated.unitPrice = (total / qty).toFixed(2)
+        } else {
+          updated.unitPrice = ''
+        }
+      }
+
+      if ('unitType' in updates) {
+        const s = updated.item
+        let multiplier = 1
+        const basePrice = s.precio_unitario || 0
+        if (updated.unitType === 'medium') {
+          multiplier = parseFloat(s.pack_medium_ratio) || 1
+        } else if (updated.unitType === 'large') {
+          multiplier = parseFloat(s.pack_large_ratio) || 1
+        }
+        const adjustedPrice = basePrice * multiplier
+        updated.unitPrice = adjustedPrice || ''
+        
+        if (qty > 0 && adjustedPrice > 0) {
+          updated.totalCost = (qty * adjustedPrice).toFixed(0)
+        } else {
+          updated.totalCost = ''
+        }
+      }
+
+      return updated
+    }))
+  }
+
+  const removeFromRestockCart = (index) => {
+    setRestockCart(prev => prev.filter((_, idx) => idx !== index))
+  }
+
+  const clearRestockCart = () => {
+    setRestockCart([])
+  }
+
+  const addLowStockItemsToRestockCart = () => {
+    let addedCount = 0
+    supplyItems.forEach(item => {
+      const isLow = Number(item.stock_actual) <= Number(item.stock_minimo)
+      if (isLow) {
+        const alreadyInCart = restockCart.some(c => c.type === 'supply' && c.id === item.id)
+        if (!alreadyInCart) {
+          addToRestockCart('supply', item)
+          addedCount++
+        }
+      }
+    })
+    
+    products.forEach(product => {
+      const currentMinStock = product.stock_minimo !== undefined && product.stock_minimo !== null
+        ? product.stock_minimo
+        : (settings?.globalMinStock || 10)
+      const isRecipe = product.inventory_mode === 'recipe'
+      const isBlend = product.inventory_mode === 'blend'
+      const isUnlimited = product.inventory_mode === 'unlimited'
+      
+      if (!isUnlimited && !isRecipe && !isBlend) {
+        const isLow = (product.stock_actual ?? 0) <= currentMinStock
+        if (isLow) {
+          const alreadyInCart = restockCart.some(c => c.type === 'product' && c.id === product.id)
+          if (!alreadyInCart) {
+            addToRestockCart('product', product)
+            addedCount++
+          }
+        }
+      }
+    })
+    
+    if (addedCount > 0) {
+      setRestockStatus({ type: 'success', message: `Se agregaron ${addedCount} ítems con bajo stock a la lista.` })
+      setTimeout(() => setRestockStatus(null), 4000)
+    } else {
+      setRestockStatus({ type: 'info', message: 'No se encontraron nuevos ítems con bajo stock para agregar.' })
+      setTimeout(() => setRestockStatus(null), 4000)
+    }
+  }
+
+  const handleBatchRestockSubmit = async (e) => {
+    e.preventDefault()
+    if (restockCart.length === 0) {
+      alert('La lista de compras está vacía.')
+      return
+    }
+    
+    const hasInvalidQty = restockCart.some(c => {
+      const q = parseFloat(c.qty)
+      return isNaN(q) || q <= 0
+    })
+    if (hasInvalidQty) {
+      alert('Por favor ingresa cantidades válidas mayores a 0 para todos los ítems.')
+      return
+    }
+    
+    setIsRestockingSubmit(true)
+    setRestockStatus(null)
+    
+    try {
+      const updates = restockCart.map(async (cartItem) => {
+        const qty = parseFloat(cartItem.qty)
+        let baseQty = qty
+        if (cartItem.type === 'supply') {
+          const s = cartItem.item
+          let ratioMultiplier = 1
+          if (cartItem.unitType === 'medium' && s.pack_medium_ratio) {
+            ratioMultiplier = parseFloat(s.pack_medium_ratio) || 1
+          } else if (cartItem.unitType === 'large' && s.pack_large_ratio) {
+            ratioMultiplier = parseFloat(s.pack_large_ratio) || 1
+          }
+          baseQty = qty * ratioMultiplier
+          await updateSupplyItem(s.id, { stock_actual: (s.stock_actual || 0) + baseQty })
+        } else {
+          const p = cartItem.item
+          await updateProduct(p.id, { stock_actual: (p.stock_actual || 0) + qty })
+        }
+      })
+      
+      await Promise.all(updates)
+      
+      if (restockRecordExpense) {
+        const totalAmount = restockCart.reduce((sum, c) => sum + (parseFloat(c.totalCost) || 0), 0)
+        if (totalAmount > 0) {
+          const itemDescriptions = restockCart.map(c => {
+            const qty = parseFloat(c.qty)
+            const name = c.item.nombre
+            const displayUnit = c.type === 'supply'
+              ? (c.unitType === 'medium' ? (c.item.pack_medium_unit || 'paquete') : c.unitType === 'large' ? (c.item.pack_large_unit || 'caja') : (c.item.unidad || 'und'))
+              : 'und'
+            return `${qty} ${displayUnit} de ${name}`
+          })
+          
+          let consolidatedDesc = `Compra de Inventario: ` + itemDescriptions.join(', ')
+          if (consolidatedDesc.length > 250) {
+            consolidatedDesc = consolidatedDesc.substring(0, 247) + '...'
+          }
+          
+          await addExpense({
+            description: consolidatedDesc,
+            amount: totalAmount,
+            category: restockCategory,
+            date: new Date().toISOString()
+          })
+        }
+      }
+      
+      setRestockCart([])
+      setRestockStatus({ type: 'success', message: '¡Todas las entradas de stock fueron registradas correctamente!' })
+      setTimeout(() => setRestockStatus(null), 5000)
+    } catch (err) {
+      console.error(err)
+      setRestockStatus({ type: 'error', message: 'Ocurrió un error al procesar las entradas. Inténtalo de nuevo.' })
+    } finally {
+      setIsRestockingSubmit(false)
+    }
+  }
+
+  const filteredRestockItems = (() => {
+    let items = []
+    
+    if (restockFilter === 'all' || restockFilter === 'products' || restockFilter === 'low') {
+      const activeProducts = products.filter(p => {
+        const isRecipe = p.inventory_mode === 'recipe'
+        const isBlend = p.inventory_mode === 'blend'
+        const isUnlimited = p.inventory_mode === 'unlimited'
+        return !isUnlimited && !isRecipe && !isBlend
+      }).map(p => ({
+        ...p,
+        _type: 'product'
+      }))
+      items = [...items, ...activeProducts]
+    }
+    
+    if (restockFilter === 'all' || restockFilter === 'supplies' || restockFilter === 'low') {
+      const activeSupplies = supplyItems.map(s => ({
+        ...s,
+        _type: 'supply'
+      }))
+      items = [...items, ...activeSupplies]
+    }
+    
+    if (restockSearchTerm.trim()) {
+      const term = restockSearchTerm.toLowerCase()
+      items = items.filter(item => (item.nombre || '').toLowerCase().includes(term))
+    }
+    
+    if (restockFilter === 'low') {
+      items = items.filter(item => {
+        if (item._type === 'supply') {
+          return Number(item.stock_actual) <= Number(item.stock_minimo)
+        } else {
+          const currentMin = item.stock_minimo !== undefined && item.stock_minimo !== null
+            ? item.stock_minimo
+            : (settings?.globalMinStock || 10)
+          return (item.stock_actual ?? 0) <= currentMin
+        }
+      })
+    }
+    
+    return items
+  })()
+
   const handleAddRecipeItem = () => {
     const unused = supplyItems.find(s => !recipeItems.some(ri => ri.supply_item_id === s.id))
     const defaultId = unused ? unused.id : (supplyItems[0]?.id || '')
@@ -722,7 +993,14 @@ export default function Inventory() {
   }
 
   const handleRecipeItemChange = (index, field, value) => {
-    setRecipeItems(prev => prev.map((item, i) => i === index ? { ...item, [field]: value } : item))
+    let finalVal = value
+    if (field === 'cantidad') {
+      if (typeof value === 'string') {
+        const valStr = value.replace(',', '.')
+        finalVal = valStr === '' ? '' : (parseFloat(valStr) || 0)
+      }
+    }
+    setRecipeItems(prev => prev.map((item, i) => i === index ? { ...item, [field]: finalVal } : item))
   }
 
   const handleAddBlendFixedSupply = () => {
@@ -746,9 +1024,16 @@ export default function Inventory() {
   }
 
   const handleBlendFixedSupplyChange = (index, field, value) => {
+    let finalVal = value
+    if (field === 'cantidad') {
+      if (typeof value === 'string') {
+        const valStr = value.replace(',', '.')
+        finalVal = valStr === '' ? '' : (parseFloat(valStr) || 0)
+      }
+    }
     setBlendConfig(prev => ({
       ...prev,
-      fixed_supplies: prev.fixed_supplies.map((item, i) => i === index ? { ...item, [field]: value } : item)
+      fixed_supplies: prev.fixed_supplies.map((item, i) => i === index ? { ...item, [field]: finalVal } : item)
     }))
   }
 
@@ -810,6 +1095,8 @@ export default function Inventory() {
       if (editingProduct) {
         savedProduct = await updateProduct(editingProduct.id, productData)
       } else {
+        delete productData.id
+        delete productData.created_at
         savedProduct = await addProduct(productData)
       }
 
@@ -953,19 +1240,54 @@ export default function Inventory() {
     setDragOverId(null)
   }
 
-  const handleSupplyDragEnd = () => {
-    dragSupplyId.current = null
-    dragOverSupplyId.current = null
-    setDragOverId(null)
-  }
+  const modalEstimatedStock = (() => {
+    if (formData.inventory_mode === 'recipe') {
+      if (!recipeItems || recipeItems.length === 0) return 0
+      const limits = recipeItems.map(r => {
+        const supply = (supplyItems || []).find(s => s.id === r.supply_item_id)
+        const cant = parseFloat(r.cantidad) || 0
+        if (!supply || cant === 0) return Infinity
+        return Math.floor((Number(supply.stock_actual) || 0) / cant)
+      })
+      const minLimit = Math.min(...limits)
+      return minLimit === Infinity ? 0 : minLimit
+    }
+    if (formData.inventory_mode === 'blend' && blendConfig) {
+      const limits = []
+      if (blendConfig.cup_supply_id) {
+        const cup = (supplyItems || []).find(s => String(s.id) === String(blendConfig.cup_supply_id))
+        limits.push(cup ? Math.floor(Number(cup.stock_actual) || 0) : 0)
+      }
+      if (Array.isArray(blendConfig.fixed_supplies)) {
+        for (const fs of blendConfig.fixed_supplies) {
+          const supply = (supplyItems || []).find(s => String(s.id) === String(fs.supply_item_id))
+          const cant = parseFloat(fs.cantidad) || 0
+          if (supply && cant > 0) {
+            limits.push(Math.floor((Number(supply.stock_actual) || 0) / cant))
+          }
+        }
+      }
+      if (Array.isArray(blendConfig.flavor_ids) && blendConfig.flavor_ids.length > 0) {
+        let totalFlavorStock = 0
+        for (const fid of blendConfig.flavor_ids) {
+          const supply = (supplyItems || []).find(s => String(s.id) === String(fid))
+          if (supply) totalFlavorStock += Number(supply.stock_actual) || 0
+        }
+        const capacityLiters = (parseFloat(blendConfig.cup_capacity) || 16) * 0.02957
+        if (capacityLiters > 0) limits.push(Math.floor(totalFlavorStock / capacityLiters))
+      }
+      return limits.length > 0 ? Math.min(...limits) : 0
+    }
+    return 0
+  })()
 
   return (
     <div className="space-y-6 animate-fade-in pb-8">
       {/* Tabs de Navegación */}
-      <div className="flex gap-4 border-b pb-2 border-gray-200 dark:border-dark-border">
+      <div className="flex gap-4 border-b pb-2 border-gray-200 dark:border-dark-border overflow-x-auto scrollbar-none">
         <button
           onClick={() => setActiveTab('products')}
-          className={`px-4 py-2 font-display font-bold text-sm uppercase tracking-wider transition-all border-b-2
+          className={`px-4 py-2 font-display font-bold text-sm uppercase tracking-wider transition-all border-b-2 whitespace-nowrap
             ${activeTab === 'products'
               ? 'border-gold-500 text-gold-500 font-extrabold'
               : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
@@ -974,16 +1296,25 @@ export default function Inventory() {
         </button>
         <button
           onClick={() => setActiveTab('supplies')}
-          className={`px-4 py-2 font-display font-bold text-sm uppercase tracking-wider transition-all border-b-2
+          className={`px-4 py-2 font-display font-bold text-sm uppercase tracking-wider transition-all border-b-2 whitespace-nowrap
             ${activeTab === 'supplies'
               ? 'border-gold-500 text-gold-500 font-extrabold'
               : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
         >
           🧪 Bodega / Insumos
         </button>
+        <button
+          onClick={() => setActiveTab('entries')}
+          className={`px-4 py-2 font-display font-bold text-sm uppercase tracking-wider transition-all border-b-2 whitespace-nowrap
+            ${activeTab === 'entries'
+              ? 'border-gold-500 text-gold-500 font-extrabold'
+              : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
+        >
+          📥 Registrar Entradas
+        </button>
       </div>
 
-      {activeTab === 'products' ? (
+      {activeTab === 'products' && (
         <>
           {/* Header Actions - Productos */}
           <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-6 rounded-3xl shadow-soft-lg
@@ -1120,7 +1451,7 @@ export default function Inventory() {
                             <div className="flex justify-end gap-2">
                               {!isUnlimited && !isRecipe && (
                                 <button
-                                  onClick={() => openEntryModal('product', product)}
+                                  onClick={() => handleQuickAddEntry('product', product)}
                                   title="Registrar entrada de mercancía"
                                   className={`p-2 rounded-xl transition-all
                                     ${isDark ? 'hover:bg-emerald-500/10 text-gray-400 hover:text-emerald-400'
@@ -1158,7 +1489,9 @@ export default function Inventory() {
             </div>
           </div>
         </>
-      ) : (
+      )}
+
+      {activeTab === 'supplies' && (
         <>
           {/* Header Actions - Insumos */}
           <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-6 rounded-3xl shadow-soft-lg
@@ -1330,7 +1663,7 @@ export default function Inventory() {
                           <td className="px-6 py-4">
                             <div className="flex justify-end gap-2">
                               <button
-                                onClick={() => openEntryModal('supply', item)}
+                                onClick={() => handleQuickAddEntry('supply', item)}
                                 title="Registrar entrada de mercancía"
                                 className={`p-2 rounded-xl transition-all
                                   ${isDark ? 'hover:bg-emerald-500/10 text-gray-400 hover:text-emerald-400'
@@ -1365,6 +1698,420 @@ export default function Inventory() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {activeTab === 'entries' && (
+        <>
+          {/* Tab - Registrar Compras (Abastecimiento en Lote) */}
+          <div className="space-y-6 animate-fade-in pb-8">
+            {/* Status Feedback banner */}
+            {restockStatus && (
+              <div className={`p-4 rounded-2xl border text-sm font-bold flex items-center justify-between gap-3 animate-fade-in
+                ${restockStatus.type === 'success' 
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' 
+                  : restockStatus.type === 'error'
+                    ? 'bg-red-500/10 border-red-500/30 text-red-500'
+                    : 'bg-blue-500/10 border-blue-500/30 text-blue-500'}`}>
+                <div className="flex items-center gap-3">
+                  <AlertTriangle size={20} />
+                  <span>{restockStatus.message}</span>
+                </div>
+                <button onClick={() => setRestockStatus(null)} className="opacity-60 hover:opacity-100" type="button">
+                  <X size={16} />
+                </button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Left Column: Search & Add Items */}
+              <div className={`lg:col-span-5 p-6 rounded-3xl border flex flex-col gap-4 max-h-[85vh] overflow-y-auto
+                ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
+                
+                <h3 className="font-display font-bold text-lg">Buscar y Agregar</h3>
+                
+                {/* Search box */}
+                <div className="relative w-full">
+                  <span className={`absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none
+                    ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                    <Search size={18} />
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Filtrar por nombre..."
+                    value={restockSearchTerm}
+                    onChange={(e) => setRestockSearchTerm(e.target.value)}
+                    className={`w-full pl-11 pr-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all duration-200
+                      focus:border-gold-500 focus:shadow-gold-sm
+                      ${isDark ? 'bg-dark-card border-dark-border text-white placeholder-gray-600'
+                        : 'bg-light-surface border-light-border text-gray-900 placeholder-gray-400'}`}
+                  />
+                </div>
+
+                {/* Filter Pills */}
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { id: 'all', label: 'Todos' },
+                    { id: 'products', label: '📦 Productos' },
+                    { id: 'supplies', label: '🧪 Insumos' },
+                    { id: 'low', label: '⚠️ Bajo Stock' }
+                  ].map(f => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setRestockFilter(f.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border
+                        ${restockFilter === f.id
+                          ? 'border-gold-500 bg-gold-500/10 text-gold-500 font-extrabold'
+                          : isDark ? 'border-dark-border bg-dark-card text-gray-400 hover:text-white' : 'border-light-border bg-light-surface text-gray-600 hover:text-gray-900'}`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Search Results List */}
+                <div className="space-y-2 overflow-y-auto pr-1">
+                  {filteredRestockItems.length === 0 ? (
+                    <p className={`text-xs text-center py-6 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                      No se encontraron productos o insumos.
+                    </p>
+                  ) : (
+                    filteredRestockItems.map(item => {
+                      const isLow = item._type === 'supply'
+                        ? Number(item.stock_actual) <= Number(item.stock_minimo)
+                        : (item.stock_actual ?? 0) <= (item.stock_minimo !== undefined && item.stock_minimo !== null ? item.stock_minimo : (settings?.globalMinStock || 10))
+                      const alreadyAdded = restockCart.some(c => c.id === item.id && c.type === item._type)
+
+                      return (
+                        <div
+                          key={`${item._type}-${item.id}`}
+                          onClick={() => !alreadyAdded && addToRestockCart(item._type, item)}
+                          className={`flex items-center justify-between p-3 rounded-2xl border transition-all duration-200 cursor-pointer
+                            ${alreadyAdded 
+                              ? 'opacity-50 cursor-not-allowed ' + (isDark ? 'bg-dark-card/50 border-dark-border' : 'bg-light-surface/50 border-light-border')
+                              : isDark ? 'bg-dark-card border-dark-border hover:border-gold-500/50 hover:bg-gold-500/5' : 'bg-light-surface border-light-border hover:border-gold-500/50 hover:bg-gold-500/5'}
+                            ${isLow && !alreadyAdded ? (isDark ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50 border-red-100') : ''}`}
+                        >
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-semibold text-sm flex items-center gap-1.5">
+                              {item._type === 'product' ? '📦' : '🧪'} {item.nombre}
+                              {isLow && (
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded
+                                  ${isDark ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-red-100 text-red-700 border border-red-200'}`}>
+                                  Bajo Stock
+                                </span>
+                              )}
+                            </span>
+                            <span className={`text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                              Stock: {item._type === 'supply' ? formatStockWithPackages(item.stock_actual, item) : `${item.stock_actual ?? 0} und`}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={alreadyAdded}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addToRestockCart(item._type, item);
+                            }}
+                            className={`p-2 rounded-xl border transition-all
+                              ${alreadyAdded 
+                                ? (isDark ? 'border-dark-border text-gray-650' : 'border-light-border text-gray-300')
+                                : isDark ? 'border-dark-border bg-dark-card hover:bg-gold-500 hover:text-dark-bg hover:border-gold-500 text-gold-400'
+                                  : 'border-light-border bg-white hover:bg-gold-500 hover:text-dark-bg hover:border-gold-500 text-gold-600'}`}
+                          >
+                            <Plus size={16} />
+                          </button>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Restock Cart */}
+              <div className="lg:col-span-7 flex flex-col gap-6">
+                <div className={`p-6 rounded-3xl border flex flex-col gap-4 flex-1
+                  ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
+                  
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div>
+                      <h3 className="font-display font-bold text-lg flex items-center gap-2">
+                        <ShoppingCart size={20} className="text-gold-500" />
+                        Lista de Entradas / Reposición
+                      </h3>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Ingresa las cantidades y costos correspondientes
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={addLowStockItemsToRestockCart}
+                      className="px-4 py-2 rounded-xl text-xs font-bold tracking-wider uppercase flex items-center gap-1.5
+                        bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/20
+                        transition-all duration-200 self-stretch sm:self-auto justify-center"
+                    >
+                      <Sparkles size={14} />
+                      Cargar Bajo Stock
+                    </button>
+                  </div>
+
+                  {/* Cart Items List */}
+                  <div className="space-y-4 flex-1 overflow-y-auto max-h-[50vh] pr-2 scrollbar-thin">
+                    {restockCart.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-12 text-center">
+                        <div className={`w-16 h-16 rounded-3xl flex items-center justify-center mb-4 border
+                          ${isDark ? 'bg-dark-card text-gray-650 border-dark-border' : 'bg-light-surface text-gray-300 border-light-border'}`}>
+                          <PackagePlus size={32} />
+                        </div>
+                        <h4 className="font-bold text-base">La lista está vacía</h4>
+                        <p className={`text-xs max-w-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                          Usa el buscador de la izquierda o el botón para cargar ítems que necesitan reposición.
+                        </p>
+                      </div>
+                    ) : (
+                      restockCart.map((cartItem, idx) => {
+                        const item = cartItem.item
+                        return (
+                          <div
+                            key={`${cartItem.type}-${cartItem.id}`}
+                            className={`p-4 rounded-2xl border flex flex-col gap-3 transition-all duration-200
+                              ${isDark ? 'bg-dark-card border-dark-border' : 'bg-light-surface border-light-border'}`}
+                          >
+                            {/* Card Header */}
+                            <div className="flex justify-between items-start gap-6">
+                              <div>
+                                <span className={`text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded mb-1 inline-block
+                                  ${cartItem.type === 'product'
+                                    ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                    : 'bg-teal-500/10 text-teal-400 border border-teal-500/20'}`}>
+                                  {cartItem.type === 'product' ? 'Producto' : 'Insumo'}
+                                </span>
+                                <h4 className="font-bold text-sm leading-tight">{item.nombre}</h4>
+                                <p className={`text-[10px] mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                  Stock actual: {cartItem.type === 'supply' ? formatStockWithPackages(item.stock_actual, item) : `${item.stock_actual ?? 0} und`}
+                                </p>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => removeFromRestockCart(idx)}
+                                className={`p-1.5 rounded-lg border transition-colors
+                                  ${isDark ? 'border-dark-border hover:bg-red-500/10 hover:text-red-400 text-gray-500'
+                                    : 'border-light-border hover:bg-red-50 hover:text-red-500 text-gray-450'}`}
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+
+                            {/* Presentación (Only for Insumos with packages config) */}
+                            {cartItem.type === 'supply' && (item.pack_medium_unit || item.pack_large_unit) && (
+                              <div className="space-y-1.5 text-left">
+                                <span className="text-[10px] font-bold uppercase tracking-wider opacity-60">Presentación a ingresar</span>
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => updateRestockCartItem(idx, { unitType: 'base' })}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all
+                                      ${cartItem.unitType === 'base'
+                                        ? 'border-gold-500 bg-gold-500/10 text-gold-500'
+                                        : isDark ? 'border-dark-border bg-dark-surface text-gray-400 hover:text-white' : 'border-light-border bg-white text-gray-600 hover:text-gray-900'}`}
+                                  >
+                                    {item.unidad || 'Unidad'}
+                                  </button>
+                                  {item.pack_medium_unit && (
+                                    <button
+                                      type="button"
+                                      onClick={() => updateRestockCartItem(idx, { unitType: 'medium' })}
+                                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all
+                                        ${cartItem.unitType === 'medium'
+                                          ? 'border-gold-500 bg-gold-500/10 text-gold-500'
+                                          : isDark ? 'border-dark-border bg-dark-surface text-gray-400 hover:text-white' : 'border-light-border bg-white text-gray-600 hover:text-gray-900'}`}
+                                    >
+                                      {item.pack_medium_unit} ({item.pack_medium_ratio})
+                                    </button>
+                                  )}
+                                  {item.pack_large_unit && (
+                                    <button
+                                      type="button"
+                                      onClick={() => updateRestockCartItem(idx, { unitType: 'large' })}
+                                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all
+                                        ${cartItem.unitType === 'large'
+                                          ? 'border-gold-500 bg-gold-500/10 text-gold-500'
+                                          : isDark ? 'border-dark-border bg-dark-surface text-gray-400 hover:text-white' : 'border-light-border bg-white text-gray-600 hover:text-gray-900'}`}
+                                    >
+                                      {item.pack_large_unit} ({item.pack_large_ratio})
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Inputs grid */}
+                            <div className="grid grid-cols-3 gap-3 text-left">
+                              {/* Quantity */}
+                              <div className="space-y-1">
+                                <label className="text-[9px] font-bold uppercase opacity-60">
+                                  Cant ({
+                                    cartItem.type === 'supply'
+                                      ? (cartItem.unitType === 'medium' ? item.pack_medium_unit : cartItem.unitType === 'large' ? item.pack_large_unit : (item.unidad || 'und'))
+                                      : 'und'
+                                  })
+                                </label>
+                                <input
+                                  required
+                                  type="number"
+                                  step="0.01"
+                                  min="0.01"
+                                  placeholder="Ej: 5"
+                                  value={cartItem.qty}
+                                  onChange={e => updateRestockCartItem(idx, { qty: e.target.value })}
+                                  className={`w-full px-3 py-2 rounded-xl text-xs font-semibold outline-none border transition-all focus:border-gold-500
+                                    ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}
+                                />
+                              </div>
+
+                              {/* Unit Price */}
+                              <div className="space-y-1">
+                                <label className="text-[9px] font-bold uppercase opacity-60">Unitario ($)</label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="Ej: 1500"
+                                  value={cartItem.unitPrice}
+                                  onChange={e => updateRestockCartItem(idx, { unitPrice: e.target.value })}
+                                  className={`w-full px-3 py-2 rounded-xl text-xs font-semibold outline-none border transition-all focus:border-gold-500
+                                    ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}
+                                />
+                              </div>
+
+                              {/* Total Cost */}
+                              <div className="space-y-1">
+                                <label className="text-[9px] font-bold uppercase opacity-60">Total ($)</label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="Ej: 7500"
+                                  value={cartItem.totalCost}
+                                  onChange={e => updateRestockCartItem(idx, { totalCost: e.target.value })}
+                                  className={`w-full px-3 py-2 rounded-xl text-xs font-semibold outline-none border transition-all focus:border-gold-500
+                                    ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}
+                                />
+                              </div>
+                            </div>
+
+                            {/* New Total Preview */}
+                            {cartItem.qty && !isNaN(parseFloat(cartItem.qty)) && parseFloat(cartItem.qty) > 0 && (() => {
+                              const qtyVal = parseFloat(cartItem.qty)
+                              let baseQty = qtyVal
+                              if (cartItem.type === 'supply') {
+                                const s = cartItem.item
+                                if (cartItem.unitType === 'medium' && s.pack_medium_ratio) {
+                                  baseQty = qtyVal * (parseFloat(s.pack_medium_ratio) || 1)
+                                } else if (cartItem.unitType === 'large' && s.pack_large_ratio) {
+                                  baseQty = qtyVal * (parseFloat(s.pack_large_ratio) || 1)
+                                }
+                              }
+                              const newTotal = (item.stock_actual || 0) + baseQty
+                              return (
+                                <div className={`text-[10px] font-bold flex justify-between items-center opacity-85 pt-2 border-t border-dashed
+                                  ${isDark ? 'border-dark-border text-emerald-400' : 'border-light-border text-emerald-700'}`}>
+                                  <span>Nuevo Stock Estimado:</span>
+                                  <span>
+                                    {cartItem.type === 'supply'
+                                      ? formatStockWithPackages(newTotal, item)
+                                      : `${newTotal} und`}
+                                  </span>
+                                </div>
+                              )
+                            })()}
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Checkout Summary Card */}
+                {restockCart.length > 0 && (
+                  <form onSubmit={handleBatchRestockSubmit} className={`p-6 rounded-3xl border space-y-4 text-left
+                    ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
+                    
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      {/* Summary details */}
+                      <div className="flex flex-col">
+                        <span className={`text-xs font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Resumen de Compra ({restockCart.length} ítems)
+                        </span>
+                        <span className={`font-display font-extrabold text-2xl tracking-tight
+                          ${isDark ? 'text-gold-400' : 'text-gold-600'}`}>
+                          ${restockCart.reduce((sum, c) => sum + (parseFloat(c.totalCost) || 0), 0).toLocaleString('es-CO')}
+                        </span>
+                      </div>
+
+                      {/* Finance record option */}
+                      <div className="flex flex-col gap-1 text-left min-w-[180px]">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="restockRecordExpenseCheckbox"
+                            checked={restockRecordExpense}
+                            onChange={e => setRestockRecordExpense(e.target.checked)}
+                            className="w-4 h-4 rounded text-gold-500 focus:ring-gold-500 border-gray-300 dark:border-dark-border cursor-pointer"
+                          />
+                          <label htmlFor="restockRecordExpenseCheckbox" className="text-xs font-bold uppercase opacity-85 select-none cursor-pointer">
+                            ¿Registrar gasto?
+                          </label>
+                        </div>
+                        {restockRecordExpense && (
+                          <select
+                            value={restockCategory}
+                            onChange={e => setRestockCategory(e.target.value)}
+                            className={`w-full mt-1 px-3 py-2 rounded-xl text-xs font-semibold outline-none border cursor-pointer
+                              ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                          >
+                            <option value="Insumos">Insumos</option>
+                            <option value="Servicios">Servicios</option>
+                            <option value="Arriendo">Arriendo</option>
+                            <option value="Otros">Otros</option>
+                          </select>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <button
+                        type="button"
+                        onClick={clearRestockCart}
+                        className={`flex-1 py-3 rounded-2xl text-xs font-bold uppercase transition-all flex items-center justify-center gap-2 border
+                          ${isDark ? 'border-dark-border bg-dark-card hover:bg-dark-surface text-gray-400' : 'border-light-border bg-gray-100 hover:bg-gray-150 text-gray-650'}`}
+                      >
+                        <Trash2 size={15} />
+                        Vaciar Lista
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={isRestockingSubmit}
+                        className="flex-1 py-3 rounded-2xl text-xs font-bold uppercase bg-gold-gradient text-dark-bg hover:scale-[1.02] active:scale-[0.98] transition-all shadow-gold-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isRestockingSubmit ? (
+                          <div className="w-4 h-4 border-2 border-dark-bg border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <PackagePlus size={15} />
+                        )}
+                        Registrar Entrada
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
             </div>
           </div>
         </>
@@ -1541,7 +2288,7 @@ export default function Inventory() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1.5 opacity-80">
                         <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock Estimado</label>
-                        <input readOnly type="text" value={`~${editingProduct ? (getEstimatedStock ? (getEstimatedStock(editingProduct.id) ?? 0) : 0) : 0} (Calculado)`}
+                        <input readOnly type="text" value={`~${modalEstimatedStock} unds est. (Calculado)`}
                           className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 cursor-not-allowed
                           ${isDark ? 'bg-dark-card/40 border-dark-border text-gray-400' : 'bg-light-surface/50 border-light-border text-gray-500'}`} />
                       </div>
@@ -1558,7 +2305,7 @@ export default function Inventory() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1.5 opacity-80">
                         <label className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Stock Estimado</label>
-                        <input readOnly type="text" value={`~${editingProduct ? (getEstimatedStock ? (getEstimatedStock(editingProduct.id) ?? 0) : 0) : 0} (Calculado)`}
+                        <input readOnly type="text" value={`~${modalEstimatedStock} unds est. (Calculado)`}
                           className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 cursor-not-allowed
                           ${isDark ? 'bg-dark-card/40 border-dark-border text-gray-400' : 'bg-light-surface/50 border-light-border text-gray-500'}`} />
                       </div>
@@ -1605,12 +2352,12 @@ export default function Inventory() {
                                 </select>
                                 <input
                                   type="number"
-                                  step="0.001"
-                                  min="0.001"
+                                  step="any"
+                                  min="0.0001"
                                   required
                                   value={item.cantidad}
                                   placeholder="Cant."
-                                  onChange={e => handleRecipeItemChange(idx, 'cantidad', parseFloat(e.target.value) || 0)}
+                                  onChange={e => handleRecipeItemChange(idx, 'cantidad', e.target.value)}
                                   className={`w-24 px-3 py-2 rounded-xl text-xs font-medium outline-none border-2 focus:border-gold-500
                                     ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
                                 />
@@ -1706,12 +2453,12 @@ export default function Inventory() {
                                   </select>
                                   <input
                                     type="number"
-                                    step="0.001"
-                                    min="0.001"
+                                    step="any"
+                                    min="0.0001"
                                     required
                                     value={item.cantidad}
                                     placeholder="Cant."
-                                    onChange={e => handleBlendFixedSupplyChange(idx, 'cantidad', parseFloat(e.target.value) || 0)}
+                                    onChange={e => handleBlendFixedSupplyChange(idx, 'cantidad', e.target.value)}
                                     className={`w-24 px-3 py-2 rounded-xl text-xs font-medium outline-none border-2 focus:border-gold-500
                                       ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
                                   />

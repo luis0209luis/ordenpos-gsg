@@ -9,7 +9,7 @@ export default function AdminMasterStats() {
 
   const [stats, setStats] = useState({
     activeBusinesses: 0,
-    globalSalesTotal: 0,
+    operatingToday: 0,
     totalProducts: 0,
     expiringBusinesses: 0,
     latestSales: [],
@@ -21,13 +21,25 @@ export default function AdminMasterStats() {
     async function loadStats() {
       try {
         const { count: bCount } = await supabase.from('businesses').select('*', { count: 'exact', head: true })
-        const { data: salesData } = await supabase.from('sales').select('total')
+        const { data: salesData } = await supabase.from('sales').select('business_id, date, created_at')
         const { count: pCount } = await supabase.from('products').select('*', { count: 'exact', head: true })
         const { count: eCount } = await supabase.from('businesses').select('*', { count: 'exact', head: true }).lte('days_remaining', 5)
         
         const { data: latestSales } = await supabase.from('sales').select('*').order('date', { ascending: false }).limit(5)
         const { data: recentTickets } = await supabase.from('support_tickets').select('*').order('created_at', { ascending: false }).limit(5)
         
+        // Calcular negocios que registraron ventas en las últimas 24 horas
+        const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000
+        const activeBizSet = new Set()
+        if (salesData) {
+          salesData.forEach(s => {
+            const saleTime = new Date(s.date || s.created_at).getTime()
+            if (saleTime >= twentyFourHoursAgo && s.business_id) {
+              activeBizSet.add(s.business_id)
+            }
+          })
+        }
+
         // Fetch products to determine real top categories globally
         const { data: allProducts } = await supabase.from('products').select('categoria')
         let catCount = {}
@@ -39,12 +51,10 @@ export default function AdminMasterStats() {
           })
         }
         const topCategories = Object.entries(catCount || {}).sort((a, b) => b[1] - a[1]).slice(0, 3)
-
-        const sumSales = salesData ? salesData.reduce((sum, s) => sum + (Number(s.total) || 0), 0) : 0
         
         setStats({
           activeBusinesses: bCount || 0,
-          globalSalesTotal: sumSales,
+          operatingToday: activeBizSet.size,
           totalProducts: pCount || 0,
           expiringBusinesses: eCount || 0,
           latestSales: latestSales || [],
@@ -79,12 +89,12 @@ export default function AdminMasterStats() {
           </div>
           <div className="space-y-4">
             <div className="flex justify-between items-end">
-              <span className={`text-sm font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Empresas Activas</span>
+              <span className={`text-sm font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Empresas Registradas</span>
               <span className={`text-2xl font-black font-display ${isDark ? 'text-white' : 'text-gray-900'}`}>{stats.activeBusinesses}</span>
             </div>
             <div className="flex justify-between items-end">
-              <span className={`text-sm font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Ventas Globales Procesadas</span>
-              <span className={`text-lg font-bold font-display ${isDark ? 'text-white' : 'text-gray-900'}`}>${stats.globalSalesTotal.toLocaleString()}</span>
+              <span className={`text-sm font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Negocios Operando Hoy</span>
+              <span className={`text-lg font-bold font-display ${isDark ? 'text-white' : 'text-gray-900'}`}>{stats.operatingToday} <span className="text-xs font-normal opacity-60">de {stats.activeBusinesses}</span></span>
             </div>
             <div className="flex justify-between items-end">
               <span className={`text-sm font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Productos en el Sistema</span>

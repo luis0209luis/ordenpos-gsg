@@ -26,7 +26,14 @@ export function InventoryProvider({ children }) {
 
     async function loadData() {
       if (!isValidUUID(bid)) {
-        if (isMounted) setLoading(false)
+        if (isMounted) {
+          setProducts([])
+          setSalesHistory([])
+          setSupplyItems([])
+          setProductRecipes([])
+          setCustomizationOptions([])
+          setLoading(false)
+        }
         return
       }
 
