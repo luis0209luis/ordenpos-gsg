@@ -422,12 +422,74 @@ export default function Inventory() {
     }
   };
 
-  const filteredProducts = (products || []).filter(p => {
+  // --- Drag & Drop order for products ---
+  const [productOrder, setProductOrder] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('ordenpos_product_order') || '[]') } catch { return [] }
+  })
+  const dragProductId = useRef(null)
+  const dragOverProductId = useRef(null)
+  const [dragOverProdId, setDragOverProdId] = useState(null)
+
+  const orderedProducts = (() => {
+    const all = (products || []).filter(Boolean)
+    if (!productOrder || productOrder.length === 0) return all
+    const orderMap = {}
+    productOrder.forEach((id, idx) => { if (id) orderMap[id] = idx })
+    return [...all].sort((a, b) => {
+      const ia = orderMap[a?.id] ?? 999999
+      const ib = orderMap[b?.id] ?? 999999
+      return ia - ib
+    })
+  })()
+
+  const [selectedProductCategory, setSelectedProductCategory] = useState('all')
+
+  const filteredProducts = (orderedProducts || []).filter(p => {
+    if (!p) return false
     const nombre = p?.nombre || ''
     const categoria = p?.categoria || ''
-    return nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
       categoria.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesCategory = selectedProductCategory === 'all' || categoria === selectedProductCategory
+    return matchesSearch && matchesCategory
   })
+
+  const handleProductDragStart = (e, id) => {
+    dragProductId.current = id
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleProductDragOver = (e, id) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    dragOverProductId.current = id
+    setDragOverProdId(id)
+  }
+
+  const handleProductDrop = (e, id) => {
+    e.preventDefault()
+    const fromId = dragProductId.current
+    const toId = id
+    if (!fromId || fromId === toId) { setDragOverProdId(null); return }
+    const currentIds = orderedProducts.map(p => p.id)
+    const fromIdx = currentIds.indexOf(fromId)
+    const toIdx = currentIds.indexOf(toId)
+    if (fromIdx === -1 || toIdx === -1) { setDragOverProdId(null); return }
+    const newIds = [...currentIds]
+    newIds.splice(fromIdx, 1)
+    newIds.splice(toIdx, 0, fromId)
+    setProductOrder(newIds)
+    localStorage.setItem('ordenpos_product_order', JSON.stringify(newIds))
+    dragProductId.current = null
+    dragOverProductId.current = null
+    setDragOverProdId(null)
+  }
+
+  const handleProductDragEnd = () => {
+    dragProductId.current = null
+    dragOverProductId.current = null
+    setDragOverProdId(null)
+  }
 
   const location = useLocation()
 
@@ -1213,9 +1275,16 @@ export default function Inventory() {
     })
   })()
 
-  const filteredSupplies = (orderedSupplies || []).filter(s =>
-    s && (s.nombre || '').toLowerCase().includes((supplySearchTerm || '').toLowerCase())
-  )
+  const [selectedSupplyLocation, setSelectedSupplyLocation] = useState('all')
+
+  const availableLocations = [...new Set((supplyItems || []).map(s => s?.ubicacion).filter(Boolean))]
+
+  const filteredSupplies = (orderedSupplies || []).filter(s => {
+    if (!s) return false
+    const matchesSearch = (s.nombre || '').toLowerCase().includes((supplySearchTerm || '').toLowerCase())
+    const matchesLocation = selectedSupplyLocation === 'all' || s.ubicacion === selectedSupplyLocation
+    return matchesSearch && matchesLocation
+  })
 
   const handleSupplyDragStart = (e, id) => {
     dragSupplyId.current = id
@@ -1335,21 +1404,37 @@ export default function Inventory() {
           <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-6 rounded-3xl shadow-soft-lg
             ${isDark ? 'bg-dark-surface border border-dark-border' : 'bg-white border border-light-border'}`}>
 
-            <div className="relative w-full md:w-96">
-              <span className={`absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none
-                ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                <Search size={18} />
-              </span>
-              <input
-                type="text"
-                placeholder="Buscar productos..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className={`w-full pl-11 pr-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all duration-200
-                  focus:border-gold-500 focus:shadow-gold-sm
-                  ${isDark ? 'bg-dark-card border-dark-border text-white placeholder-gray-600'
-                    : 'bg-light-surface border-light-border text-gray-900 placeholder-gray-400'}`}
-              />
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+              <div className="relative w-full md:w-80">
+                <span className={`absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none
+                  ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                  <Search size={18} />
+                </span>
+                <input
+                  type="text"
+                  placeholder="Buscar productos..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className={`w-full pl-11 pr-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all duration-200
+                    focus:border-gold-500 focus:shadow-gold-sm
+                    ${isDark ? 'bg-dark-card border-dark-border text-white placeholder-gray-600'
+                      : 'bg-light-surface border-light-border text-gray-900 placeholder-gray-400'}`}
+                />
+              </div>
+
+              <select
+                value={selectedProductCategory}
+                onChange={(e) => setSelectedProductCategory(e.target.value)}
+                className={`px-4 py-3 rounded-2xl text-sm font-bold outline-none border-2 transition-all duration-200 cursor-pointer
+                  focus:border-gold-500
+                  ${isDark ? 'bg-dark-card border-dark-border text-gold-400'
+                    : 'bg-light-surface border-light-border text-gold-600'}`}
+              >
+                <option value="all">📂 Todas las Categorías</option>
+                {availableCategories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
             </div>
 
             <button
@@ -1371,8 +1456,24 @@ export default function Inventory() {
                 <thead>
                   <tr className={`border-b text-xs uppercase tracking-wider
                     ${isDark ? 'border-dark-border bg-dark-card text-gray-400' : 'border-light-border bg-light-surface text-gray-500'}`}>
+                    <th className="pl-3 pr-1 py-4 w-8"></th>
                     <th className="px-6 py-4 font-semibold">Producto</th>
-                    <th className="px-6 py-4 font-semibold">Categoría</th>
+                    <th className="px-6 py-4 font-semibold">
+                      <div className="flex items-center gap-2">
+                        <span>Categoría</span>
+                        <select
+                          value={selectedProductCategory}
+                          onChange={e => setSelectedProductCategory(e.target.value)}
+                          className={`px-2 py-1 rounded-lg text-xs font-bold outline-none border cursor-pointer lowercase
+                            ${isDark ? 'bg-dark-surface border-dark-border text-gold-400' : 'bg-white border-gray-300 text-gold-600'}`}
+                        >
+                          <option value="all">Todas</option>
+                          {availableCategories.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </th>
                     <th className="px-6 py-4 font-semibold text-right">Precio</th>
                     <th className="px-6 py-4 font-semibold text-center">Stock Actual</th>
                     <th className="px-6 py-4 font-semibold text-center">Estado</th>
@@ -1382,7 +1483,7 @@ export default function Inventory() {
                 <tbody>
                   {filteredProducts.length === 0 ? (
                     <tr>
-                      <td colSpan="6" className={`px-6 py-8 text-center text-sm font-medium
+                      <td colSpan="7" className={`px-6 py-8 text-center text-sm font-medium
                         ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                         No se encontraron productos.
                       </td>
@@ -1403,10 +1504,30 @@ export default function Inventory() {
                         : (product.stock_actual ?? 0)
 
                       const isLowStock = !isUnlimited && (displayStock <= currentMinStock)
+                      const isDragOver = dragOverProdId === product.id
 
                       return (
-                        <tr key={product.id} className={`border-b last:border-0 transition-colors duration-200 hover:bg-gold-500/5
-                          ${isDark ? 'border-dark-border text-gray-300' : 'border-light-border text-gray-700'}`}>
+                        <tr
+                          key={product.id}
+                          onDragOver={(e) => handleProductDragOver(e, product.id)}
+                          onDrop={(e) => handleProductDrop(e, product.id)}
+                          onDragEnd={handleProductDragEnd}
+                          className={`border-b last:border-0 transition-colors duration-200 hover:bg-gold-500/5
+                            ${isDragOver ? (isDark ? 'border-t-2 border-t-gold-400 bg-gold-500/10' : 'border-t-2 border-t-gold-500 bg-gold-50') : ''}
+                            ${isDark ? 'border-dark-border text-gray-300' : 'border-light-border text-gray-700'}`}>
+                          {/* Drag Handle */}
+                          <td className="pl-3 pr-1 py-4 w-8">
+                            <span
+                              draggable
+                              onDragStart={(e) => handleProductDragStart(e, product.id)}
+                              title="Arrastra para reordenar producto"
+                              className={`flex items-center justify-center cursor-grab active:cursor-grabbing transition-opacity
+                                ${isDark ? 'text-gray-500 hover:text-gold-400' : 'text-gray-300 hover:text-gold-500'}`}
+                              style={{ opacity: 0.45 }}
+                            >
+                              <GripVertical size={18} />
+                            </span>
+                          </td>
                           <td className={`px-6 py-4 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
                             {product.nombre}
                             {isRecipe && (
@@ -1512,21 +1633,39 @@ export default function Inventory() {
           <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-6 rounded-3xl shadow-soft-lg
             ${isDark ? 'bg-dark-surface border border-dark-border' : 'bg-white border border-light-border'}`}>
 
-            <div className="relative w-full md:w-96">
-              <span className={`absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none
-                ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                <Search size={18} />
-              </span>
-              <input
-                type="text"
-                placeholder="Buscar insumos..."
-                value={supplySearchTerm}
-                onChange={(e) => setSupplySearchTerm(e.target.value)}
-                className={`w-full pl-11 pr-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all duration-200
-                  focus:border-gold-500 focus:shadow-gold-sm
-                  ${isDark ? 'bg-dark-card border-dark-border text-white placeholder-gray-600'
-                    : 'bg-light-surface border-light-border text-gray-900 placeholder-gray-400'}`}
-              />
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+              <div className="relative w-full md:w-80">
+                <span className={`absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none
+                  ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                  <Search size={18} />
+                </span>
+                <input
+                  type="text"
+                  placeholder="Buscar insumos..."
+                  value={supplySearchTerm}
+                  onChange={(e) => setSupplySearchTerm(e.target.value)}
+                  className={`w-full pl-11 pr-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all duration-200
+                    focus:border-gold-500 focus:shadow-gold-sm
+                    ${isDark ? 'bg-dark-card border-dark-border text-white placeholder-gray-600'
+                      : 'bg-light-surface border-light-border text-gray-900 placeholder-gray-400'}`}
+                />
+              </div>
+
+              {availableLocations.length > 0 && (
+                <select
+                  value={selectedSupplyLocation}
+                  onChange={(e) => setSelectedSupplyLocation(e.target.value)}
+                  className={`px-4 py-3 rounded-2xl text-sm font-bold outline-none border-2 transition-all duration-200 cursor-pointer
+                    focus:border-gold-500
+                    ${isDark ? 'bg-dark-card border-dark-border text-gold-400'
+                      : 'bg-light-surface border-light-border text-gold-600'}`}
+                >
+                  <option value="all">📍 Todas las Ubicaciones</option>
+                  {availableLocations.map(loc => (
+                    <option key={loc} value={loc}>{loc}</option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <button
@@ -1554,7 +1693,24 @@ export default function Inventory() {
                     <th className="px-6 py-4 font-semibold text-right">Precio Unitario</th>
                     <th className="px-6 py-4 font-semibold text-center">Stock Actual</th>
                     <th className="px-6 py-4 font-semibold text-center">Stock Mínimo</th>
-                    <th className="px-6 py-4 font-semibold text-center">Ubicación</th>
+                    <th className="px-6 py-4 font-semibold text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <span>Ubicación</span>
+                        {availableLocations.length > 0 && (
+                          <select
+                            value={selectedSupplyLocation}
+                            onChange={e => setSelectedSupplyLocation(e.target.value)}
+                            className={`px-2 py-1 rounded-lg text-xs font-bold outline-none border cursor-pointer lowercase
+                              ${isDark ? 'bg-dark-surface border-dark-border text-gold-400' : 'bg-white border-gray-300 text-gold-600'}`}
+                          >
+                            <option value="all">Todas</option>
+                            {availableLocations.map(loc => (
+                              <option key={loc} value={loc}>{loc}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    </th>
                     <th className="px-6 py-4 font-semibold text-center">Estado</th>
                     <th className="px-6 py-4 font-semibold text-right">Acciones</th>
                   </tr>
