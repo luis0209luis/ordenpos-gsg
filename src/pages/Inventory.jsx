@@ -1249,6 +1249,12 @@ export default function Inventory() {
     setDragOverId(null)
   }
 
+  const handleSupplyDragEnd = () => {
+    dragSupplyId.current = null
+    dragOverSupplyId.current = null
+    setDragOverId(null)
+  }
+
   const modalEstimatedStock = (() => {
     if (formData.inventory_mode === 'recipe') {
       if (!recipeItems || recipeItems.length === 0) return 0
