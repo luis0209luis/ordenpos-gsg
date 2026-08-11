@@ -5,6 +5,13 @@ import { isValidUUID } from '../utils/uuid'
 
 const FinanceContext = createContext()
 
+// Maps DB snake_case columns -> camelCase for UI consistency
+const normalizeEmployee = (emp) => ({
+  ...emp,
+  baseSalary: emp.salary || 0,
+  frequency: emp.payment_frequency || 'Mensual',
+})
+
 export function FinanceProvider({ children }) {
   const { user } = useAuth()
   const bid = user?.businessId || 'default'
@@ -40,7 +47,7 @@ export function FinanceProvider({ children }) {
         if (!isMounted) return
 
         if (expRes.data) setExpenses(expRes.data)
-        if (empRes.data) setEmployees(empRes.data)
+        if (empRes.data) setEmployees(empRes.data.map(normalizeEmployee))
         if (payRes.data) setPayrollHistory(payRes.data)
 
         expensesChannel = supabase.channel('expenses-changes')
@@ -62,10 +69,12 @@ export function FinanceProvider({ children }) {
           .on('postgres_changes', { event: '*', schema: 'public', table: 'employees', filter: `business_id=eq.${bid}` }, payload => {
             if (!isMounted) return
             if (payload.eventType === 'INSERT') {
-              setEmployees(prev => prev.find(e => e.id === payload.new.id) ? prev : [payload.new, ...prev])
+              const norm = normalizeEmployee(payload.new)
+              setEmployees(prev => prev.find(e => e.id === norm.id) ? prev : [norm, ...prev])
             }
             if (payload.eventType === 'UPDATE') {
-              setEmployees(prev => prev.map(e => e.id === payload.new.id ? { ...e, ...payload.new } : e))
+              const norm = normalizeEmployee(payload.new)
+              setEmployees(prev => prev.map(e => e.id === norm.id ? { ...e, ...norm } : e))
             }
             if (payload.eventType === 'DELETE') {
               setEmployees(prev => prev.filter(e => e.id !== payload.old.id))
@@ -122,8 +131,18 @@ export function FinanceProvider({ children }) {
   const addEmployee = async (employee) => {
     if (!isValidUUID(bid)) return
     try {
-      const { data } = await supabase.from('employees').insert({ ...employee, business_id: bid }).select().single()
-      if (data) setEmployees(prev => [data, ...prev])
+      // Map UI fields to actual DB column names
+      const dbRecord = {
+        business_id: bid,
+        name: employee.name,
+        role: employee.role,
+        salary: Number(employee.baseSalary || employee.salary || 0),
+        payment_frequency: employee.frequency || employee.payment_frequency || 'monthly',
+      }
+      const { data, error } = await supabase.from('employees').insert(dbRecord).select().single()
+      if (error) { console.error('addEmployee error:', error); return }
+      // Normalize to camelCase for UI consistency
+      if (data) setEmployees(prev => [normalizeEmployee(data), ...prev])
     } catch (e) {
       console.error(e)
     }

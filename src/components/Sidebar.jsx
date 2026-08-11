@@ -194,8 +194,8 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
           </div>
         )}
 
-        {/* Cerrar Caja */}
-        {user && ['CAJERO', 'admin', 'Superadmin'].includes(user.role) && currentRegister && (
+        {/* Cerrar Caja — solo para CAJERO */}
+        {user && user.role === 'CAJERO' && currentRegister && (
           <button
             id="sidebar-close-cash"
             onClick={() => {

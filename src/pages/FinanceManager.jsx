@@ -352,14 +352,20 @@ export default function FinanceManager() {
 
   // Calculate next payment date
   const getNextPaymentDate = (emp) => {
-    const lastPayment = (payrollHistory || []).find(p => p.employeeId === emp.id)
-    const baseDate = lastPayment ? parseISO(lastPayment.date) : parseISO(emp.startDate)
-    let nextDate;
-    if (emp.frequency === 'Diario') nextDate = addDays(baseDate, 1)
-    else if (emp.frequency === 'Semanal') nextDate = addWeeks(baseDate, 1)
-    else if (emp.frequency === 'Quincenal') nextDate = addDays(baseDate, 15)
-    else nextDate = addMonths(baseDate, 1)
-    return format(nextDate, 'dd/MM/yyyy')
+    try {
+      const lastPayment = (payrollHistory || []).find(p => p.employeeId === emp.id)
+      const startDateStr = emp.startDate || emp.created_at || new Date().toISOString()
+      const baseDate = lastPayment ? parseISO(lastPayment.date) : parseISO(startDateStr)
+      const freq = emp.frequency || emp.payment_frequency || 'Mensual'
+      let nextDate
+      if (freq === 'Diario' || freq === 'daily') nextDate = addDays(baseDate, 1)
+      else if (freq === 'Semanal' || freq === 'weekly') nextDate = addWeeks(baseDate, 1)
+      else if (freq === 'Quincenal' || freq === 'biweekly') nextDate = addDays(baseDate, 15)
+      else nextDate = addMonths(baseDate, 1)
+      return format(nextDate, 'dd/MM/yyyy')
+    } catch {
+      return '—'
+    }
   }
 
   return (
