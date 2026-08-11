@@ -12,6 +12,19 @@ const normalizeEmployee = (emp) => ({
   frequency: emp.payment_frequency || 'Mensual',
 })
 
+const normalizePayroll = (p) => ({
+  ...p,
+  id: p.id,
+  employeeId: p.employee_id || p.employeeId,
+  employeeName: p.employee_name || p.employeeName || 'Empleado',
+  totalPaid: Number(p.amount ?? p.totalPaid ?? 0),
+  baseSalary: Number(p.base_salary ?? p.baseSalary ?? p.amount ?? 0),
+  bonus: Number(p.bonus ?? 0),
+  deduction: Number(p.deduction ?? 0),
+  observation: p.period || p.observation || '',
+  date: p.date || p.created_at || new Date().toISOString()
+})
+
 export function FinanceProvider({ children }) {
   const { user } = useAuth()
   const bid = user?.businessId || 'default'
@@ -25,6 +38,7 @@ export function FinanceProvider({ children }) {
     let isMounted = true
     let expensesChannel
     let employeesChannel
+    let payrollChannel
 
     async function loadData() {
       if (!isValidUUID(bid)) {
@@ -48,7 +62,7 @@ export function FinanceProvider({ children }) {
 
         if (expRes.data) setExpenses(expRes.data)
         if (empRes.data) setEmployees(empRes.data.map(normalizeEmployee))
-        if (payRes.data) setPayrollHistory(payRes.data)
+        if (payRes.data) setPayrollHistory(payRes.data.map(normalizePayroll))
 
         expensesChannel = supabase.channel('expenses-changes')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `business_id=eq.${bid}` }, payload => {
@@ -82,6 +96,23 @@ export function FinanceProvider({ children }) {
           })
           .subscribe()
 
+        payrollChannel = supabase.channel('payroll-changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'payroll_history', filter: `business_id=eq.${bid}` }, payload => {
+            if (!isMounted) return
+            if (payload.eventType === 'INSERT') {
+              const norm = normalizePayroll(payload.new)
+              setPayrollHistory(prev => prev.find(p => p.id === norm.id) ? prev : [norm, ...prev])
+            }
+            if (payload.eventType === 'UPDATE') {
+              const norm = normalizePayroll(payload.new)
+              setPayrollHistory(prev => prev.map(p => p.id === norm.id ? { ...p, ...norm } : p))
+            }
+            if (payload.eventType === 'DELETE') {
+              setPayrollHistory(prev => prev.filter(p => p.id !== payload.old.id))
+            }
+          })
+          .subscribe()
+
       } catch (e) {
         console.error("Error loading finance data:", e)
       } finally {
@@ -95,6 +126,7 @@ export function FinanceProvider({ children }) {
       isMounted = false
       if (expensesChannel) supabase.removeChannel(expensesChannel)
       if (employeesChannel) supabase.removeChannel(employeesChannel)
+      if (payrollChannel) supabase.removeChannel(payrollChannel)
     }
   }, [bid])
 
@@ -171,10 +203,22 @@ export function FinanceProvider({ children }) {
   const addPayrollRecord = async (record) => {
     if (!isValidUUID(bid)) return
     try {
-      const { data } = await supabase.from('payroll_history').insert({ ...record, business_id: bid, date: new Date().toISOString() }).select().single()
-      if (data) setPayrollHistory(prev => [data, ...prev])
+      const dbRecord = {
+        business_id: bid,
+        employee_id: isValidUUID(record.employeeId) ? record.employeeId : null,
+        employee_name: record.employeeName || 'Empleado',
+        amount: Number(record.totalPaid || record.amount || 0),
+        period: record.observation || record.period || '',
+        date: record.date || new Date().toISOString()
+      }
+      const { data, error } = await supabase.from('payroll_history').insert(dbRecord).select().single()
+      if (error) {
+        console.error('addPayrollRecord error:', error)
+        return
+      }
+      if (data) setPayrollHistory(prev => [normalizePayroll(data), ...prev])
     } catch (e) {
-      console.error(e)
+      console.error('addPayrollRecord exception:', e)
     }
   }
 
