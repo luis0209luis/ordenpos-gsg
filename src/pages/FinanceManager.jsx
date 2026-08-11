@@ -5,7 +5,7 @@ import { useFinance } from '../context/FinanceContext'
 import { useInventory } from '../context/InventoryContext'
 import { useTheme, useAuth, useDeleteConfirmation } from '../context/AppContext'
 import { useCashRegister } from '../context/CashRegisterContext'
-import { DollarSign, TrendingUp, TrendingDown, Users, Download, Plus, FileText, Briefcase, Calendar, CheckCircle2, Trash2, X, Edit, Archive } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, Users, Download, Plus, FileText, Briefcase, Calendar, CheckCircle2, Trash2, X, Edit, Archive, Gift } from 'lucide-react'
 
 export default function FinanceManager() {
   const { theme } = useTheme()
@@ -90,7 +90,7 @@ export default function FinanceManager() {
     if (timeFilter === 'Todo') return true
     const date = parseISO(sale?.date || new Date().toISOString())
     if (timeFilter === 'Hoy') return isToday(date)
-    if (timeFilter === 'Semana') return isThisWeek(date)
+    if (timeFilter === 'Semana') return isThisWeek(date, { weekStartsOn: 1 })
     if (timeFilter === 'Mes') return isThisMonth(date)
     if (timeFilter === 'Año') return isThisYear(date)
     return true
@@ -100,7 +100,7 @@ export default function FinanceManager() {
     if (timeFilter === 'Todo') return true
     const date = parseISO(exp?.date || new Date().toISOString())
     if (timeFilter === 'Hoy') return isToday(date)
-    if (timeFilter === 'Semana') return isThisWeek(date)
+    if (timeFilter === 'Semana') return isThisWeek(date, { weekStartsOn: 1 })
     if (timeFilter === 'Mes') return isThisMonth(date)
     if (timeFilter === 'Año') return isThisYear(date)
     return true
@@ -110,7 +110,7 @@ export default function FinanceManager() {
     if (timeFilter === 'Todo') return true
     const date = parseISO(p?.date || new Date().toISOString())
     if (timeFilter === 'Hoy') return isToday(date)
-    if (timeFilter === 'Semana') return isThisWeek(date)
+    if (timeFilter === 'Semana') return isThisWeek(date, { weekStartsOn: 1 })
     if (timeFilter === 'Mes') return isThisMonth(date)
     if (timeFilter === 'Año') return isThisYear(date)
     return true
@@ -121,6 +121,13 @@ export default function FinanceManager() {
   const totalExpenses = filteredExpenses.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0)
   const totalPayroll = filteredPayroll.reduce((sum, p) => sum + (Number(p.totalPaid) || 0), 0)
   const netProfit = totalSales - totalExpenses - totalPayroll
+
+  const totalGiftsVal = filteredSales
+    .filter(s => s.paymentMethod === 'Regalo' || s.paymentMethod === 'Gratis')
+    .reduce((acc, s) => {
+      const itemsVal = (s.items || []).reduce((sum, i) => sum + ((i.precio || 0) * (i.quantity || 0)), 0)
+      return acc + itemsVal
+    }, 0)
 
   const handleAddExpense = (e) => {
     e.preventDefault()
@@ -211,10 +218,11 @@ export default function FinanceManager() {
       [`Reporte Financiero (${timeFilter})`],
       [''],
       ['Concepto', 'Monto'],
-      ['Total Ingresos (Ventas POS)', totalSales],
+      ['Total Ingresos Reales (Ventas POS)', totalSales],
       ['Total Egresos (Gastos Operativos)', totalExpenses],
       ['Total Nómina (Pagos Empleados)', totalPayroll],
-      ['Utilidad Neta', netProfit]
+      ['Utilidad Neta', netProfit],
+      ['Valor Mercancía Regalada / Cortesías', totalGiftsVal]
     ])
     XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen')
 
@@ -223,6 +231,7 @@ export default function FinanceManager() {
       Fecha: format(parseISO(s.date), 'yyyy-MM-dd HH:mm'),
       Tipo: 'Ingreso (Venta)',
       Categoria: 'POS',
+      MetodoPago: s.paymentMethod || 'Efectivo',
       Descripcion: `Venta #${String(s?.id || '').slice(-5)}`,
       Monto: s.total
     }))
@@ -230,6 +239,7 @@ export default function FinanceManager() {
       Fecha: format(parseISO(e.date), 'yyyy-MM-dd'),
       Tipo: 'Egreso (Gasto)',
       Categoria: e.category,
+      MetodoPago: '—',
       Descripcion: e.description,
       Monto: -Number(e.amount)
     }))
@@ -357,7 +367,7 @@ export default function FinanceManager() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
         <div className={`p-6 rounded-2xl border ${isDark ? 'bg-dark-card border-dark-border' : 'bg-white border-light-border'}`}>
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 rounded-lg bg-green-500/10 text-green-500"><TrendingUp size={20} /></div>
@@ -378,6 +388,13 @@ export default function FinanceManager() {
             <h3 className="font-semibold text-sm">Pago Nómina</h3>
           </div>
           <p className="text-2xl font-bold font-display text-blue-500">${totalPayroll.toLocaleString('es-CO')}</p>
+        </div>
+        <div className={`p-6 rounded-2xl border ${isDark ? 'bg-dark-card border-purple-500/30' : 'bg-white border-purple-200'}`}>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400"><Gift size={20} /></div>
+            <h3 className="font-semibold text-sm">Valor Regalado</h3>
+          </div>
+          <p className="text-2xl font-bold font-display text-purple-400">${totalGiftsVal.toLocaleString('es-CO')}</p>
         </div>
         <div className={`p-6 rounded-2xl border ${isDark ? 'bg-dark-card border-gold-500/50' : 'bg-white border-gold-500'}`}>
           <div className="flex items-center gap-3 mb-2">
@@ -718,7 +735,7 @@ export default function FinanceManager() {
                 if (!r.closed_at) return false
                 const d = new Date(r.closed_at)
                 if (cajaTimeFilter === 'Hoy') return isToday(d)
-                if (cajaTimeFilter === 'Semana') return isThisWeek(d)
+                if (cajaTimeFilter === 'Semana') return isThisWeek(d, { weekStartsOn: 1 })
                 if (cajaTimeFilter === 'Mes') return isThisMonth(d)
                 return true
               })

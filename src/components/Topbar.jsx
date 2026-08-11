@@ -17,7 +17,7 @@ export default function Topbar({ title, onMenuClick }) {
   const { settings = {} } = useSettings() || {}
   const navigate = useNavigate()
 
-  const CASH_ROLES = ['CAJERO']
+  const CASH_ROLES = ['CAJERO', 'admin', 'Superadmin']
 
   // Notifications State
   const [showNotifications, setShowNotifications] = useState(false)
@@ -274,21 +274,35 @@ export default function Topbar({ title, onMenuClick }) {
           {/* Cash Register indicator — solo para cajeros y admins */}
           {user && CASH_ROLES.includes(user.role) && (
             currentRegister ? (
-              <div className="hidden md:flex items-center gap-2">
-                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold
-                  ${isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  Caja · {new Date(currentRegister.opened_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+              <>
+                {/* Desktop View */}
+                <div className="hidden md:flex items-center gap-2">
+                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold
+                    ${isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    Caja · {new Date(currentRegister.opened_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                  <button
+                    onClick={() => setShowCloseModal(true)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all hover:scale-105
+                      ${isDark ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20' : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'}`}
+                  >
+                    <Lock size={12} />
+                    Cerrar Caja
+                  </button>
                 </div>
+
+                {/* Mobile View */}
                 <button
                   onClick={() => setShowCloseModal(true)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all hover:scale-105
+                  className={`md:hidden flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all active:scale-95 shrink-0
                     ${isDark ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20' : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'}`}
+                  title="Cerrar Caja"
                 >
-                  <Lock size={12} />
-                  Cerrar Caja
+                  <Lock size={13} />
+                  <span>Cerrar Caja</span>
                 </button>
-              </div>
+              </>
             ) : null
           )}
 

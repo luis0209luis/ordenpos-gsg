@@ -260,7 +260,8 @@ export default function Dashboard() {
         nextDates.push(d1, d2)
       } else if (emp.frequency === 'Semanal') {
         let d = new Date(today)
-        d.setDate(today.getDate() + (7 - today.getDay())) 
+        const daysUntilSunday = (7 - today.getDay()) % 7
+        d.setDate(today.getDate() + (daysUntilSunday === 0 ? 0 : daysUntilSunday)) 
         nextDates.push(d)
       } else if (emp.frequency === 'Diario') {
         let d = new Date(today)

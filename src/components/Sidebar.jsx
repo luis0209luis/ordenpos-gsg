@@ -20,8 +20,11 @@ import {
 
   Truck,
   DollarSign,
-  LifeBuoy
+  LifeBuoy,
+  Lock
 } from 'lucide-react'
+import { useCashRegister } from '../context/CashRegisterContext'
+import CashRegisterModal from './CashRegisterModal'
 
 export const NAV_ITEMS = [
   { label: 'Dashboard',    path: '/dashboard',  icon: LayoutDashboard, roles: ['admin', 'Superadmin', 'CAJERO'] },
@@ -42,8 +45,10 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
   const { user, logout } = useAuth() || {}
   const { theme }        = useTheme() || {}
   const { staff = [], isConfigured } = useSettings() || {}
+  const { currentRegister } = useCashRegister() || {}
   const location         = useLocation()
   const [collapsed, setCollapsed] = useState(false)
+  const [showCloseModal, setShowCloseModal] = useState(false)
 
   const isDark = theme === 'dark'
   
@@ -189,6 +194,38 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
           </div>
         )}
 
+        {/* Cerrar Caja */}
+        {user && ['CAJERO', 'admin', 'Superadmin'].includes(user.role) && currentRegister && (
+          <button
+            id="sidebar-close-cash"
+            onClick={() => {
+              if (setMobileOpen) setMobileOpen(false)
+              setShowCloseModal(true)
+            }}
+            className={`
+              w-full flex items-center gap-3 px-3 py-2.5 rounded-xl
+              text-sm font-bold border transition-all duration-200 group relative overflow-hidden
+              ${collapsed ? 'justify-center' : ''}
+              ${isDark
+                ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20'
+                : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'}
+            `}
+          >
+            <Lock size={18} className="shrink-0 group-hover:scale-110 transition-transform" />
+            {!collapsed && <span>Cerrar Caja</span>}
+            {collapsed && (
+              <span className={`
+                absolute left-full ml-3 px-2.5 py-1.5 text-xs font-semibold rounded-lg
+                opacity-0 group-hover:opacity-100 pointer-events-none
+                whitespace-nowrap transition-all duration-200
+                ${isDark ? 'bg-dark-card border border-dark-border text-red-400' : 'bg-white border border-light-border text-red-600'}
+              `}>
+                Cerrar Caja
+              </span>
+            )}
+          </button>
+        )}
+
         {/* Logout */}
         <button
           id="sidebar-logout"
@@ -234,6 +271,11 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
         {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
       </button>
     </aside>
+
+    {/* Modal de cierre de caja desde Sidebar */}
+    {showCloseModal && (
+      <CashRegisterModal mode="close" onCancel={() => setShowCloseModal(false)} />
+    )}
     </>
   )
 }

@@ -7,13 +7,27 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell
 } from 'recharts'
-import { TrendingUp, Package, DollarSign } from 'lucide-react'
+import { TrendingUp, Package, DollarSign, Gift } from 'lucide-react'
+
+// Helper para parsear con seguridad los ítems de las ventas sin importar el formato (array, json string, null, etc)
+const getItemsArray = (items) => {
+  if (Array.isArray(items)) return items
+  if (typeof items === 'string') {
+    try {
+      const parsed = JSON.parse(items)
+      if (Array.isArray(parsed)) return parsed
+    } catch {
+      return []
+    }
+  }
+  return []
+}
 
 export default function Reports() {
   const { theme } = useTheme() || {}
   const { user } = useAuth() || {}
   const { staff = [] } = useSettings() || {}
-  const { confirmDelete } = useDeleteConfirmation()
+  const { confirmDelete } = useDeleteConfirmation() || {}
   const isDark = theme === 'dark'
   const { products = [], salesHistory = [], deleteSale } = useInventory() || {}
   const [timeFilter, setTimeFilter] = useState('Hoy')
@@ -21,6 +35,10 @@ export default function Reports() {
   const [selectedRoleFilter, setSelectedRoleFilter] = useState('Todos')
 
   const handleDeleteSale = (id) => {
+    if (!confirmDelete) {
+      if (window.confirm('¿Estás seguro de eliminar esta venta?')) deleteSale(id)
+      return
+    }
     confirmDelete({
       title: 'Eliminar Venta',
       description: '¿Estás seguro de eliminar esta venta? Esta acción afectará el inventario y las estadísticas de negocio. Se requiere la contraseña del administrador.',
@@ -35,7 +53,7 @@ export default function Reports() {
     return (salesHistory || []).filter(sale => {
       const date = parseISO(sale?.date || new Date().toISOString())
       if (timeFilter === 'Hoy') return isToday(date)
-      if (timeFilter === 'Semana') return isThisWeek(date)
+      if (timeFilter === 'Semana') return isThisWeek(date, { weekStartsOn: 1 })
       if (timeFilter === 'Mes') return isThisMonth(date)
       if (timeFilter === 'Año') return isThisYear(date)
       return true
@@ -44,17 +62,37 @@ export default function Reports() {
 
   // Aggregation for Line Chart (by Day/Month depending on filter)
   const chartData = useMemo(() => {
+    if (timeFilter === 'Semana') {
+      const daysMap = {
+        1: { name: 'Lun', sales: 0, orders: 0 },
+        2: { name: 'Mar', sales: 0, orders: 0 },
+        3: { name: 'Mié', sales: 0, orders: 0 },
+        4: { name: 'Jue', sales: 0, orders: 0 },
+        5: { name: 'Vie', sales: 0, orders: 0 },
+        6: { name: 'Sáb', sales: 0, orders: 0 },
+        0: { name: 'Dom', sales: 0, orders: 0 },
+      }
+      filteredSales.forEach(sale => {
+        const date = parseISO(sale.date)
+        const dayIndex = date.getDay()
+        if (daysMap[dayIndex]) {
+          daysMap[dayIndex].sales += Number(sale.total) || 0
+          daysMap[dayIndex].orders += 1
+        }
+      })
+      return [daysMap[1], daysMap[2], daysMap[3], daysMap[4], daysMap[5], daysMap[6], daysMap[0]]
+    }
+
     const agg = {}
     filteredSales.forEach(sale => {
       let key = ''
       const date = parseISO(sale.date)
       if (timeFilter === 'Hoy') key = format(date, 'HH:mm')
-      else if (timeFilter === 'Semana') key = format(date, 'EEE') // Mon, Tue...
       else if (timeFilter === 'Mes') key = format(date, 'dd MMM')
       else if (timeFilter === 'Año') key = format(date, 'MMM')
 
       if (!agg[key]) agg[key] = { name: key, sales: 0, orders: 0 }
-      agg[key].sales += sale.total
+      agg[key].sales += Number(sale.total) || 0
       agg[key].orders += 1
     })
     return Object.values(agg)
@@ -64,9 +102,10 @@ export default function Reports() {
   const topProducts = useMemo(() => {
     const productSales = {}
     filteredSales.forEach(sale => {
-      sale.items.forEach(item => {
-        if (!productSales[item.nombre]) productSales[item.nombre] = 0
-        productSales[item.nombre] += (item.precio * item.quantity)
+      getItemsArray(sale?.items).forEach(item => {
+        const name = item?.nombre || item?.name || 'Producto'
+        if (!productSales[name]) productSales[name] = 0
+        productSales[name] += ((Number(item?.precio) || 0) * (Number(item?.quantity) || Number(item?.cantidad) || 1))
       })
     })
     return Object.entries(productSales)
@@ -76,17 +115,35 @@ export default function Reports() {
   }, [filteredSales])
 
   // KPIs
-  const totalIngresos = filteredSales.reduce((acc, sale) => acc + sale.total, 0)
+  const totalIngresos = filteredSales.reduce((acc, sale) => acc + (Number(sale.total) || 0), 0)
   const totalOrdenes = filteredSales.length
 
+  const totalObsequiado = useMemo(() => {
+    return filteredSales
+      .filter(s => s.paymentMethod === 'Regalo' || s.paymentMethod === 'Gratis')
+      .reduce((acc, s) => {
+        const itemsVal = getItemsArray(s?.items).reduce((sum, item) => sum + ((Number(item?.precio) || 0) * (Number(item?.quantity) || Number(item?.cantidad) || 1)), 0)
+        return acc + itemsVal
+      }, 0)
+  }, [filteredSales])
+
+  const totalOrdenesObsequiadas = useMemo(() => {
+    return filteredSales.filter(s => s.paymentMethod === 'Regalo' || s.paymentMethod === 'Gratis').length
+  }, [filteredSales])
+
   const paymentBreakdown = useMemo(() => {
-    const breakdown = { Efectivo: 0, Nequi: 0, Transferencia: 0, Otro: 0 }
+    const breakdown = { Efectivo: 0, Nequi: 0, Transferencia: 0, Regalo: 0, RegaloValor: 0, RegaloCount: 0, Otro: 0 }
     filteredSales.forEach(sale => {
       const method = sale.paymentMethod || 'Efectivo'
-      if (breakdown[method] !== undefined) {
-        breakdown[method] += sale.total
+      if (method === 'Regalo' || method === 'Gratis') {
+        breakdown.Regalo += (Number(sale.total) || 0)
+        breakdown.RegaloCount += 1
+        const itemsVal = getItemsArray(sale?.items).reduce((sum, item) => sum + ((Number(item?.precio) || 0) * (Number(item?.quantity) || Number(item?.cantidad) || 1)), 0)
+        breakdown.RegaloValor += itemsVal
+      } else if (breakdown[method] !== undefined) {
+        breakdown[method] += (Number(sale.total) || 0)
       } else {
-        breakdown.Otro += sale.total
+        breakdown.Otro += (Number(sale.total) || 0)
       }
     })
     return breakdown
@@ -120,12 +177,12 @@ export default function Reports() {
           grouped[nombre] = { nombre, ventas: 0, total: 0, productos: {} }
         }
         grouped[nombre].ventas++
-        grouped[nombre].total += sale.total || 0
+        grouped[nombre].total += Number(sale.total) || 0
         // Contar productos
-        (sale.items || []).forEach(item => {
-          const key = item.name || item.nombre
+        getItemsArray(sale?.items).forEach(item => {
+          const key = item?.name || item?.nombre
           if (key) {
-            grouped[nombre].productos[key] = (grouped[nombre].productos[key] || 0) + (item.quantity || item.cantidad || 1)
+            grouped[nombre].productos[key] = (grouped[nombre].productos[key] || 0) + (Number(item?.quantity) || Number(item?.cantidad) || 1)
           }
         })
       })
@@ -261,7 +318,7 @@ export default function Reports() {
       {timeFilter !== 'Actividad del Personal' ? (
         <>
           {/* KPI Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className={`p-6 rounded-3xl shadow-soft-lg border relative overflow-hidden group
               ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
               <div className="absolute right-0 top-0 w-32 h-32 bg-gold-500/5 rounded-bl-full pointer-events-none group-hover:scale-110 transition-transform" />
@@ -292,10 +349,25 @@ export default function Reports() {
 
             <div className={`p-6 rounded-3xl shadow-soft-lg border relative overflow-hidden group
               ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
-              <div className="absolute right-0 top-0 w-32 h-32 bg-purple-500/5 rounded-bl-full pointer-events-none group-hover:scale-110 transition-transform" />
+              <div className="absolute right-0 top-0 w-32 h-32 bg-purple-500/10 rounded-bl-full pointer-events-none group-hover:scale-110 transition-transform" />
               <div className="flex items-center gap-4 mb-4">
                 <div className={`p-3 rounded-2xl ${isDark ? 'bg-dark-card' : 'bg-light-surface'}`}>
-                  <Package size={24} className="text-purple-500" />
+                  <Gift size={24} className="text-purple-400" />
+                </div>
+                <div>
+                  <p className={`text-sm font-semibold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Obsequios / Regalos</p>
+                  <h3 className={`font-display font-bold text-2xl text-purple-400`}>${Math.round(totalObsequiado).toLocaleString('es-CO')}</h3>
+                  <span className="text-xs text-gray-500 font-medium">{totalOrdenesObsequiadas} órdenes regaladas</span>
+                </div>
+              </div>
+            </div>
+
+            <div className={`p-6 rounded-3xl shadow-soft-lg border relative overflow-hidden group
+              ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
+              <div className="absolute right-0 top-0 w-32 h-32 bg-blue-500/5 rounded-bl-full pointer-events-none group-hover:scale-110 transition-transform" />
+              <div className="flex items-center gap-4 mb-4">
+                <div className={`p-3 rounded-2xl ${isDark ? 'bg-dark-card' : 'bg-light-surface'}`}>
+                  <Package size={24} className="text-blue-500" />
                 </div>
                 <div>
                   <p className={`text-sm font-semibold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Total en Inventario</p>
@@ -319,7 +391,7 @@ export default function Reports() {
               </div>
             </div>
             
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
               <div className={`p-4 rounded-2xl border ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-100'}`}>
                 <span className="text-2xl">💵</span>
                 <p className={`text-xs font-semibold mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Efectivo</p>
@@ -342,6 +414,17 @@ export default function Reports() {
                 <h4 className={`font-display font-bold text-xl mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
                   ${Math.round(paymentBreakdown.Transferencia).toLocaleString('es-CO')}
                 </h4>
+              </div>
+
+              <div className={`p-4 rounded-2xl border border-purple-500/20 ${isDark ? 'bg-purple-500/5' : 'bg-purple-50'}`}>
+                <span className="text-2xl">🎁</span>
+                <p className={`text-xs font-semibold mt-2 text-purple-400`}>Regalo / Cortesía</p>
+                <h4 className={`font-display font-bold text-xl mt-1 text-purple-400`}>
+                  $0
+                </h4>
+                <p className="text-[10px] text-gray-500 font-medium mt-0.5">
+                  Val: ${Math.round(paymentBreakdown.RegaloValor).toLocaleString('es-CO')} ({paymentBreakdown.RegaloCount} órd.)
+                </p>
               </div>
 
               <div className={`p-4 rounded-2xl border ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-100'}`}>
@@ -435,6 +518,7 @@ export default function Reports() {
                 <tbody>
                   {(filteredSales || []).slice().reverse().map(sale => {
                     const method = sale.paymentMethod || 'Efectivo';
+                    const isGiftSale = method === 'Regalo' || method === 'Gratis';
                     let methodBadge = 'bg-gray-500/10 text-gray-400 border-gray-500/20';
                     let methodEmoji = '💵';
                     if (method === 'Efectivo') {
@@ -446,6 +530,9 @@ export default function Reports() {
                     } else if (method === 'Transferencia') {
                       methodBadge = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
                       methodEmoji = '🏦';
+                    } else if (isGiftSale) {
+                      methodBadge = 'bg-purple-500/10 text-purple-400 border-purple-500/20';
+                      methodEmoji = '🎁';
                     }
 
                     return (
@@ -457,17 +544,22 @@ export default function Reports() {
                           <p className="text-xs text-gray-500">{new Date(sale?.date).toLocaleString()}</p>
                         </td>
                         <td className="px-6 py-4 text-sm">
-                          {(sale?.items || []).map(item => (
-                            <div key={item.id}>{item.quantity}x {item.nombre}</div>
+                          {getItemsArray(sale?.items).map((item, idx) => (
+                            <div key={idx}>{item?.quantity || item?.cantidad || 1}x {item?.nombre || item?.name}</div>
                           ))}
                         </td>
                         <td className="px-6 py-4 text-center">
                           <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${methodBadge}`}>
-                            <span>{methodEmoji}</span> {method}
+                            <span>{methodEmoji}</span> {isGiftSale ? 'Regalo' : method}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-right font-bold">
-                          ${sale.total.toLocaleString('es-CO')}
+                          ${(Number(sale.total) || 0).toLocaleString('es-CO')}
+                          {isGiftSale && (
+                            <span className="block text-[10px] text-purple-400 font-normal">
+                              Val: ${getItemsArray(sale?.items).reduce((s, i) => s + ((Number(i?.precio) || 0) * (Number(i?.quantity) || Number(i?.cantidad) || 1)), 0).toLocaleString('es-CO')}
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-center">
                           {user?.role === 'admin' ? (
@@ -716,6 +808,7 @@ export default function Reports() {
                 <tbody>
                   {detailedSales.slice().reverse().map(sale => {
                     const method = sale.paymentMethod || 'Efectivo';
+                    const isGiftSale = method === 'Regalo' || method === 'Gratis';
                     let methodBadge = 'bg-gray-500/10 text-gray-400 border-gray-500/20';
                     let methodEmoji = '💵';
                     if (method === 'Efectivo') {
@@ -727,6 +820,9 @@ export default function Reports() {
                     } else if (method === 'Transferencia') {
                       methodBadge = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
                       methodEmoji = '🏦';
+                    } else if (isGiftSale) {
+                      methodBadge = 'bg-purple-500/10 text-purple-400 border-purple-500/20';
+                      methodEmoji = '🎁';
                     }
 
                     return (
@@ -747,11 +843,16 @@ export default function Reports() {
                         </td>
                         <td className="px-6 py-4 text-center">
                           <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${methodBadge}`}>
-                            <span>{methodEmoji}</span> {method}
+                            <span>{methodEmoji}</span> {isGiftSale ? 'Regalo' : method}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-right font-bold">
-                          ${sale.total.toLocaleString('es-CO')}
+                          ${(sale.total || 0).toLocaleString('es-CO')}
+                          {isGiftSale && (
+                            <span className="block text-[10px] text-purple-400 font-normal">
+                              Val: ${((sale.items || []).reduce((s, i) => s + ((i.precio || 0) * (i.quantity || i.cantidad || 1)), 0)).toLocaleString('es-CO')}
+                            </span>
+                          )}
                         </td>
                       </tr>
                     )
