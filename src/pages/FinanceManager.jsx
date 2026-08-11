@@ -109,6 +109,7 @@ export default function FinanceManager() {
   // Filter by period
   const [timeFilter, setTimeFilter] = useState('Todo')
   const [weekOffset, setWeekOffset] = useState(0) // 0 = esta semana, -1 = semana anterior, -2 = hace 2 semanas...
+  const [showWeekDropdown, setShowWeekDropdown] = useState(false)
 
   const filteredSales = (salesHistory || []).filter(sale => {
     if (timeFilter === 'Todo') return true
