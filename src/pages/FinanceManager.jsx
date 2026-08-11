@@ -940,9 +940,12 @@ export default function FinanceManager() {
 
       {/* Payment / Liquidacion Modal */}
       {selectedEmp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
-          <div className={`w-full max-w-lg rounded-3xl relative flex flex-col max-h-[90vh] shadow-2xl overflow-hidden transition-all duration-300 ${isDark ? 'bg-dark-card border border-dark-border text-white' : 'bg-white border border-light-border text-gray-900'}`}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-8 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className={`w-full max-w-lg rounded-3xl relative flex flex-col max-h-[85vh] my-auto shadow-2xl overflow-hidden border transition-all duration-300 ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-white border-gray-200 text-gray-900'}`}>
             
+            {/* Accent Bar */}
+            <div className="h-1.5 bg-gold-gradient w-full shrink-0" />
+
             {showSuccess ? (
               <div className="flex flex-col items-center justify-center p-8 py-12 animate-scale-in">
                 <div className="w-20 h-20 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mb-6">
@@ -953,25 +956,30 @@ export default function FinanceManager() {
               </div>
             ) : (
               <>
-                {/* Header fijo sin desborde */}
-                <div className={`p-6 pb-4 border-b shrink-0 relative ${isDark ? 'border-dark-border bg-dark-card' : 'border-gray-100 bg-white'}`}>
+                {/* Header fijo espaciado */}
+                <div className={`px-6 pt-5 pb-4 border-b shrink-0 relative ${isDark ? 'border-dark-border bg-dark-card' : 'border-gray-100 bg-gray-50/50'}`}>
                   <button 
                     type="button"
                     onClick={() => setSelectedEmp(null)}
-                    className={`absolute top-5 right-5 p-2 rounded-full transition-colors ${isDark ? 'text-gray-400 hover:bg-white/10' : 'text-gray-500 hover:bg-black/5'}`}>
-                    <X size={20} />
+                    className={`absolute top-5 right-5 w-8 h-8 rounded-full flex items-center justify-center border transition-all ${isDark ? 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-200'}`}>
+                    <X size={16} />
                   </button>
 
-                  <h3 className="text-xl font-bold font-display pr-8">
+                  <div className="flex items-center gap-1.5 mb-1.5 text-xs font-bold text-gold-500 uppercase tracking-wider">
+                    <DollarSign size={14} className="shrink-0" />
+                    Liquidación de Nómina
+                  </div>
+
+                  <h3 className="text-xl font-black font-display pr-10 tracking-tight">
                     Liquidando a: <span className={isDark ? 'text-gold-400' : 'text-gold-600'}>{selectedEmp.name}</span>
                   </h3>
                   
-                  <div className="flex items-center gap-2 mt-2 text-xs">
-                    <span className={`px-2.5 py-1 rounded-lg font-bold ${isDark ? 'bg-white/10 text-gray-300' : 'bg-gray-100 text-gray-700'}`}>
-                      Cargo: {selectedEmp.role}
+                  <div className="flex flex-wrap items-center gap-2 mt-2.5 text-xs">
+                    <span className={`px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 ${isDark ? 'bg-white/5 text-gray-300 border border-white/10' : 'bg-gray-100 text-gray-700 border border-gray-200'}`}>
+                      <Briefcase size={12} className="text-gray-400" /> Cargo: {selectedEmp.role}
                     </span>
-                    <span className={`px-2.5 py-1 rounded-lg font-bold ${isDark ? 'bg-gold-500/10 text-gold-400 border border-gold-500/20' : 'bg-gold-50 text-gold-700 border border-gold-200'}`}>
-                      Frecuencia: {selectedEmp.frequency}
+                    <span className={`px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 ${isDark ? 'bg-gold-500/10 text-gold-400 border border-gold-500/20' : 'bg-gold-50 text-gold-700 border border-gold-200'}`}>
+                      <Calendar size={12} className="text-gold-500" /> Frecuencia: {selectedEmp.frequency}
                     </span>
                   </div>
                 </div>
