@@ -67,8 +67,17 @@ export default function FinanceManager() {
   // Employee Form State
   const [empName, setEmpName] = useState('')
   const [empRole, setEmpRole] = useState('')
-  const [empFreq, setEmpFreq] = useState('Mensual')
+  const [empFreq, setEmpFreq] = useState('Semanal')
+  const [empPayDay, setEmpPayDay] = useState('Lunes')
   const [empSalary, setEmpSalary] = useState('')
+
+  // Ficha del Empleado State
+  const [selectedEmpDetails, setSelectedEmpDetails] = useState(null)
+  const [editEmpName, setEditEmpName] = useState('')
+  const [editEmpRole, setEditEmpRole] = useState('')
+  const [editEmpFreq, setEditEmpFreq] = useState('Semanal')
+  const [editEmpPayDay, setEditEmpPayDay] = useState('Lunes')
+  const [editEmpSalary, setEditEmpSalary] = useState('')
 
   // Payroll Payment State
   const [selectedEmp, setSelectedEmp] = useState(null)
@@ -195,12 +204,35 @@ export default function FinanceManager() {
       name: empName,
       role: empRole,
       frequency: empFreq,
+      payDay: empPayDay,
       baseSalary: Number(empSalary),
       startDate: new Date().toISOString()
     })
     setEmpName('')
     setEmpRole('')
     setEmpSalary('')
+  }
+
+  const openEmployeeDetails = (emp) => {
+    setSelectedEmpDetails(emp)
+    setEditEmpName(emp.name || '')
+    setEditEmpRole(emp.role || '')
+    setEditEmpFreq(emp.frequency || 'Semanal')
+    setEditEmpPayDay(emp.payDay || 'Lunes')
+    setEditEmpSalary(emp.baseSalary || '')
+  }
+
+  const handleSaveEmployeeDetails = (e) => {
+    e.preventDefault()
+    if (!selectedEmpDetails) return
+    updateEmployee(selectedEmpDetails.id, {
+      name: editEmpName,
+      role: editEmpRole,
+      frequency: editEmpFreq,
+      payDay: editEmpPayDay,
+      baseSalary: Number(editEmpSalary)
+    })
+    setSelectedEmpDetails(null)
   }
 
   const openLiquidationModal = (emp) => {
@@ -371,12 +403,31 @@ export default function FinanceManager() {
       const lastPayment = (payrollHistory || []).find(p => p.employeeId === emp.id)
       const startDateStr = emp.startDate || emp.created_at || new Date().toISOString()
       const baseDate = lastPayment ? parseISO(lastPayment.date) : parseISO(startDateStr)
-      const freq = emp.frequency || emp.payment_frequency || 'Mensual'
-      let nextDate
-      if (freq === 'Diario' || freq === 'daily') nextDate = addDays(baseDate, 1)
-      else if (freq === 'Semanal' || freq === 'weekly') nextDate = addWeeks(baseDate, 1)
-      else if (freq === 'Quincenal' || freq === 'biweekly') nextDate = addDays(baseDate, 15)
-      else nextDate = addMonths(baseDate, 1)
+      const freqStr = emp.displayFrequency || emp.frequency || emp.payment_frequency || 'Mensual'
+
+      if (freqStr.includes('Diario')) {
+        return format(addDays(baseDate, 1), 'dd/MM/yyyy')
+      }
+      if (freqStr.includes('Quincenal')) {
+        return format(addDays(baseDate, 15), 'dd/MM/yyyy')
+      }
+      if (freqStr.includes('Mensual')) {
+        return format(addMonths(baseDate, 1), 'dd/MM/yyyy')
+      }
+
+      // Semanal: Calculate target day of week (Lunes, Martes, Miércoles, etc.)
+      const dayMap = { 'Domingo': 0, 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5, 'Sábado': 6 }
+      let targetDayName = emp.payDay || 'Lunes'
+      for (const d of Object.keys(dayMap)) {
+        if (freqStr.includes(d)) targetDayName = d
+      }
+      const targetDayIndex = dayMap[targetDayName] ?? 1
+
+      const currentDayIndex = baseDate.getDay() // 0 = Sun, 1 = Mon, ...
+      let daysToAdd = (targetDayIndex - currentDayIndex + 7) % 7
+      if (daysToAdd === 0) daysToAdd = 7
+
+      const nextDate = addDays(baseDate, daysToAdd)
       return format(nextDate, 'dd/MM/yyyy')
     } catch {
       return '—'
@@ -661,12 +712,25 @@ export default function FinanceManager() {
                   <label className="text-xs font-semibold text-gray-500">Frecuencia de Pago</label>
                   <select value={empFreq} onChange={e=>setEmpFreq(e.target.value)}
                     className={`w-full mt-1 p-3 rounded-xl border ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-gray-50 border-gray-200'} outline-none focus:border-gold-500`}>
-                    <option>Diario</option>
-                    <option>Semanal</option>
-                    <option>Quincenal</option>
-                    <option>Mensual</option>
+                    <option value="Semanal">Semanal</option>
+                    <option value="Diario">Diario</option>
+                    <option value="Quincenal">Quincenal</option>
+                    <option value="Mensual">Mensual</option>
                   </select>
                 </div>
+
+                {empFreq === 'Semanal' && (
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500">Día de Pago de la Semana</label>
+                    <select value={empPayDay} onChange={e=>setEmpPayDay(e.target.value)}
+                      className={`w-full mt-1 p-3 rounded-xl border ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-gray-50 border-gray-200'} outline-none focus:border-gold-500`}>
+                      {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <div>
                   <label className="text-xs font-semibold text-gray-500">Salario Base ($)</label>
                   <input type="number" value={empSalary} onChange={e=>setEmpSalary(e.target.value)} required min="0"
@@ -685,13 +749,20 @@ export default function FinanceManager() {
              <h3 className="text-lg font-bold mb-4">Plantilla de Empleados</h3>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                {(employees || []).map(emp => (
-                 <div key={emp.id} className={`p-4 rounded-xl border ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-gray-50 border-gray-200'} relative flex flex-col justify-between`}>
-                   <div>
-                     <h4 className="font-bold text-lg">{emp.name}</h4>
-                     <p className="text-sm text-gold-500 font-semibold">{emp.role}</p>
+                 <div key={emp.id} className={`p-4 rounded-xl border ${isDark ? 'bg-dark-surface border-dark-border hover:border-gold-500/40' : 'bg-gray-50 border-gray-200 hover:border-gold-500/40'} relative flex flex-col justify-between transition-all duration-200`}>
+                   <div onClick={() => openEmployeeDetails(emp)} className="cursor-pointer group">
+                     <div className="flex justify-between items-start">
+                       <div>
+                         <h4 className="font-bold text-lg group-hover:text-gold-500 transition-colors flex items-center gap-2">
+                           {emp.name}
+                           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-gold-500/10 text-gold-400 group-hover:bg-gold-500 group-hover:text-black transition-colors">Ver Ficha</span>
+                         </h4>
+                         <p className="text-sm text-gold-500 font-semibold">{emp.role}</p>
+                       </div>
+                     </div>
                      <div className="mt-3 space-y-1 text-xs text-gray-500">
-                       <p>Base: <strong className={isDark ? 'text-gray-300' : 'text-gray-700'}>${(Number(emp.baseSalary) || 0).toLocaleString()}</strong> ({emp.frequency})</p>
-                       <p className="flex items-center gap-1 text-blue-400"><Calendar size={12}/> Próx. Pago: {getNextPaymentDate(emp)}</p>
+                       <p>Base: <strong className={isDark ? 'text-gray-300' : 'text-gray-700'}>${(Number(emp.baseSalary) || 0).toLocaleString('es-CO')}</strong> ({emp.displayFrequency || emp.frequency})</p>
+                       <p className="flex items-center gap-1 text-blue-400 font-semibold"><Calendar size={12}/> Próx. Pago: {getNextPaymentDate(emp)}</p>
                      </div>
                    </div>
                    
@@ -705,6 +776,13 @@ export default function FinanceManager() {
                      </div>
                    ) : (
                      <div className="mt-4 pt-3 border-t border-gray-500/20 flex gap-2">
+                       <button 
+                         onClick={() => openEmployeeDetails(emp)}
+                         className={`px-3 text-xs font-bold py-2 rounded-lg border transition-colors ${isDark ? 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
+                         title="Ver Ficha / Editar datos"
+                       >
+                         Ficha
+                       </button>
                        <button 
                          onClick={() => openLiquidationModal(emp)}
                          className={`flex-1 text-xs font-bold py-2 rounded-lg border transition-colors ${isDark ? 'bg-blue-500/10 border-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white' : 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-500 hover:text-white'}`}>
@@ -1336,6 +1414,176 @@ export default function FinanceManager() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Ficha del Empleado Modal */}
+      {selectedEmpDetails && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className={`w-full max-w-xl rounded-3xl relative flex flex-col max-h-[90vh] shadow-2xl overflow-hidden border transition-all duration-300 ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-white border-gray-200 text-gray-900'}`}>
+            
+            {/* Accent Bar */}
+            <div className="h-1.5 bg-gold-gradient w-full shrink-0" />
+
+            {/* Header */}
+            <div className={`px-6 pt-5 pb-4 border-b shrink-0 relative ${isDark ? 'border-dark-border bg-dark-card' : 'border-gray-100 bg-gray-50/50'}`}>
+              <button 
+                type="button"
+                onClick={() => setSelectedEmpDetails(null)}
+                className={`absolute top-5 right-5 w-8 h-8 rounded-full flex items-center justify-center border transition-all ${isDark ? 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10' : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900'}`}>
+                <X size={16} />
+              </button>
+
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gold-gradient text-black font-black text-xl flex items-center justify-center shrink-0 shadow-md">
+                  {editEmpName?.[0]?.toUpperCase() || 'E'}
+                </div>
+                <div>
+                  <h3 className="text-xl font-black font-display tracking-tight">Ficha del Empleado</h3>
+                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Información laboral, salario y día de pago semanal
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 overflow-y-auto flex-1 custom-scrollbar space-y-6">
+              <form onSubmit={handleSaveEmployeeDetails} className="space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-gold-500 flex items-center gap-1.5">
+                  <Briefcase size={14} /> Configuración del Empleado
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500">Nombre Completo</label>
+                    <input 
+                      type="text" 
+                      value={editEmpName} 
+                      onChange={e => setEditEmpName(e.target.value)} 
+                      required 
+                      className={`w-full mt-1 p-3 text-sm font-semibold rounded-xl border outline-none ${isDark ? 'bg-dark-surface border-dark-border text-white focus:border-gold-500' : 'bg-gray-50 border-gray-200 text-gray-900 focus:border-gold-500'}`} 
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500">Cargo / Rol</label>
+                    <input 
+                      type="text" 
+                      value={editEmpRole} 
+                      onChange={e => setEditEmpRole(e.target.value)} 
+                      required 
+                      className={`w-full mt-1 p-3 text-sm font-semibold rounded-xl border outline-none ${isDark ? 'bg-dark-surface border-dark-border text-white focus:border-gold-500' : 'bg-gray-50 border-gray-200 text-gray-900 focus:border-gold-500'}`} 
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500">Salario / Tarifa Base ($)</label>
+                    <input 
+                      type="number" 
+                      value={editEmpSalary} 
+                      onChange={e => setEditEmpSalary(e.target.value)} 
+                      required 
+                      min="0"
+                      step="500"
+                      className={`w-full mt-1 p-3 text-sm font-bold rounded-xl border outline-none ${isDark ? 'bg-dark-surface border-dark-border text-white focus:border-gold-500' : 'bg-gray-50 border-gray-200 text-gray-900 focus:border-gold-500'}`} 
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500">Frecuencia de Pago</label>
+                    <select 
+                      value={editEmpFreq} 
+                      onChange={e => setEditEmpFreq(e.target.value)}
+                      className={`w-full mt-1 p-3 text-sm font-semibold rounded-xl border outline-none ${isDark ? 'bg-dark-surface border-dark-border text-white focus:border-gold-500' : 'bg-gray-50 border-gray-200 text-gray-900 focus:border-gold-500'}`}
+                    >
+                      <option value="Semanal">Semanal</option>
+                      <option value="Diario">Diario</option>
+                      <option value="Quincenal">Quincenal</option>
+                      <option value="Mensual">Mensual</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Día Específico de Pago (si es Semanal) */}
+                {editEmpFreq === 'Semanal' && (
+                  <div className={`p-4 rounded-2xl border space-y-2 ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-gray-50 border-gray-200'}`}>
+                    <label className="text-xs font-bold uppercase tracking-wider text-gold-500 flex items-center gap-1.5">
+                      <Calendar size={14} /> Día Preferido de Pago Semanal
+                    </label>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Indica qué día de la semana se realiza el pago (Lunes, Martes, Domingo, etc.):
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                      {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map(day => (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => setEditEmpPayDay(day)}
+                          className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${editEmpPayDay === day ? (isDark ? 'bg-gold-500 text-black border-gold-500 shadow' : 'bg-gold-500 text-black border-gold-500 shadow') : (isDark ? 'bg-dark-card border-dark-border text-gray-400 hover:text-white' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-100')}`}
+                        >
+                          {day}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-2 flex gap-3">
+                  <button 
+                    type="submit" 
+                    className="flex-1 py-3.5 rounded-xl bg-gold-gradient text-black font-black text-xs uppercase tracking-wider shadow-md hover:scale-[1.02] transition-transform">
+                    Guardar Ficha
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      const empToPay = selectedEmpDetails
+                      setSelectedEmpDetails(null)
+                      openLiquidationModal(empToPay)
+                    }}
+                    className="py-3.5 px-4 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-500 transition-colors shadow-md flex items-center gap-1.5">
+                    <DollarSign size={16} /> Liquidar Ahora
+                  </button>
+                </div>
+              </form>
+
+              {/* Historial de Pagos del Empleado */}
+              <div className="pt-4 border-t border-gray-500/20">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
+                  <FileText size={14} className="text-blue-400" /> Historial de Liquidaciones
+                </h4>
+                {(() => {
+                  const empPayrolls = (payrollHistory || []).filter(p => p.employeeId === selectedEmpDetails.id)
+                  const totalPaidAccum = empPayrolls.reduce((sum, p) => sum + Number(p.totalPaid || 0), 0)
+
+                  return (
+                    <div className="space-y-3">
+                      <div className={`p-3.5 rounded-xl border flex justify-between items-center text-xs ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-gray-50 border-gray-200'}`}>
+                        <span className="font-semibold text-gray-400">Total Acumulado Pagado:</span>
+                        <span className="font-black text-emerald-500 text-sm">${totalPaidAccum.toLocaleString('es-CO')}</span>
+                      </div>
+
+                      {empPayrolls.length === 0 ? (
+                        <p className="text-xs text-gray-500 italic py-2 text-center">No hay registros de liquidación previos para este empleado.</p>
+                      ) : (
+                        <div className="max-h-[180px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                          {empPayrolls.map(p => (
+                            <div key={p.id} className={`p-3 rounded-xl border flex justify-between items-center text-xs ${isDark ? 'bg-dark-surface/50 border-dark-border' : 'bg-white border-gray-200'}`}>
+                              <div>
+                                <p className="font-bold text-blue-400">${(Number(p.totalPaid) || 0).toLocaleString('es-CO')}</p>
+                                <p className="text-[10px] text-gray-400">{format(parseISO(p.date || new Date().toISOString()), 'dd/MM/yyyy')} — {p.observation || 'Sin notas'}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+              </div>
+            </div>
           </div>
         </div>
       )}

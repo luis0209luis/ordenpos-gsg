@@ -6,11 +6,31 @@ import { isValidUUID } from '../utils/uuid'
 const FinanceContext = createContext()
 
 // Maps DB snake_case columns -> camelCase for UI consistency
-const normalizeEmployee = (emp) => ({
-  ...emp,
-  baseSalary: emp.salary || 0,
-  frequency: emp.payment_frequency || 'Mensual',
-})
+const normalizeEmployee = (emp) => {
+  const rawFreq = emp.payment_frequency || 'Mensual'
+  let frequency = rawFreq
+  let payDay = 'Lunes'
+
+  if (rawFreq.includes(' - ')) {
+    const parts = rawFreq.split(' - ')
+    frequency = parts[0]
+    payDay = parts[1] || 'Lunes'
+  } else if (rawFreq.includes('(')) {
+    const match = rawFreq.match(/(.+?)\s*\((.+?)\)/)
+    if (match) {
+      frequency = match[1].trim()
+      payDay = match[2].trim()
+    }
+  }
+
+  return {
+    ...emp,
+    baseSalary: Number(emp.salary || 0),
+    frequency: frequency,
+    payDay: payDay,
+    displayFrequency: frequency === 'Semanal' ? `Semanal (${payDay})` : frequency
+  }
+}
 
 const normalizePayroll = (p) => ({
   ...p,
@@ -163,17 +183,19 @@ export function FinanceProvider({ children }) {
   const addEmployee = async (employee) => {
     if (!isValidUUID(bid)) return
     try {
-      // Map UI fields to actual DB column names
+      const baseFreq = employee.frequency || 'Mensual'
+      const pDay = employee.payDay || 'Lunes'
+      const freqValue = baseFreq === 'Semanal' ? `Semanal - ${pDay}` : baseFreq
+
       const dbRecord = {
         business_id: bid,
         name: employee.name,
         role: employee.role,
         salary: Number(employee.baseSalary || employee.salary || 0),
-        payment_frequency: employee.frequency || employee.payment_frequency || 'monthly',
+        payment_frequency: freqValue,
       }
       const { data, error } = await supabase.from('employees').insert(dbRecord).select().single()
       if (error) { console.error('addEmployee error:', error); return }
-      // Normalize to camelCase for UI consistency
       if (data) setEmployees(prev => [normalizeEmployee(data), ...prev])
     } catch (e) {
       console.error(e)
@@ -181,12 +203,33 @@ export function FinanceProvider({ children }) {
   }
 
   const updateEmployee = async (id, updatedData) => {
-    setEmployees(prev => prev.map(e => e.id === id ? { ...e, ...updatedData } : e))
+    let freqValue = updatedData.frequency
+    if (updatedData.frequency === 'Semanal' && updatedData.payDay) {
+      freqValue = `Semanal - ${updatedData.payDay}`
+    } else if (updatedData.frequency && updatedData.frequency !== 'Semanal') {
+      freqValue = updatedData.frequency
+    }
+
+    const dbUpdate = {}
+    if (updatedData.name !== undefined) dbUpdate.name = updatedData.name
+    if (updatedData.role !== undefined) dbUpdate.role = updatedData.role
+    if (updatedData.baseSalary !== undefined || updatedData.salary !== undefined) {
+      dbUpdate.salary = Number(updatedData.baseSalary ?? updatedData.salary ?? 0)
+    }
+    if (freqValue !== undefined) dbUpdate.payment_frequency = freqValue
+
+    setEmployees(prev => prev.map(e => {
+      if (e.id !== id) return e
+      const merged = { ...e, ...updatedData }
+      if (freqValue) merged.payment_frequency = freqValue
+      return normalizeEmployee(merged)
+    }))
+
     if (!isValidUUID(bid)) return
     try {
-      await supabase.from('employees').update(updatedData).eq('id', id)
+      await supabase.from('employees').update(dbUpdate).eq('id', id)
     } catch (e) {
-      console.error(e)
+      console.error('updateEmployee error:', e)
     }
   }
 
