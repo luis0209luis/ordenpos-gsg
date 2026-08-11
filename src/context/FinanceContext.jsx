@@ -222,11 +222,37 @@ export function FinanceProvider({ children }) {
     }
   }
 
+  const updatePayrollRecord = async (id, updatedData) => {
+    setPayrollHistory(prev => prev.map(p => p.id === id ? { ...p, ...updatedData } : p))
+    if (!isValidUUID(bid)) return
+    try {
+      const dbUpdate = {}
+      if (updatedData.date) dbUpdate.date = updatedData.date
+      if (updatedData.totalPaid !== undefined) dbUpdate.amount = Number(updatedData.totalPaid)
+      if (updatedData.observation !== undefined) dbUpdate.period = updatedData.observation
+      if (updatedData.employeeName !== undefined) dbUpdate.employee_name = updatedData.employeeName
+
+      await supabase.from('payroll_history').update(dbUpdate).eq('id', id)
+    } catch (e) {
+      console.error('updatePayrollRecord error:', e)
+    }
+  }
+
+  const deletePayrollRecord = async (id) => {
+    setPayrollHistory(prev => prev.filter(p => p.id !== id))
+    if (!isValidUUID(bid)) return
+    try {
+      await supabase.from('payroll_history').delete().eq('id', id)
+    } catch (e) {
+      console.error('deletePayrollRecord error:', e)
+    }
+  }
+
   return (
     <FinanceContext.Provider value={{
       expenses, addExpense, deleteExpense, updateExpense,
       employees, addEmployee, updateEmployee, deleteEmployee,
-      payrollHistory, addPayrollRecord, loading
+      payrollHistory, addPayrollRecord, updatePayrollRecord, deletePayrollRecord, loading
     }}>
       {children}
     </FinanceContext.Provider>

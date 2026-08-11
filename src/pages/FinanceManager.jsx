@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
-import { format, parseISO, addDays, addWeeks, addMonths, isToday, isThisWeek, isThisMonth, isThisYear } from 'date-fns'
+import { format, parseISO, addDays, addWeeks, addMonths, isToday, isThisWeek, isThisMonth, isThisYear, subWeeks, isSameWeek } from 'date-fns'
 import * as XLSX from 'xlsx'
 import { useFinance } from '../context/FinanceContext'
 import { useInventory } from '../context/InventoryContext'
 import { useTheme, useAuth, useDeleteConfirmation } from '../context/AppContext'
 import { useCashRegister } from '../context/CashRegisterContext'
-import { DollarSign, TrendingUp, TrendingDown, Users, Download, Plus, FileText, Briefcase, Calendar, CheckCircle2, Trash2, X, Edit, Archive, Gift } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, Users, Download, Plus, FileText, Briefcase, Calendar, CheckCircle2, Trash2, X, Edit, Archive, Gift, CalendarDays } from 'lucide-react'
 
 export default function FinanceManager() {
   const { theme } = useTheme()
@@ -21,7 +21,9 @@ export default function FinanceManager() {
     employees = [], 
     addEmployee, 
     payrollHistory = [], 
-    addPayrollRecord, 
+    addPayrollRecord,
+    updatePayrollRecord,
+    deletePayrollRecord, 
     deleteEmployee 
   } = useFinance() || {}
   const { salesHistory } = useInventory()
@@ -70,6 +72,7 @@ export default function FinanceManager() {
 
   // Payroll Payment State
   const [selectedEmp, setSelectedEmp] = useState(null)
+  const [payrollDate, setPayrollDate] = useState(new Date().toISOString().split('T')[0])
   const [customBaseSalary, setCustomBaseSalary] = useState(0)
   const [useDailyCalc, setUseDailyCalc] = useState(false)
   const [daysWorked, setDaysWorked] = useState(1)
@@ -82,7 +85,12 @@ export default function FinanceManager() {
   const [showSuccess, setShowSuccess] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
   const [confirmExpenseDeleteId, setConfirmExpenseDeleteId] = useState(null)
+  const [confirmPayrollDeleteId, setConfirmPayrollDeleteId] = useState(null)
   
+  // Payroll Date Edit Modal State
+  const [editingPayrollRecord, setEditingPayrollRecord] = useState(null)
+  const [editPayrollDateValue, setEditPayrollDateValue] = useState('')
+
   // Payroll Export Modal State
   const [showPayrollExport, setShowPayrollExport] = useState(false)
   const [exportType, setExportType] = useState('Mensual')
@@ -97,6 +105,7 @@ export default function FinanceManager() {
     const date = parseISO(sale?.date || new Date().toISOString())
     if (timeFilter === 'Hoy') return isToday(date)
     if (timeFilter === 'Semana') return isThisWeek(date, { weekStartsOn: 1 })
+    if (timeFilter === 'SemanaAnt') return isSameWeek(date, subWeeks(new Date(), 1), { weekStartsOn: 1 })
     if (timeFilter === 'Mes') return isThisMonth(date)
     if (timeFilter === 'Año') return isThisYear(date)
     return true
@@ -107,6 +116,7 @@ export default function FinanceManager() {
     const date = parseISO(exp?.date || new Date().toISOString())
     if (timeFilter === 'Hoy') return isToday(date)
     if (timeFilter === 'Semana') return isThisWeek(date, { weekStartsOn: 1 })
+    if (timeFilter === 'SemanaAnt') return isSameWeek(date, subWeeks(new Date(), 1), { weekStartsOn: 1 })
     if (timeFilter === 'Mes') return isThisMonth(date)
     if (timeFilter === 'Año') return isThisYear(date)
     return true
@@ -117,6 +127,7 @@ export default function FinanceManager() {
     const date = parseISO(p?.date || new Date().toISOString())
     if (timeFilter === 'Hoy') return isToday(date)
     if (timeFilter === 'Semana') return isThisWeek(date, { weekStartsOn: 1 })
+    if (timeFilter === 'SemanaAnt') return isSameWeek(date, subWeeks(new Date(), 1), { weekStartsOn: 1 })
     if (timeFilter === 'Mes') return isThisMonth(date)
     if (timeFilter === 'Año') return isThisYear(date)
     return true
@@ -194,6 +205,7 @@ export default function FinanceManager() {
 
   const openLiquidationModal = (emp) => {
     setSelectedEmp(emp)
+    setPayrollDate(new Date().toISOString().split('T')[0])
     const base = Number(emp.baseSalary) || 0
     setCustomBaseSalary(base)
     setDaysWorked(1)
@@ -231,6 +243,8 @@ export default function FinanceManager() {
     }
     const finalObservation = notesParts.join(' | ')
 
+    const payDateISO = payrollDate ? new Date(payrollDate + 'T12:00:00').toISOString() : new Date().toISOString()
+
     addPayrollRecord({
       employeeId: selectedEmp.id,
       employeeName: selectedEmp.name,
@@ -238,7 +252,8 @@ export default function FinanceManager() {
       bonus: Number(bonus),
       deduction: Number(deduction),
       totalPaid,
-      observation: finalObservation
+      observation: finalObservation,
+      date: payDateISO
     })
     
     setShowSuccess(true)
@@ -388,7 +403,8 @@ export default function FinanceManager() {
             ${isDark ? 'bg-dark-card border-dark-border' : 'bg-light-surface border-light-border'}`}>
             {[
               { id: 'Hoy', label: 'Diario' },
-              { id: 'Semana', label: 'Semanal' },
+              { id: 'Semana', label: 'Sem. Actual' },
+              { id: 'SemanaAnt', label: 'Sem. Anterior' },
               { id: 'Mes', label: 'Mensual' },
               { id: 'Año', label: 'Anual' },
               { id: 'Todo', label: 'Todo' }
@@ -728,12 +744,13 @@ export default function FinanceManager() {
                       <th className="pb-3 font-semibold">Bonos/Ded.</th>
                       <th className="pb-3 font-semibold">Notas / Motivos</th>
                       <th className="pb-3 font-semibold">Total Pagado</th>
+                      <th className="pb-3 font-semibold text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredPayroll.map(p => (
                       <tr key={p.id} className={`border-b ${isDark ? 'border-dark-border/50' : 'border-gray-100'} text-sm`}>
-                        <td className="py-3 text-xs">{format(parseISO(p.date || new Date().toISOString()), 'dd/MM/yyyy')}</td>
+                        <td className="py-3 text-xs font-semibold">{format(parseISO(p.date || new Date().toISOString()), 'dd/MM/yyyy')}</td>
                         <td className="py-3 font-medium">{p.employeeName}</td>
                         <td className="py-3 text-xs">${(Number(p.baseSalary) || 0).toLocaleString('es-CO')}</td>
                         <td className="py-3 text-xs">
@@ -743,9 +760,38 @@ export default function FinanceManager() {
                           {p.observation || '—'}
                         </td>
                         <td className="py-3 font-bold text-blue-500">${(Number(p.totalPaid) || 0).toLocaleString('es-CO')}</td>
+                        <td className="py-3 text-right">
+                          {confirmPayrollDeleteId === p.id ? (
+                            <div className="flex items-center justify-end gap-1 animate-fade-in">
+                              <span className="text-[10px] text-red-500 font-bold">¿Borrar?</span>
+                              <button onClick={() => setConfirmPayrollDeleteId(null)} className="px-1.5 py-0.5 text-[10px] rounded bg-gray-500/10 text-gray-400 font-bold">No</button>
+                              <button onClick={() => { deletePayrollRecord(p.id); setConfirmPayrollDeleteId(null); }} className="px-1.5 py-0.5 text-[10px] rounded bg-red-600 text-white font-bold shadow">Sí</button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-end gap-1">
+                              <button 
+                                onClick={() => {
+                                  setEditingPayrollRecord(p)
+                                  setEditPayrollDateValue(p.date ? p.date.split('T')[0] : new Date().toISOString().split('T')[0])
+                                }}
+                                className={`p-1.5 rounded-lg transition-colors ${isDark ? 'hover:bg-gold-500/10 text-gold-400' : 'hover:bg-gold-50 text-gold-600'}`}
+                                title="Mover a otra fecha (Ej. Semana pasada)"
+                              >
+                                <CalendarDays size={15} />
+                              </button>
+                              <button 
+                                onClick={() => setConfirmPayrollDeleteId(p.id)}
+                                className={`p-1.5 rounded-lg transition-colors ${isDark ? 'hover:bg-red-500/20 text-red-400' : 'hover:bg-red-50 text-red-600'}`}
+                                title="Eliminar registro"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     ))}
-                    {filteredPayroll.length === 0 && <tr><td colSpan="6" className="py-6 text-center text-gray-500">No hay pagos de nómina registrados.</td></tr>}
+                    {filteredPayroll.length === 0 && <tr><td colSpan="7" className="py-6 text-center text-gray-500">No hay pagos de nómina registrados.</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -988,6 +1034,22 @@ export default function FinanceManager() {
                 <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
                   <form onSubmit={handlePayPayroll} className="space-y-5">
 
+                    {/* Fecha de Imputación del Pago */}
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="text-xs font-bold uppercase tracking-wider text-gray-500 flex items-center gap-1">
+                          <Calendar size={12} className="text-gold-500" /> Fecha del Pago / Cierre
+                        </label>
+                        <span className="text-[10px] text-gray-400">¿Afecta la semana pasada? Cambia la fecha</span>
+                      </div>
+                      <input 
+                        type="date" 
+                        value={payrollDate} 
+                        onChange={e => setPayrollDate(e.target.value)} 
+                        className={`w-full p-3 text-sm font-semibold rounded-2xl border outline-none transition-colors ${isDark ? 'bg-dark-surface border-dark-border text-white focus:border-gold-500' : 'bg-gray-50 border-gray-200 text-gray-900 focus:border-gold-500'}`} 
+                      />
+                    </div>
+
                     {/* Selector de Modo de Base */}
                     <div className={`p-1.5 rounded-2xl border flex gap-1 ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-gray-100 border-gray-200'}`}>
                       <button
@@ -1222,6 +1284,58 @@ export default function FinanceManager() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Edit Payroll Date Modal */}
+      {editingPayrollRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in">
+          <div className={`w-full max-w-md rounded-3xl p-6 relative border shadow-2xl ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-white border-gray-200 text-gray-900'}`}>
+            <button 
+              type="button" 
+              onClick={() => setEditingPayrollRecord(null)}
+              className={`absolute top-4 right-4 p-2 rounded-full transition-colors ${isDark ? 'text-gray-400 hover:bg-white/10' : 'text-gray-500 hover:bg-black/5'}`}>
+              <X size={18} />
+            </button>
+            <h3 className="text-lg font-bold font-display mb-1 flex items-center gap-2">
+              <CalendarDays className="text-gold-500" size={20} />
+              Cambiar Fecha del Pago
+            </h3>
+            <p className={`text-xs mb-5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              Imputa este pago de <strong>{editingPayrollRecord.employeeName}</strong> (${Number(editingPayrollRecord.totalPaid || 0).toLocaleString('es-CO')}) a la semana o día correspondiente.
+            </p>
+            <form onSubmit={(e) => {
+              e.preventDefault()
+              if (!editPayrollDateValue) return
+              const newISO = new Date(editPayrollDateValue + 'T12:00:00').toISOString()
+              updatePayrollRecord(editingPayrollRecord.id, { date: newISO })
+              setEditingPayrollRecord(null)
+            }} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-500">Nueva Fecha de Contabilización</label>
+                <input 
+                  type="date" 
+                  value={editPayrollDateValue} 
+                  onChange={e => setEditPayrollDateValue(e.target.value)} 
+                  required
+                  className={`w-full mt-1.5 p-3.5 text-sm font-bold rounded-2xl border outline-none ${isDark ? 'bg-dark-surface border-dark-border text-white focus:border-gold-500' : 'bg-gray-50 border-gray-200 text-gray-900'}`} 
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button 
+                  type="button" 
+                  onClick={() => setEditingPayrollRecord(null)}
+                  className={`flex-1 py-3 rounded-xl font-bold text-xs ${isDark ? 'bg-white/5 hover:bg-white/10 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}>
+                  Cancelar
+                </button>
+                <button 
+                  type="submit" 
+                  className="flex-1 py-3 rounded-xl bg-gold-gradient text-black font-black text-xs uppercase tracking-wider shadow-md hover:scale-[1.02] transition-transform">
+                  Guardar Fecha
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
