@@ -5,7 +5,7 @@ import { useFinance } from '../context/FinanceContext'
 import { useInventory } from '../context/InventoryContext'
 import { useTheme, useAuth, useDeleteConfirmation } from '../context/AppContext'
 import { useCashRegister } from '../context/CashRegisterContext'
-import { DollarSign, TrendingUp, TrendingDown, Users, Download, Plus, FileText, Briefcase, Calendar, CheckCircle2, Trash2, X, Edit, Archive, Gift, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, Users, Download, Plus, FileText, Briefcase, Calendar, CheckCircle2, Trash2, X, Edit, Archive, Gift, CalendarDays, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 
 export default function FinanceManager() {
   const { theme } = useTheme()
@@ -457,77 +457,31 @@ export default function FinanceManager() {
         </div>
         
         <div className="flex flex-wrap items-center gap-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className={`flex items-center gap-1 p-1 rounded-xl border
-              ${isDark ? 'bg-dark-card border-dark-border' : 'bg-light-surface border-light-border'}`}>
-              {[
-                { id: 'Hoy', label: 'Diario' },
-                { id: 'Semana', label: 'Semanal' },
-                { id: 'Mes', label: 'Mensual' },
-                { id: 'Año', label: 'Anual' },
-                { id: 'Todo', label: 'Todo' }
-              ].map(filter => (
-                <button
-                  key={filter.id}
-                  onClick={() => {
-                    setTimeFilter(filter.id)
-                    if (filter.id === 'Semana') setWeekOffset(0)
-                  }}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all
-                    ${timeFilter === filter.id
-                      ? 'bg-gold-gradient text-dark-bg shadow-gold-sm font-bold'
-                      : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
-                >
-                  {filter.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Selector interactivo de semana cuando 'Semanal' está activo */}
-            {timeFilter === 'Semana' && (
-              <div className={`flex items-center gap-1.5 p-1 px-2.5 rounded-xl border animate-fade-in ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
-                <button 
-                  type="button"
-                  onClick={() => setWeekOffset(prev => prev - 1)}
-                  className={`p-1 rounded-lg transition-colors ${isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-100 text-gray-700'}`}
-                  title="Semana anterior"
-                >
-                  <ChevronLeft size={16} />
-                </button>
-
-                <select 
-                  value={weekOffset} 
-                  onChange={e => setWeekOffset(Number(e.target.value))}
-                  className={`bg-transparent text-xs font-bold outline-none cursor-pointer ${isDark ? 'text-gold-400' : 'text-gold-700'}`}
-                >
-                  <option value={0} className={isDark ? 'bg-dark-card text-white' : 'bg-white text-black'}>
-                    Esta Semana ({format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'dd/MM')} - {format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'dd/MM')})
-                  </option>
-                  <option value={-1} className={isDark ? 'bg-dark-card text-white' : 'bg-white text-black'}>
-                    Semana Anterior ({format(startOfWeek(subWeeks(new Date(), 1), { weekStartsOn: 1 }), 'dd/MM')} - {format(endOfWeek(subWeeks(new Date(), 1), { weekStartsOn: 1 }), 'dd/MM')})
-                  </option>
-                  <option value={-2} className={isDark ? 'bg-dark-card text-white' : 'bg-white text-black'}>
-                    Hace 2 Semanas ({format(startOfWeek(subWeeks(new Date(), 2), { weekStartsOn: 1 }), 'dd/MM')} - {format(endOfWeek(subWeeks(new Date(), 2), { weekStartsOn: 1 }), 'dd/MM')})
-                  </option>
-                  <option value={-3} className={isDark ? 'bg-dark-card text-white' : 'bg-white text-black'}>
-                    Hace 3 Semanas ({format(startOfWeek(subWeeks(new Date(), 3), { weekStartsOn: 1 }), 'dd/MM')} - {format(endOfWeek(subWeeks(new Date(), 3), { weekStartsOn: 1 }), 'dd/MM')})
-                  </option>
-                  <option value={-4} className={isDark ? 'bg-dark-card text-white' : 'bg-white text-black'}>
-                    Hace 4 Semanas ({format(startOfWeek(subWeeks(new Date(), 4), { weekStartsOn: 1 }), 'dd/MM')} - {format(endOfWeek(subWeeks(new Date(), 4), { weekStartsOn: 1 }), 'dd/MM')})
-                  </option>
-                </select>
-
-                <button 
-                  type="button"
-                  onClick={() => setWeekOffset(prev => Math.min(0, prev + 1))}
-                  disabled={weekOffset >= 0}
-                  className={`p-1 rounded-lg transition-colors ${weekOffset >= 0 ? 'opacity-30 cursor-not-allowed' : isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-100 text-gray-700'}`}
-                  title="Semana siguiente"
-                >
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-            )}
+          <div className={`flex items-center gap-1 p-1 rounded-xl border
+            ${isDark ? 'bg-dark-card border-dark-border' : 'bg-light-surface border-light-border'}`}>
+            {[
+              { id: 'Hoy', label: 'Diario' },
+              { id: 'Semana', label: 'Semanal' },
+              { id: 'Mes', label: 'Mensual' },
+              { id: 'Año', label: 'Anual' },
+              { id: 'Todo', label: 'Todo' }
+            ].map(filter => (
+              <button
+                key={filter.id}
+                onClick={() => {
+                  setTimeFilter(filter.id)
+                  if (filter.id === 'Semana') {
+                    setWeekOffset(0)
+                  }
+                }}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all
+                  ${timeFilter === filter.id
+                    ? 'bg-gold-gradient text-dark-bg shadow-gold-sm font-bold'
+                    : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
+              >
+                {filter.label}
+              </button>
+            ))}
           </div>
 
           <button 
@@ -580,20 +534,117 @@ export default function FinanceManager() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 mb-6 border-b border-gray-500/30 pb-2 overflow-x-auto">
-        {['resumen', 'egresos', 'nomina', 'caja'].map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 rounded-t-lg font-bold capitalize transition-colors whitespace-nowrap
-              ${activeTab === tab 
-                ? (isDark ? 'bg-dark-card text-gold-400 border-t-2 border-gold-500' : 'bg-white text-gold-600 border-t-2 border-gold-500')
-                : (isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900')}`}
-          >
-            {tab === 'resumen' ? 'Resumen General' : tab === 'egresos' ? 'Gastos / Egresos' : tab === 'nomina' ? 'Nómina & RH' : '🗃️ Historial de Caja'}
-          </button>
-        ))}
+      {/* Tabs & Period Navigation */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-gray-500/30 pb-2">
+        <div className="flex gap-2 overflow-x-auto">
+          {['resumen', 'egresos', 'nomina', 'caja'].map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 rounded-t-lg font-bold capitalize transition-colors whitespace-nowrap
+                ${activeTab === tab 
+                  ? (isDark ? 'bg-dark-card text-gold-400 border-t-2 border-gold-500' : 'bg-white text-gold-600 border-t-2 border-gold-500')
+                  : (isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900')}`}
+            >
+              {tab === 'resumen' ? 'Resumen General' : tab === 'egresos' ? 'Gastos / Egresos' : tab === 'nomina' ? 'Nómina & RH' : '🗃️ Historial de Caja'}
+            </button>
+          ))}
+        </div>
+
+        {/* Selector de Semana reubicado aquí de manera estratégica cuando timeFilter === 'Semana' */}
+        {timeFilter === 'Semana' && (
+          <div className="relative pb-1 sm:pb-0">
+            <button
+              type="button"
+              onClick={() => setShowWeekDropdown(prev => !prev)}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-sm ${
+                isDark
+                  ? 'bg-dark-card border-gold-500/40 text-gold-400 hover:border-gold-400'
+                  : 'bg-white border-gold-500/50 text-gold-700 hover:border-gold-500'
+              }`}
+            >
+              <Calendar size={14} className="text-gold-500" />
+              <span>
+                {weekOffset === 0
+                  ? 'Esta Semana'
+                  : weekOffset === -1
+                  ? 'Semana Anterior'
+                  : `Hace ${Math.abs(weekOffset)} Semanas`}
+              </span>
+              <span className="text-[11px] font-normal opacity-85">
+                ({format(startOfWeek(addWeeks(new Date(), weekOffset), { weekStartsOn: 1 }), 'dd/MM')} - {format(endOfWeek(addWeeks(new Date(), weekOffset), { weekStartsOn: 1 }), 'dd/MM')})
+              </span>
+              <ChevronDown size={14} className={`transition-transform duration-200 ${showWeekDropdown ? 'rotate-180' : ''}`} />
+            </button>
+
+            {/* Floating Popover Card */}
+            {showWeekDropdown && (
+              <>
+                <div className="fixed inset-0 z-20" onClick={() => setShowWeekDropdown(false)} />
+                <div className={`absolute right-0 mt-2 w-72 rounded-2xl border p-3 shadow-2xl z-30 animate-in fade-in zoom-in-95 duration-150 ${
+                  isDark ? 'bg-dark-card/95 backdrop-blur-md border-dark-border text-white' : 'bg-white/95 backdrop-blur-md border-light-border text-gray-900'
+                }`}>
+                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-gray-500/20 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    <span>Seleccionar Semana</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setWeekOffset(prev => prev - 1)}
+                        className={`p-1 rounded-lg transition-colors ${isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-100 text-gray-700'}`}
+                        title="Semana anterior"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setWeekOffset(prev => Math.min(0, prev + 1))}
+                        disabled={weekOffset >= 0}
+                        className={`p-1 rounded-lg transition-colors ${weekOffset >= 0 ? 'opacity-30 cursor-not-allowed' : isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-100 text-gray-700'}`}
+                        title="Semana siguiente"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    {[
+                      { offset: 0, label: 'Esta Semana' },
+                      { offset: -1, label: 'Semana Anterior' },
+                      { offset: -2, label: 'Hace 2 Semanas' },
+                      { offset: -3, label: 'Hace 3 Semanas' },
+                      { offset: -4, label: 'Hace 4 Semanas' },
+                    ].map((item) => {
+                      const start = format(startOfWeek(addWeeks(new Date(), item.offset), { weekStartsOn: 1 }), 'dd/MM')
+                      const end = format(endOfWeek(addWeeks(new Date(), item.offset), { weekStartsOn: 1 }), 'dd/MM/yyyy')
+                      const isSelected = weekOffset === item.offset
+                      return (
+                        <button
+                          key={item.offset}
+                          type="button"
+                          onClick={() => {
+                            setWeekOffset(item.offset)
+                            setShowWeekDropdown(false)
+                          }}
+                          className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between transition-colors ${
+                            isSelected
+                              ? 'bg-gold-500/20 text-gold-500 font-bold border border-gold-500/30'
+                              : isDark
+                              ? 'hover:bg-white/5 text-gray-300'
+                              : 'hover:bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          <span>{item.label}</span>
+                          <span className="text-[11px] opacity-70">{start} - {end}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Tab Content: Resumen */}
