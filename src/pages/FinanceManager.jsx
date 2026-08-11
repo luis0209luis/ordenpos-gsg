@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
-import { format, parseISO, addDays, addWeeks, addMonths, isToday, isThisWeek, isThisMonth, isThisYear, subWeeks, isSameWeek } from 'date-fns'
+import { format, parseISO, addDays, addWeeks, addMonths, isToday, isThisWeek, isThisMonth, isThisYear, subWeeks, isSameWeek, startOfWeek, endOfWeek } from 'date-fns'
 import * as XLSX from 'xlsx'
 import { useFinance } from '../context/FinanceContext'
 import { useInventory } from '../context/InventoryContext'
 import { useTheme, useAuth, useDeleteConfirmation } from '../context/AppContext'
 import { useCashRegister } from '../context/CashRegisterContext'
-import { DollarSign, TrendingUp, TrendingDown, Users, Download, Plus, FileText, Briefcase, Calendar, CheckCircle2, Trash2, X, Edit, Archive, Gift, CalendarDays } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, Users, Download, Plus, FileText, Briefcase, Calendar, CheckCircle2, Trash2, X, Edit, Archive, Gift, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 
 export default function FinanceManager() {
   const { theme } = useTheme()
@@ -108,13 +108,16 @@ export default function FinanceManager() {
 
   // Filter by period
   const [timeFilter, setTimeFilter] = useState('Todo')
+  const [weekOffset, setWeekOffset] = useState(0) // 0 = esta semana, -1 = semana anterior, -2 = hace 2 semanas...
 
   const filteredSales = (salesHistory || []).filter(sale => {
     if (timeFilter === 'Todo') return true
     const date = parseISO(sale?.date || new Date().toISOString())
     if (timeFilter === 'Hoy') return isToday(date)
-    if (timeFilter === 'Semana') return isThisWeek(date, { weekStartsOn: 1 })
-    if (timeFilter === 'SemanaAnt') return isSameWeek(date, subWeeks(new Date(), 1), { weekStartsOn: 1 })
+    if (timeFilter === 'Semana') {
+      const targetWeekDate = addWeeks(new Date(), weekOffset)
+      return isSameWeek(date, targetWeekDate, { weekStartsOn: 1 })
+    }
     if (timeFilter === 'Mes') return isThisMonth(date)
     if (timeFilter === 'Año') return isThisYear(date)
     return true
@@ -124,8 +127,10 @@ export default function FinanceManager() {
     if (timeFilter === 'Todo') return true
     const date = parseISO(exp?.date || new Date().toISOString())
     if (timeFilter === 'Hoy') return isToday(date)
-    if (timeFilter === 'Semana') return isThisWeek(date, { weekStartsOn: 1 })
-    if (timeFilter === 'SemanaAnt') return isSameWeek(date, subWeeks(new Date(), 1), { weekStartsOn: 1 })
+    if (timeFilter === 'Semana') {
+      const targetWeekDate = addWeeks(new Date(), weekOffset)
+      return isSameWeek(date, targetWeekDate, { weekStartsOn: 1 })
+    }
     if (timeFilter === 'Mes') return isThisMonth(date)
     if (timeFilter === 'Año') return isThisYear(date)
     return true
@@ -135,8 +140,10 @@ export default function FinanceManager() {
     if (timeFilter === 'Todo') return true
     const date = parseISO(p?.date || new Date().toISOString())
     if (timeFilter === 'Hoy') return isToday(date)
-    if (timeFilter === 'Semana') return isThisWeek(date, { weekStartsOn: 1 })
-    if (timeFilter === 'SemanaAnt') return isSameWeek(date, subWeeks(new Date(), 1), { weekStartsOn: 1 })
+    if (timeFilter === 'Semana') {
+      const targetWeekDate = addWeeks(new Date(), weekOffset)
+      return isSameWeek(date, targetWeekDate, { weekStartsOn: 1 })
+    }
     if (timeFilter === 'Mes') return isThisMonth(date)
     if (timeFilter === 'Año') return isThisYear(date)
     return true
@@ -450,27 +457,77 @@ export default function FinanceManager() {
         </div>
         
         <div className="flex flex-wrap items-center gap-4">
-          <div className={`flex items-center gap-1 p-1 rounded-xl border
-            ${isDark ? 'bg-dark-card border-dark-border' : 'bg-light-surface border-light-border'}`}>
-            {[
-              { id: 'Hoy', label: 'Diario' },
-              { id: 'Semana', label: 'Sem. Actual' },
-              { id: 'SemanaAnt', label: 'Sem. Anterior' },
-              { id: 'Mes', label: 'Mensual' },
-              { id: 'Año', label: 'Anual' },
-              { id: 'Todo', label: 'Todo' }
-            ].map(filter => (
-              <button
-                key={filter.id}
-                onClick={() => setTimeFilter(filter.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all
-                  ${timeFilter === filter.id
-                    ? 'bg-gold-gradient text-dark-bg shadow-gold-sm font-bold'
-                    : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
-              >
-                {filter.label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className={`flex items-center gap-1 p-1 rounded-xl border
+              ${isDark ? 'bg-dark-card border-dark-border' : 'bg-light-surface border-light-border'}`}>
+              {[
+                { id: 'Hoy', label: 'Diario' },
+                { id: 'Semana', label: 'Semanal' },
+                { id: 'Mes', label: 'Mensual' },
+                { id: 'Año', label: 'Anual' },
+                { id: 'Todo', label: 'Todo' }
+              ].map(filter => (
+                <button
+                  key={filter.id}
+                  onClick={() => {
+                    setTimeFilter(filter.id)
+                    if (filter.id === 'Semana') setWeekOffset(0)
+                  }}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all
+                    ${timeFilter === filter.id
+                      ? 'bg-gold-gradient text-dark-bg shadow-gold-sm font-bold'
+                      : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Selector interactivo de semana cuando 'Semanal' está activo */}
+            {timeFilter === 'Semana' && (
+              <div className={`flex items-center gap-1.5 p-1 px-2.5 rounded-xl border animate-fade-in ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
+                <button 
+                  type="button"
+                  onClick={() => setWeekOffset(prev => prev - 1)}
+                  className={`p-1 rounded-lg transition-colors ${isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-100 text-gray-700'}`}
+                  title="Semana anterior"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+
+                <select 
+                  value={weekOffset} 
+                  onChange={e => setWeekOffset(Number(e.target.value))}
+                  className={`bg-transparent text-xs font-bold outline-none cursor-pointer ${isDark ? 'text-gold-400' : 'text-gold-700'}`}
+                >
+                  <option value={0} className={isDark ? 'bg-dark-card text-white' : 'bg-white text-black'}>
+                    Esta Semana ({format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'dd/MM')} - {format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'dd/MM')})
+                  </option>
+                  <option value={-1} className={isDark ? 'bg-dark-card text-white' : 'bg-white text-black'}>
+                    Semana Anterior ({format(startOfWeek(subWeeks(new Date(), 1), { weekStartsOn: 1 }), 'dd/MM')} - {format(endOfWeek(subWeeks(new Date(), 1), { weekStartsOn: 1 }), 'dd/MM')})
+                  </option>
+                  <option value={-2} className={isDark ? 'bg-dark-card text-white' : 'bg-white text-black'}>
+                    Hace 2 Semanas ({format(startOfWeek(subWeeks(new Date(), 2), { weekStartsOn: 1 }), 'dd/MM')} - {format(endOfWeek(subWeeks(new Date(), 2), { weekStartsOn: 1 }), 'dd/MM')})
+                  </option>
+                  <option value={-3} className={isDark ? 'bg-dark-card text-white' : 'bg-white text-black'}>
+                    Hace 3 Semanas ({format(startOfWeek(subWeeks(new Date(), 3), { weekStartsOn: 1 }), 'dd/MM')} - {format(endOfWeek(subWeeks(new Date(), 3), { weekStartsOn: 1 }), 'dd/MM')})
+                  </option>
+                  <option value={-4} className={isDark ? 'bg-dark-card text-white' : 'bg-white text-black'}>
+                    Hace 4 Semanas ({format(startOfWeek(subWeeks(new Date(), 4), { weekStartsOn: 1 }), 'dd/MM')} - {format(endOfWeek(subWeeks(new Date(), 4), { weekStartsOn: 1 }), 'dd/MM')})
+                  </option>
+                </select>
+
+                <button 
+                  type="button"
+                  onClick={() => setWeekOffset(prev => Math.min(0, prev + 1))}
+                  disabled={weekOffset >= 0}
+                  className={`p-1 rounded-lg transition-colors ${weekOffset >= 0 ? 'opacity-30 cursor-not-allowed' : isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-100 text-gray-700'}`}
+                  title="Semana siguiente"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            )}
           </div>
 
           <button 
