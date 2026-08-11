@@ -70,8 +70,14 @@ export default function FinanceManager() {
 
   // Payroll Payment State
   const [selectedEmp, setSelectedEmp] = useState(null)
+  const [customBaseSalary, setCustomBaseSalary] = useState(0)
+  const [useDailyCalc, setUseDailyCalc] = useState(false)
+  const [daysWorked, setDaysWorked] = useState(1)
+  const [dailyRate, setDailyRate] = useState(0)
   const [bonus, setBonus] = useState(0)
+  const [bonusReason, setBonusReason] = useState('')
   const [deduction, setDeduction] = useState(0)
+  const [deductionReason, setDeductionReason] = useState('')
   const [observation, setObservation] = useState('')
   const [showSuccess, setShowSuccess] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
@@ -186,18 +192,53 @@ export default function FinanceManager() {
     setEmpSalary('')
   }
 
+  const openLiquidationModal = (emp) => {
+    setSelectedEmp(emp)
+    const base = Number(emp.baseSalary) || 0
+    setCustomBaseSalary(base)
+    setDaysWorked(1)
+    setDailyRate(base)
+    setUseDailyCalc(emp.frequency === 'Diario')
+    setBonus(0)
+    setBonusReason('')
+    setDeduction(0)
+    setDeductionReason('')
+    setObservation('')
+  }
+
   const handlePayPayroll = (e) => {
     e.preventDefault()
     if (!selectedEmp) return
-    const totalPaid = selectedEmp.baseSalary + Number(bonus) - Number(deduction)
+
+    const effectiveBaseSalary = useDailyCalc 
+      ? (Number(daysWorked || 0) * Number(dailyRate || 0))
+      : Number(customBaseSalary || 0)
+
+    const totalPaid = Math.max(0, effectiveBaseSalary + Number(bonus || 0) - Number(deduction || 0))
+
+    const notesParts = []
+    if (useDailyCalc && daysWorked) {
+      notesParts.push(`${daysWorked} día(s) laborado(s) x $${Number(dailyRate || 0).toLocaleString('es-CO')}`)
+    }
+    if (Number(bonus) > 0) {
+      notesParts.push(`Bono: +$${Number(bonus).toLocaleString('es-CO')}${bonusReason ? ` (${bonusReason})` : ''}`)
+    }
+    if (Number(deduction) > 0) {
+      notesParts.push(`Desc: -$${Number(deduction).toLocaleString('es-CO')}${deductionReason ? ` (${deductionReason})` : ''}`)
+    }
+    if (observation.trim()) {
+      notesParts.push(observation.trim())
+    }
+    const finalObservation = notesParts.join(' | ')
+
     addPayrollRecord({
       employeeId: selectedEmp.id,
       employeeName: selectedEmp.name,
-      baseSalary: selectedEmp.baseSalary,
+      baseSalary: effectiveBaseSalary,
       bonus: Number(bonus),
       deduction: Number(deduction),
       totalPaid,
-      observation
+      observation: finalObservation
     })
     
     setShowSuccess(true)
@@ -205,7 +246,9 @@ export default function FinanceManager() {
       setShowSuccess(false)
       setSelectedEmp(null)
       setBonus(0)
+      setBonusReason('')
       setDeduction(0)
+      setDeductionReason('')
       setObservation('')
     }, 1500)
   }
@@ -641,7 +684,7 @@ export default function FinanceManager() {
                    ) : (
                      <div className="mt-4 pt-3 border-t border-gray-500/20 flex gap-2">
                        <button 
-                         onClick={() => { setSelectedEmp(emp); setBonus(0); setDeduction(0); }}
+                         onClick={() => openLiquidationModal(emp)}
                          className={`flex-1 text-xs font-bold py-2 rounded-lg border transition-colors ${isDark ? 'bg-blue-500/10 border-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white' : 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-500 hover:text-white'}`}>
                          Liquidar
                        </button>
@@ -672,30 +715,35 @@ export default function FinanceManager() {
              <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className={`border-b ${isDark ? 'border-dark-border text-gray-400' : 'border-gray-200 text-gray-500'} text-sm`}>
+                    <tr className={`border-b ${isDark ? 'border-dark-border text-gray-400' : 'border-gray-200 text-gray-500'} text-xs uppercase tracking-wider`}>
                       <th className="pb-3 font-semibold">Fecha</th>
                       <th className="pb-3 font-semibold">Empleado</th>
+                      <th className="pb-3 font-semibold">Base</th>
                       <th className="pb-3 font-semibold">Bonos/Ded.</th>
+                      <th className="pb-3 font-semibold">Notas / Motivos</th>
                       <th className="pb-3 font-semibold">Total Pagado</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredPayroll.map(p => (
                       <tr key={p.id} className={`border-b ${isDark ? 'border-dark-border/50' : 'border-gray-100'} text-sm`}>
-                        <td className="py-3">{format(parseISO(p.date || new Date().toISOString()), 'dd/MM/yyyy')}</td>
+                        <td className="py-3 text-xs">{format(parseISO(p.date || new Date().toISOString()), 'dd/MM/yyyy')}</td>
                         <td className="py-3 font-medium">{p.employeeName}</td>
-                        <td className="py-3">
-                          <span className="text-green-500 text-xs">+{p.bonus}</span> / <span className="text-red-500 text-xs">-{p.deduction}</span>
+                        <td className="py-3 text-xs">${(Number(p.baseSalary) || 0).toLocaleString('es-CO')}</td>
+                        <td className="py-3 text-xs">
+                          <span className="text-green-500 font-bold">+{Number(p.bonus || 0).toLocaleString('es-CO')}</span> / <span className="text-red-500 font-bold">-{Number(p.deduction || 0).toLocaleString('es-CO')}</span>
                         </td>
-                        <td className="py-3 font-bold text-blue-500">${(Number(p.totalPaid) || 0).toLocaleString()}</td>
+                        <td className="py-3 text-xs max-w-[220px] truncate text-gray-400" title={p.observation || ''}>
+                          {p.observation || '—'}
+                        </td>
+                        <td className="py-3 font-bold text-blue-500">${(Number(p.totalPaid) || 0).toLocaleString('es-CO')}</td>
                       </tr>
                     ))}
-                    {filteredPayroll.length === 0 && <tr><td colSpan="4" className="py-6 text-center text-gray-500">No hay pagos de nómina registrados.</td></tr>}
+                    {filteredPayroll.length === 0 && <tr><td colSpan="6" className="py-6 text-center text-gray-500">No hay pagos de nómina registrados.</td></tr>}
                   </tbody>
                 </table>
               </div>
           </div>
-
         </div>
       )}
 
@@ -887,7 +935,7 @@ export default function FinanceManager() {
       {/* Payment / Liquidacion Modal */}
       {selectedEmp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className={`w-full max-w-md rounded-3xl p-6 relative overflow-hidden transition-all duration-300 transform scale-100 ${isDark ? 'bg-dark-card border border-dark-border' : 'bg-white border border-light-border shadow-2xl'}`}>
+          <div className={`w-full max-w-lg rounded-3xl p-6 relative overflow-hidden transition-all duration-300 transform scale-100 max-h-[92vh] overflow-y-auto ${isDark ? 'bg-dark-card border border-dark-border text-white' : 'bg-white border border-light-border shadow-2xl text-gray-900'}`}>
             
             {showSuccess ? (
               <div className="flex flex-col items-center justify-center py-10 animate-scale-in">
@@ -905,51 +953,249 @@ export default function FinanceManager() {
                   <X size={20} />
                 </button>
 
-                <h3 className="text-xl font-bold font-display mb-2 pr-8">
+                <h3 className="text-xl font-bold font-display mb-1 pr-8">
                   Liquidando a: <span className={isDark ? 'text-gold-400' : 'text-gold-600'}>{selectedEmp.name}</span>
                 </h3>
                 
-                <div className="flex items-center gap-3 mb-6">
-                  <span className={`px-2 py-1 rounded-md text-xs font-bold ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-700'}`}>
+                <div className="flex items-center gap-2 mb-5 text-xs">
+                  <span className={`px-2.5 py-1 rounded-lg font-bold ${isDark ? 'bg-white/10 text-gray-300' : 'bg-gray-100 text-gray-700'}`}>
+                    Cargo: {selectedEmp.role}
+                  </span>
+                  <span className={`px-2.5 py-1 rounded-lg font-bold ${isDark ? 'bg-gold-500/10 text-gold-400 border border-gold-500/20' : 'bg-gold-50 text-gold-700 border border-gold-200'}`}>
                     Frecuencia: {selectedEmp.frequency}
                   </span>
                 </div>
 
-                <form onSubmit={handlePayPayroll} className="space-y-4">
-                  <div className={`p-4 rounded-xl border flex justify-between items-center ${isDark ? 'bg-white/5 border-white/10' : 'bg-gray-50 border-gray-200'}`}>
-                    <span className="text-sm font-semibold text-gray-500">Salario Base</span>
-                    <span className="text-xl font-bold">${selectedEmp.baseSalary.toLocaleString('es-CO')}</span>
+                <form onSubmit={handlePayPayroll} className="space-y-5">
+
+                  {/* Selector de Modo de Base */}
+                  <div className={`p-1.5 rounded-2xl border flex gap-1 ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-gray-100 border-gray-200'}`}>
+                    <button
+                      type="button"
+                      onClick={() => setUseDailyCalc(false)}
+                      className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${!useDailyCalc ? (isDark ? 'bg-gold-500 text-black shadow-md' : 'bg-white text-gray-900 shadow-md') : (isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900')}`}
+                    >
+                      💵 Monto Fijo / Ajustable
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUseDailyCalc(true)}
+                      className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${useDailyCalc ? (isDark ? 'bg-gold-500 text-black shadow-md' : 'bg-white text-gray-900 shadow-md') : (isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900')}`}
+                    >
+                      📅 Calculadora por Días
+                    </button>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* Sección Salario Base */}
+                  {!useDailyCalc ? (
                     <div>
-                      <label className="text-xs font-semibold text-gray-500">Bonos Extras (+)</label>
-                      <input type="number" value={bonus} onChange={e=>setBonus(e.target.value)} min="0"
-                        className={`w-full mt-1 p-3 text-lg font-bold rounded-xl border outline-none transition-colors ${isDark ? 'bg-dark-surface border-dark-border text-green-400 focus:border-green-500' : 'bg-white border-gray-200 text-green-600 focus:border-green-500'}`} />
+                      <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Monto Base a Liquidar ($)</label>
+                      <input 
+                        type="number" 
+                        value={customBaseSalary} 
+                        onChange={e => setCustomBaseSalary(e.target.value)} 
+                        min="0"
+                        step="500"
+                        className={`w-full mt-1.5 p-3.5 text-xl font-black rounded-2xl border outline-none transition-colors ${isDark ? 'bg-dark-surface border-dark-border text-white focus:border-gold-500' : 'bg-gray-50 border-gray-200 text-gray-900 focus:border-gold-500'}`} 
+                      />
                     </div>
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500">Deducciones (-)</label>
-                      <input type="number" value={deduction} onChange={e=>setDeduction(e.target.value)} min="0"
-                        className={`w-full mt-1 p-3 text-lg font-bold rounded-xl border outline-none transition-colors ${isDark ? 'bg-dark-surface border-dark-border text-red-400 focus:border-red-500' : 'bg-white border-gray-200 text-red-600 focus:border-red-500'}`} />
+                  ) : (
+                    <div className={`p-4 rounded-2xl border space-y-3 ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-gray-50 border-gray-200'}`}>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Cálculo por Jornadas / Días</span>
+                        <span className="text-xs font-bold text-gold-500">
+                          Subtotal Base: ${((Number(daysWorked || 0) * Number(dailyRate || 0))).toLocaleString('es-CO')}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[11px] font-semibold text-gray-500">Días Laborados</label>
+                          <input 
+                            type="number" 
+                            value={daysWorked} 
+                            onChange={e => setDaysWorked(e.target.value)} 
+                            min="0"
+                            step="0.5"
+                            className={`w-full mt-1 p-2.5 text-base font-bold rounded-xl border outline-none ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-white border-gray-200 text-gray-900'}`} 
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-semibold text-gray-500">Tarifa por Día ($)</label>
+                          <input 
+                            type="number" 
+                            value={dailyRate} 
+                            onChange={e => setDailyRate(e.target.value)} 
+                            min="0"
+                            step="500"
+                            className={`w-full mt-1 p-2.5 text-base font-bold rounded-xl border outline-none ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-white border-gray-200 text-gray-900'}`} 
+                          />
+                        </div>
+                      </div>
+
+                      {/* Presets de días */}
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <span className="text-[10px] font-semibold text-gray-400">Acceso rápido:</span>
+                        {[1, 2, 5, 6, 15].map(d => (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => setDaysWorked(d)}
+                            className={`px-2 py-0.5 rounded-lg text-[11px] font-bold border transition-colors ${Number(daysWorked) === d ? (isDark ? 'bg-gold-500/20 text-gold-400 border-gold-500/30' : 'bg-gold-100 text-gold-700 border-gold-300') : (isDark ? 'bg-white/5 border-white/10 text-gray-400' : 'bg-white border-gray-200 text-gray-600')}`}
+                          >
+                            {d}d
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sección Deducciones (-)... */}
+                  <div className={`p-4 rounded-2xl border space-y-3 ${isDark ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50/50 border-red-200'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-red-500 flex items-center gap-1">
+                        🔻 Deducciones / Descuentos (-)
+                      </span>
+                      {/* Preset Descontar Día */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const valDia = useDailyCalc ? Number(dailyRate || 0) : (Number(customBaseSalary || 0) / 30)
+                          setDeduction(prev => Math.round(Number(prev || 0) + valDia))
+                          setDeductionReason(prev => prev ? `${prev}, 1 día no laborado` : '1 día no laborado')
+                        }}
+                        className="text-[11px] font-bold px-2 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors border border-red-500/20"
+                      >
+                        + Descontar 1 Día
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-semibold text-gray-500">Monto Descuento ($)</label>
+                        <input 
+                          type="number" 
+                          value={deduction} 
+                          onChange={e => setDeduction(e.target.value)} 
+                          min="0"
+                          step="500"
+                          className={`w-full mt-1 p-2.5 text-base font-bold rounded-xl border outline-none text-red-500 focus:border-red-500 ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-gray-200'}`} 
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-gray-500">Motivo del Descuento</label>
+                        <input 
+                          type="text" 
+                          value={deductionReason} 
+                          onChange={e => setDeductionReason(e.target.value)} 
+                          placeholder="Ej. Día no laborado, anticipo..."
+                          className={`w-full mt-1 p-2.5 text-xs rounded-xl border outline-none focus:border-red-500 ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-gray-200 text-gray-900'}`} 
+                        />
+                      </div>
                     </div>
                   </div>
 
+                  {/* Sección Bonificaciones (+)... */}
+                  <div className={`p-4 rounded-2xl border space-y-3 ${isDark ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50/50 border-emerald-200'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-emerald-500 flex items-center gap-1">
+                        🌟 Bonificaciones / Adicionales (+)
+                      </span>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setBonusReason('Día de alta venta')}
+                          className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors border border-emerald-500/20"
+                        >
+                          Alta Venta
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBonusReason('Horas extra')}
+                          className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors border border-emerald-500/20"
+                        >
+                          Horas Extra
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-semibold text-gray-500">Monto Bonificación ($)</label>
+                        <input 
+                          type="number" 
+                          value={bonus} 
+                          onChange={e => setBonus(e.target.value)} 
+                          min="0"
+                          step="500"
+                          className={`w-full mt-1 p-2.5 text-base font-bold rounded-xl border outline-none text-emerald-500 focus:border-emerald-500 ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-gray-200'}`} 
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-gray-500">Motivo del Bono</label>
+                        <input 
+                          type="text" 
+                          value={bonusReason} 
+                          onChange={e => setBonusReason(e.target.value)} 
+                          placeholder="Ej. Día alta venta, horas extra..."
+                          className={`w-full mt-1 p-2.5 text-xs rounded-xl border outline-none focus:border-emerald-500 ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-gray-200 text-gray-900'}`} 
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Observaciones generales */}
                   <div>
-                    <label className="text-xs font-semibold text-gray-500">Observaciones (Opcional)</label>
-                    <input type="text" value={observation} onChange={e=>setObservation(e.target.value)} placeholder="Ej. Bono por metas cumplidas"
-                      className={`w-full mt-1 p-3 rounded-xl border outline-none transition-colors ${isDark ? 'bg-dark-surface border-dark-border text-white focus:border-gold-500' : 'bg-white border-gray-200 focus:border-gold-500'}`} />
+                    <label className="text-xs font-semibold text-gray-500">Observaciones adicionales (Opcional)</label>
+                    <input 
+                      type="text" 
+                      value={observation} 
+                      onChange={e => setObservation(e.target.value)} 
+                      placeholder="Notas generales de la liquidación..."
+                      className={`w-full mt-1 p-3 text-xs rounded-xl border outline-none transition-colors ${isDark ? 'bg-dark-surface border-dark-border text-white focus:border-gold-500' : 'bg-white border-gray-200 focus:border-gold-500'}`} 
+                    />
                   </div>
 
-                  <div className={`flex justify-between items-center text-lg pt-4 border-t ${isDark ? 'border-white/10' : 'border-gray-200'}`}>
-                    <span className="font-bold text-gray-500">Total Neto a Pagar:</span>
-                    <span className="text-3xl font-black text-green-500">
-                      ${(selectedEmp.baseSalary + Number(bonus) - Number(deduction)).toLocaleString('es-CO')}
-                    </span>
-                  </div>
+                  {/* Desglose de Pago Neto */}
+                  {(() => {
+                    const effectiveBase = useDailyCalc 
+                      ? (Number(daysWorked || 0) * Number(dailyRate || 0))
+                      : Number(customBaseSalary || 0)
+                    const totalNeto = Math.max(0, effectiveBase + Number(bonus || 0) - Number(deduction || 0))
+                    return (
+                      <div className={`p-4 rounded-2xl border space-y-2 ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-gray-50 border-gray-200'}`}>
+                        <div className="flex justify-between text-xs text-gray-400">
+                          <span>Monto Base</span>
+                          <span className="font-semibold text-gray-300">${effectiveBase.toLocaleString('es-CO')}</span>
+                        </div>
+                        {Number(bonus) > 0 && (
+                          <div className="flex justify-between text-xs text-emerald-500">
+                            <span>+ Bonificaciones</span>
+                            <span className="font-semibold">+${Number(bonus).toLocaleString('es-CO')}</span>
+                          </div>
+                        )}
+                        {Number(deduction) > 0 && (
+                          <div className="flex justify-between text-xs text-red-400">
+                            <span>- Deducciones</span>
+                            <span className="font-semibold">-${Number(deduction).toLocaleString('es-CO')}</span>
+                          </div>
+                        )}
+                        <div className={`flex justify-between items-center pt-2 border-t text-base ${isDark ? 'border-dark-border' : 'border-gray-200'}`}>
+                          <span className="font-bold">Total Neto a Pagar:</span>
+                          <span className="text-2xl font-black text-emerald-500">
+                            ${totalNeto.toLocaleString('es-CO')}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })()}
 
-                  <div className="pt-2">
-                    <button type="submit" className="w-full py-4 rounded-xl bg-gold-gradient text-black font-black uppercase tracking-wider hover:scale-[1.02] transition-transform shadow-lg flex justify-center items-center gap-2">
-                      <CheckCircle2 size={20}/> Confirmar Pago
+                  <div className="pt-1">
+                    <button 
+                      type="submit" 
+                      className="w-full py-4 rounded-2xl bg-gold-gradient text-black font-black uppercase tracking-wider hover:scale-[1.01] active:scale-[0.99] transition-transform shadow-lg flex justify-center items-center gap-2 text-sm"
+                    >
+                      <CheckCircle2 size={20}/> Confirmar y Registrar Pago
                     </button>
                   </div>
                 </form>
