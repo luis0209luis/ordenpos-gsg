@@ -108,6 +108,8 @@ export default function FinanceManager() {
 
   // Filter by period
   const [timeFilter, setTimeFilter] = useState('Todo')
+  const [selectedCustomDate, setSelectedCustomDate] = useState(new Date().toISOString().split('T')[0])
+  const [selectedCajaCustomDate, setSelectedCajaCustomDate] = useState(new Date().toISOString().split('T')[0])
   const [weekOffset, setWeekOffset] = useState(0) // 0 = esta semana, -1 = semana anterior, -2 = hace 2 semanas...
   const [showWeekDropdown, setShowWeekDropdown] = useState(false)
 
@@ -115,6 +117,7 @@ export default function FinanceManager() {
     if (timeFilter === 'Todo') return true
     const date = parseISO(sale?.date || new Date().toISOString())
     if (timeFilter === 'Hoy') return isToday(date)
+    if (timeFilter === 'Fecha') return format(date, 'yyyy-MM-dd') === selectedCustomDate
     if (timeFilter === 'Semana') {
       const targetWeekDate = addWeeks(new Date(), weekOffset)
       return isSameWeek(date, targetWeekDate, { weekStartsOn: 1 })
@@ -128,6 +131,7 @@ export default function FinanceManager() {
     if (timeFilter === 'Todo') return true
     const date = parseISO(exp?.date || new Date().toISOString())
     if (timeFilter === 'Hoy') return isToday(date)
+    if (timeFilter === 'Fecha') return format(date, 'yyyy-MM-dd') === selectedCustomDate
     if (timeFilter === 'Semana') {
       const targetWeekDate = addWeeks(new Date(), weekOffset)
       return isSameWeek(date, targetWeekDate, { weekStartsOn: 1 })
@@ -141,6 +145,7 @@ export default function FinanceManager() {
     if (timeFilter === 'Todo') return true
     const date = parseISO(p?.date || new Date().toISOString())
     if (timeFilter === 'Hoy') return isToday(date)
+    if (timeFilter === 'Fecha') return format(date, 'yyyy-MM-dd') === selectedCustomDate
     if (timeFilter === 'Semana') {
       const targetWeekDate = addWeeks(new Date(), weekOffset)
       return isSameWeek(date, targetWeekDate, { weekStartsOn: 1 })
@@ -458,10 +463,11 @@ export default function FinanceManager() {
         </div>
         
         <div className="flex flex-wrap items-center gap-4">
-          <div className={`flex items-center gap-1 p-1 rounded-xl border
+          <div className={`flex flex-wrap items-center gap-1 p-1 rounded-xl border
             ${isDark ? 'bg-dark-card border-dark-border' : 'bg-light-surface border-light-border'}`}>
             {[
               { id: 'Hoy', label: 'Diario' },
+              { id: 'Fecha', label: '📅 Elegir Día' },
               { id: 'Semana', label: 'Semanal' },
               { id: 'Mes', label: 'Mensual' },
               { id: 'Año', label: 'Anual' },
@@ -475,15 +481,34 @@ export default function FinanceManager() {
                     setWeekOffset(0)
                   }
                 }}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all
                   ${timeFilter === filter.id
-                    ? 'bg-gold-gradient text-dark-bg shadow-gold-sm font-bold'
+                    ? 'bg-gold-gradient text-dark-bg shadow-gold-sm font-black'
                     : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
               >
                 {filter.label}
               </button>
             ))}
           </div>
+
+          {/* Date Picker Selector when 'Fecha' filter is selected */}
+          {timeFilter === 'Fecha' && (
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border animate-fade-in
+              ${isDark ? 'bg-dark-card border-gold-500/50 text-white' : 'bg-white border-gold-500 text-gray-900'}`}>
+              <Calendar size={16} className="text-gold-500 shrink-0" />
+              <input
+                type="date"
+                value={selectedCustomDate}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setSelectedCustomDate(e.target.value)
+                  }
+                }}
+                className={`bg-transparent text-xs font-bold outline-none cursor-pointer
+                  ${isDark ? 'text-white' : 'text-gray-900'}`}
+              />
+            </div>
+          )}
 
           <button 
             onClick={exportToExcel}
@@ -990,20 +1015,44 @@ export default function FinanceManager() {
       {activeTab === 'caja' && (
         <div>
           {/* Filtros de fecha */}
-          <div className="flex items-center gap-2 mb-6">
+          <div className="flex flex-wrap items-center gap-2 mb-6">
             <span className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Período:</span>
-            <div className={`flex items-center gap-1 p-1 rounded-xl border
+            <div className={`flex flex-wrap items-center gap-1 p-1 rounded-xl border
               ${isDark ? 'bg-dark-card border-dark-border' : 'bg-light-surface border-light-border'}`}>
-              {['Hoy', 'Semana', 'Mes', 'Todo'].map(f => (
-                <button key={f} onClick={() => setCajaTimeFilter(f)}
+              {[
+                { id: 'Hoy', label: 'Hoy' },
+                { id: 'Fecha', label: '📅 Elegir Día' },
+                { id: 'Semana', label: 'Semana' },
+                { id: 'Mes', label: 'Mes' },
+                { id: 'Todo', label: 'Todo' }
+              ].map(f => (
+                <button key={f.id} onClick={() => setCajaTimeFilter(f.id)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all
-                    ${cajaTimeFilter === f
-                      ? 'bg-gold-gradient text-dark-bg shadow-gold-sm'
+                    ${cajaTimeFilter === f.id
+                      ? 'bg-gold-gradient text-dark-bg shadow-gold-sm font-bold'
                       : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}>
-                  {f}
+                  {f.label}
                 </button>
               ))}
             </div>
+
+            {cajaTimeFilter === 'Fecha' && (
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border animate-fade-in
+                ${isDark ? 'bg-dark-card border-gold-500/50 text-white' : 'bg-white border-gold-500 text-gray-900'}`}>
+                <Calendar size={16} className="text-gold-500 shrink-0" />
+                <input
+                  type="date"
+                  value={selectedCajaCustomDate}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setSelectedCajaCustomDate(e.target.value)
+                    }
+                  }}
+                  className={`bg-transparent text-xs font-bold outline-none cursor-pointer
+                    ${isDark ? 'text-white' : 'text-gray-900'}`}
+                />
+              </div>
+            )}
           </div>
 
           <div className={`rounded-3xl border overflow-hidden ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
@@ -1022,6 +1071,7 @@ export default function FinanceManager() {
                 if (!r.closed_at) return false
                 const d = new Date(r.closed_at)
                 if (cajaTimeFilter === 'Hoy') return isToday(d)
+                if (cajaTimeFilter === 'Fecha') return format(parseISO(r.closed_at), 'yyyy-MM-dd') === selectedCajaCustomDate
                 if (cajaTimeFilter === 'Semana') return isThisWeek(d, { weekStartsOn: 1 })
                 if (cajaTimeFilter === 'Mes') return isThisMonth(d)
                 return true
