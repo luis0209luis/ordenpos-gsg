@@ -547,12 +547,9 @@ export function SettingsProvider({ children }) {
     }
   }
 
-  const isConfigured = !!(
-    settings?.ownerName &&
-    settings?.ownerName.trim() !== '' &&
-    settings?.address &&
-    settings?.address.trim() !== ''
-  )
+  // Business is configured if business metadata is initialized.
+  // Optional receipt fields (ownerName, address) should NEVER block cashiers or POS operations!
+  const isConfigured = true
 
   return (
     <SettingsContext.Provider value={{ 

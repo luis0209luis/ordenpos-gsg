@@ -39,33 +39,10 @@ export default function AppLayout() {
     )
   }
 
-  // Force local admin to configure business settings first
-  if (user && user.role === 'admin' && !isConfigured && location.pathname !== '/settings') {
-    return <Navigate to="/settings" replace />
-  }
-
-  // If another staff role logs in but the business isn't configured, show a blocked screen
-  if (user && user.role !== 'admin' && user.role !== 'Superadmin' && !isConfigured) {
-    return (
-      <div className={`h-screen flex flex-col items-center justify-center p-6 text-center ${isDark ? 'bg-dark-bg text-white' : 'bg-light-surface text-gray-900'}`}>
-        <h2 className="text-2xl font-bold mb-2">Configuración Requerida</h2>
-        <p className="text-gray-500 max-w-md">
-          El administrador de este negocio aún no ha completado la configuración inicial del sistema. 
-          Por favor, solicita al dueño del negocio que configure la información básica para activar la aplicación.
-        </p>
-        <button 
-          onClick={() => window.location.reload()} 
-          className="mt-6 px-6 py-2.5 bg-gold-gradient text-black font-bold rounded-xl transition-all hover:scale-105"
-        >
-          Reintentar
-        </button>
-      </div>
-    )
-  }
-
-  // Determinar si el rol actual requiere caja
-  const requiresCash = user && CASH_ROLES.includes(user.role)
-  const needsOpenModal = requiresCash && !loadingRegister && !currentRegister && isConfigured
+  // Determinar si el rol actual requiere caja (evaluación insensible a mayúsculas/minúsculas)
+  const userRoleUpper = (user?.role || '').toUpperCase()
+  const requiresCash = user && CASH_ROLES.includes(userRoleUpper)
+  const needsOpenModal = requiresCash && !loadingRegister && !currentRegister
 
   return (
     <div className={`flex h-screen overflow-hidden ${isDark ? 'bg-dark-bg' : 'bg-light-surface'}`}>

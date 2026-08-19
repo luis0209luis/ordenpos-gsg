@@ -19,12 +19,17 @@ export function CashRegisterProvider({ children }) {
     }
     setLoadingRegister(true)
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('cash_registers')
         .select('*')
         .eq('business_id', bid)
         .eq('status', 'open')
+        .order('opened_at', { ascending: false })
+        .limit(1)
         .maybeSingle()
+      if (error) {
+        console.error('Error loading cash register:', error)
+      }
       setCurrentRegister(data || null)
     } catch (e) {
       console.error('Error loading cash register:', e)
@@ -41,6 +46,21 @@ export function CashRegisterProvider({ children }) {
   const openCashRegister = async (openingAmount) => {
     if (!bid) return { success: false, error: 'No business ID' }
     try {
+      // First check if an open register already exists for this business
+      const { data: existing } = await supabase
+        .from('cash_registers')
+        .select('*')
+        .eq('business_id', bid)
+        .eq('status', 'open')
+        .order('opened_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (existing) {
+        setCurrentRegister(existing)
+        return { success: true, register: existing }
+      }
+
       const { data, error } = await supabase
         .from('cash_registers')
         .insert({
@@ -61,7 +81,20 @@ export function CashRegisterProvider({ children }) {
   }
 
   const closeCashRegister = async ({ closingPhysical, systemTotal, notes }) => {
-    if (!currentRegister) return { success: false, error: 'No hay caja abierta' }
+    let targetRegister = currentRegister
+    if (!targetRegister) {
+      const { data: existing } = await supabase
+        .from('cash_registers')
+        .select('*')
+        .eq('business_id', bid)
+        .eq('status', 'open')
+        .order('opened_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      targetRegister = existing
+    }
+    if (!targetRegister) return { success: false, error: 'No hay caja abierta' }
+    
     const difference = Number(closingPhysical) - Number(systemTotal)
     try {
       const { error } = await supabase
@@ -75,7 +108,7 @@ export function CashRegisterProvider({ children }) {
           notes: notes || null,
           closed_at: new Date().toISOString()
         })
-        .eq('id', currentRegister.id)
+        .eq('id', targetRegister.id)
       if (error) return { success: false, error: error.message }
       setCurrentRegister(null)
       return { success: true }

@@ -93,7 +93,7 @@ function ClosingModal({ isDark, onClose, onCancel, currentRegister }) {
   // Ventas del turno (desde que se abrió la caja)
   const openedAt = currentRegister?.opened_at ? parseISO(currentRegister.opened_at) : null
   const turnoSales = openedAt
-    ? salesHistory.filter(s => new Date(s.date) >= openedAt)
+    ? salesHistory.filter(s => new Date(s.created_at || s.date || Date.now()) >= openedAt)
     : salesHistory
 
   const giftSalesVal = turnoSales
