@@ -62,8 +62,11 @@ export default function Topbar({ title, onMenuClick }) {
   }, [showSearch])
 
   const getProductStockLimit = (product) => {
+    if (product.inventory_mode === 'unlimited') return Infinity
     if (product.inventory_mode === 'recipe' || product.inventory_mode === 'blend') {
-      return getEstimatedStock ? (getEstimatedStock(product.id) ?? 0) : 0
+      const est = getEstimatedStock ? getEstimatedStock(product.id) : null
+      if (est === null || est === undefined) return product.stock_actual ?? Infinity
+      return est
     }
     return product.stock_actual ?? 0
   }

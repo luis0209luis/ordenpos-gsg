@@ -191,25 +191,31 @@ export default function Dashboard() {
     return null
   }
 
+  const getDashStock = (p) => {
+    if (p.inventory_mode === 'unlimited') return Infinity
+    if (p.inventory_mode === 'recipe' || p.inventory_mode === 'blend') {
+      const est = getEstimatedStock ? getEstimatedStock(p.id) : null
+      if (est === null || est === undefined) return p.stock_actual ?? Infinity
+      return est
+    }
+    return p.stock_actual ?? 0
+  }
+
   const realLowStock = useMemo(() => {
     return (products || [])
       .filter(p => {
         if (p.inventory_mode === 'unlimited') return false
         const currentMinStock = p.stock_minimo ?? settings?.globalMinStock ?? 10
-        const stockLimit = p.inventory_mode === 'recipe'
-          ? (getEstimatedStock ? (getEstimatedStock(p.id) ?? 0) : 0)
-          : (p.stock_actual ?? 0)
+        const stockLimit = getDashStock(p)
         return stockLimit <= currentMinStock
       })
       .map(p => {
-        const stockLimit = p.inventory_mode === 'recipe'
-          ? (getEstimatedStock ? (getEstimatedStock(p.id) ?? 0) : 0)
-          : (p.stock_actual ?? 0)
+        const stockLimit = getDashStock(p)
         return { 
           id: p.id, 
           name: p.nombre, 
           stock: stockLimit,
-          isRecipe: p.inventory_mode === 'recipe'
+          isRecipe: p.inventory_mode === 'recipe' || p.inventory_mode === 'blend'
         }
       })
       .sort((a, b) => a.stock - b.stock)

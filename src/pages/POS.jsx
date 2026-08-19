@@ -112,7 +112,13 @@ export default function POS() {
   const getEffectiveStock = (product) => {
     if (product.inventory_mode === 'unlimited') return Infinity
     if (product.inventory_mode === 'recipe' || product.inventory_mode === 'blend') {
-      return getEstimatedStock ? (getEstimatedStock(product.id) ?? 0) : 0
+      const estimated = getEstimatedStock ? getEstimatedStock(product.id) : null
+      if (estimated === null || estimated === undefined) {
+        return product.stock_actual !== undefined && product.stock_actual !== null && product.stock_actual > 0
+          ? product.stock_actual
+          : Infinity
+      }
+      return estimated
     }
     return product.stock_actual ?? 0
   }

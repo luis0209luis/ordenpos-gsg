@@ -712,8 +712,6 @@ export function InventoryProvider({ children }) {
         const cupSupply = supplyItems.find(s => String(s.id) === String(config.cup_supply_id))
         if (cupSupply) {
           limits.push(Math.floor(Number(cupSupply.stock_actual) || 0))
-        } else {
-          limits.push(0)
         }
       }
 
@@ -723,8 +721,6 @@ export function InventoryProvider({ children }) {
           const supply = supplyItems.find(s => String(s.id) === String(fs.supply_item_id))
           if (supply && fs.cantidad > 0) {
             limits.push(Math.floor((Number(supply.stock_actual) || 0) / Number(fs.cantidad)))
-          } else if (!supply) {
-            limits.push(0)
           }
         }
       }
@@ -732,23 +728,23 @@ export function InventoryProvider({ children }) {
       // 3. Flavors capacity limit (total available flavor stock / capacity per cup)
       if (Array.isArray(config.flavor_ids) && config.flavor_ids.length > 0) {
         let totalFlavorStock = 0
+        let validFlavors = 0
         for (const fid of config.flavor_ids) {
           const supply = supplyItems.find(s => String(s.id) === String(fid))
           if (supply) {
             totalFlavorStock += Number(supply.stock_actual) || 0
+            validFlavors++
           }
         }
-        const capacityLiters = (Number(config.cup_capacity) || 16) * 0.02957
-        if (capacityLiters > 0) {
-          limits.push(Math.floor(totalFlavorStock / capacityLiters))
-        } else {
-          limits.push(0)
+        if (validFlavors > 0) {
+          const capacityLiters = (Number(config.cup_capacity) || 16) * 0.02957
+          if (capacityLiters > 0) {
+            limits.push(Math.floor(totalFlavorStock / capacityLiters))
+          }
         }
-      } else {
-        limits.push(0)
       }
 
-      return limits.length > 0 ? Math.min(...limits) : 0
+      return limits.length > 0 ? Math.min(...limits) : null
     }
 
     const recipe = productRecipes.filter(r => r.product_id === productId)
@@ -756,7 +752,7 @@ export function InventoryProvider({ children }) {
     const limits = recipe.map(r => {
       const supply = supplyItems.find(s => s.id === r.supply_item_id)
       if (!supply || r.cantidad === 0) return Infinity
-      return Math.floor(supply.stock_actual / r.cantidad)
+      return Math.floor((Number(supply.stock_actual) || 0) / Number(r.cantidad))
     })
     return Math.min(...limits)
   }
