@@ -143,6 +143,7 @@ export default function Inventory() {
   const [restockStatus, setRestockStatus] = useState(null) // { type: 'success' | 'error', message: '' }
   const [restockRecordExpense, setRestockRecordExpense] = useState(true)
   const [restockCategory, setRestockCategory] = useState('Insumos')
+  const [mobileEntriesSubTab, setMobileEntriesSubTab] = useState('search') // 'search' | 'cart'
 
   const DEFAULT_CATEGORIES = ['Bebida', 'Comida Rápida', 'Repostería', 'Pan'];
   const [customCategories, setCustomCategories] = useState([]);
@@ -845,8 +846,7 @@ export default function Inventory() {
   }
 
   const handleQuickAddEntry = (type, item) => {
-    addToRestockCart(type, item)
-    setActiveTab('entries')
+    openEntryModal(type, item)
   }
 
   const updateRestockCartItem = (index, updates) => {
@@ -1915,12 +1915,53 @@ export default function Inventory() {
               </div>
             )}
 
+            {/* Mobile Sub-tab Switcher (Visible only on phone screens) */}
+            <div className="flex lg:hidden rounded-2xl p-1.5 border bg-dark-card/60 border-dark-border shadow-sm">
+              <button
+                type="button"
+                onClick={() => setMobileEntriesSubTab('search')}
+                className={`flex-1 py-3 rounded-xl text-xs font-extrabold uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95
+                  ${mobileEntriesSubTab === 'search'
+                    ? 'bg-gold-gradient text-dark-bg font-black shadow-gold-sm'
+                    : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                <Search size={16} />
+                Buscar / Catálogo
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileEntriesSubTab('cart')}
+                className={`flex-1 py-3 rounded-xl text-xs font-extrabold uppercase tracking-wider flex items-center justify-center gap-2 transition-all relative active:scale-95
+                  ${mobileEntriesSubTab === 'cart'
+                    ? 'bg-gold-gradient text-dark-bg font-black shadow-gold-sm'
+                    : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                <ShoppingCart size={16} />
+                Mi Lista ({restockCart.length})
+                {restockCart.length > 0 && (
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse inline-block ml-0.5" />
+                )}
+              </button>
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Left Column: Search & Add Items */}
-              <div className={`lg:col-span-5 p-6 rounded-3xl border flex flex-col gap-4 max-h-[85vh] overflow-y-auto
+              <div className={`lg:col-span-5 p-4 sm:p-6 rounded-3xl border flex flex-col gap-4 max-h-[85vh] overflow-y-auto
+                ${mobileEntriesSubTab === 'search' ? 'block' : 'hidden lg:flex'}
                 ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
                 
-                <h3 className="font-display font-bold text-lg">Buscar y Agregar</h3>
+                <h3 className="font-display font-bold text-lg flex items-center justify-between">
+                  <span>Buscar y Agregar</span>
+                  {restockCart.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setMobileEntriesSubTab('cart')}
+                      className="lg:hidden text-xs text-gold-500 font-bold underline"
+                    >
+                      Ver lista ({restockCart.length}) →
+                    </button>
+                  )}
+                </h3>
                 
                 {/* Search box */}
                 <div className="relative w-full">
@@ -1933,7 +1974,7 @@ export default function Inventory() {
                     placeholder="Filtrar por nombre..."
                     value={restockSearchTerm}
                     onChange={(e) => setRestockSearchTerm(e.target.value)}
-                    className={`w-full pl-11 pr-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all duration-200
+                    className={`w-full pl-11 pr-4 py-3 rounded-2xl text-base sm:text-sm font-medium outline-none border-2 transition-all duration-200
                       focus:border-gold-500 focus:shadow-gold-sm
                       ${isDark ? 'bg-dark-card border-dark-border text-white placeholder-gray-600'
                         : 'bg-light-surface border-light-border text-gray-900 placeholder-gray-400'}`}
@@ -1952,7 +1993,7 @@ export default function Inventory() {
                       key={f.id}
                       type="button"
                       onClick={() => setRestockFilter(f.id)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border active:scale-95
                         ${restockFilter === f.id
                           ? 'border-gold-500 bg-gold-500/10 text-gold-500 font-extrabold'
                           : isDark ? 'border-dark-border bg-dark-card text-gray-400 hover:text-white' : 'border-light-border bg-light-surface text-gray-600 hover:text-gray-900'}`}
@@ -1963,7 +2004,7 @@ export default function Inventory() {
                 </div>
 
                 {/* Search Results List */}
-                <div className="space-y-2 overflow-y-auto pr-1">
+                <div className="space-y-2 overflow-y-auto pr-1 max-h-[50vh] sm:max-h-none">
                   {filteredRestockItems.length === 0 ? (
                     <p className={`text-xs text-center py-6 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                       No se encontraron productos o insumos.
@@ -1978,14 +2019,18 @@ export default function Inventory() {
                       return (
                         <div
                           key={`${item._type}-${item.id}`}
-                          onClick={() => !alreadyAdded && addToRestockCart(item._type, item)}
-                          className={`flex items-center justify-between p-3 rounded-2xl border transition-all duration-200 cursor-pointer
+                          onClick={() => {
+                            if (!alreadyAdded) {
+                              addToRestockCart(item._type, item);
+                            }
+                          }}
+                          className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all duration-200 cursor-pointer active:scale-[0.99]
                             ${alreadyAdded 
                               ? 'opacity-50 cursor-not-allowed ' + (isDark ? 'bg-dark-card/50 border-dark-border' : 'bg-light-surface/50 border-light-border')
                               : isDark ? 'bg-dark-card border-dark-border hover:border-gold-500/50 hover:bg-gold-500/5' : 'bg-light-surface border-light-border hover:border-gold-500/50 hover:bg-gold-500/5'}
                             ${isLow && !alreadyAdded ? (isDark ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50 border-red-100') : ''}`}
                         >
-                          <div className="flex flex-col gap-0.5">
+                          <div className="flex flex-col gap-0.5 pr-2">
                             <span className="font-semibold text-sm flex items-center gap-1.5">
                               {item._type === 'product' ? '📦' : '🧪'} {item.nombre}
                               {isLow && (
@@ -1995,7 +2040,7 @@ export default function Inventory() {
                                 </span>
                               )}
                             </span>
-                            <span className={`text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            <span className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                               Stock: {item._type === 'supply' ? formatStockWithPackages(item.stock_actual, item) : `${item.stock_actual ?? 0} und`}
                             </span>
                           </div>
@@ -2007,13 +2052,13 @@ export default function Inventory() {
                               e.stopPropagation();
                               addToRestockCart(item._type, item);
                             }}
-                            className={`p-2 rounded-xl border transition-all
+                            className={`p-2.5 rounded-xl border transition-all shrink-0 active:scale-90
                               ${alreadyAdded 
                                 ? (isDark ? 'border-dark-border text-gray-650' : 'border-light-border text-gray-300')
                                 : isDark ? 'border-dark-border bg-dark-card hover:bg-gold-500 hover:text-dark-bg hover:border-gold-500 text-gold-400'
                                   : 'border-light-border bg-white hover:bg-gold-500 hover:text-dark-bg hover:border-gold-500 text-gold-600'}`}
                           >
-                            <Plus size={16} />
+                            <Plus size={18} />
                           </button>
                         </div>
                       )
@@ -2023,8 +2068,9 @@ export default function Inventory() {
               </div>
 
               {/* Right Column: Restock Cart */}
-              <div className="lg:col-span-7 flex flex-col gap-6">
-                <div className={`p-6 rounded-3xl border flex flex-col gap-4 flex-1
+              <div className={`lg:col-span-7 flex flex-col gap-6
+                ${mobileEntriesSubTab === 'cart' ? 'block' : 'hidden lg:flex'}`}>
+                <div className={`p-4 sm:p-6 rounded-3xl border flex flex-col gap-4 flex-1
                   ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
                   
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -2142,32 +2188,76 @@ export default function Inventory() {
                             )}
 
                             {/* Inputs grid */}
-                            <div className="grid grid-cols-3 gap-3 text-left">
+                             {/* Inputs grid with touch steppers and presets */}
+                            <div className="flex flex-col sm:grid sm:grid-cols-3 gap-3 text-left">
                               {/* Quantity */}
                               <div className="space-y-1">
-                                <label className="text-[9px] font-bold uppercase opacity-60">
+                                <label className="text-[10px] font-bold uppercase opacity-60">
                                   Cant ({
                                     cartItem.type === 'supply'
                                       ? (cartItem.unitType === 'medium' ? item.pack_medium_unit : cartItem.unitType === 'large' ? item.pack_large_unit : (item.unidad || 'und'))
                                       : 'und'
                                   })
                                 </label>
-                                <input
-                                  required
-                                  type="number"
-                                  step="0.01"
-                                  min="0.01"
-                                  placeholder="Ej: 5"
-                                  value={cartItem.qty}
-                                  onChange={e => updateRestockCartItem(idx, { qty: e.target.value })}
-                                  className={`w-full px-3 py-2 rounded-xl text-xs font-semibold outline-none border transition-all focus:border-gold-500
-                                    ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}
-                                />
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const current = parseFloat(cartItem.qty) || 0
+                                      if (current > 1) {
+                                        updateRestockCartItem(idx, { qty: String(current - 1) })
+                                      }
+                                    }}
+                                    className={`w-9 h-9 rounded-xl border font-bold text-sm flex items-center justify-center shrink-0 active:scale-95 transition-all
+                                      ${isDark ? 'bg-dark-surface border-dark-border text-gray-300' : 'bg-white border-light-border text-gray-700'}`}
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    required
+                                    type="number"
+                                    step="0.01"
+                                    min="0.01"
+                                    placeholder="Ej: 5"
+                                    value={cartItem.qty}
+                                    onChange={e => updateRestockCartItem(idx, { qty: e.target.value })}
+                                    className={`w-full px-3 py-2 rounded-xl text-base sm:text-xs font-bold outline-none border transition-all focus:border-gold-500 text-center
+                                      ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const current = parseFloat(cartItem.qty) || 0
+                                      updateRestockCartItem(idx, { qty: String(current + 1) })
+                                    }}
+                                    className={`w-9 h-9 rounded-xl border font-bold text-sm flex items-center justify-center shrink-0 active:scale-95 transition-all
+                                      ${isDark ? 'bg-dark-surface border-dark-border text-gray-300' : 'bg-white border-light-border text-gray-700'}`}
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                                
+                                {/* Presets for mobile */}
+                                <div className="flex flex-wrap gap-1 pt-1">
+                                  {[1, 5, 10, 20].map(num => (
+                                    <button
+                                      key={num}
+                                      type="button"
+                                      onClick={() => updateRestockCartItem(idx, { qty: String(num) })}
+                                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all active:scale-95
+                                        ${parseFloat(cartItem.qty) === num
+                                          ? 'bg-gold-500/20 border-gold-500 text-gold-400 font-extrabold'
+                                          : isDark ? 'bg-dark-surface border-dark-border text-gray-400' : 'bg-white border-light-border text-gray-600'}`}
+                                    >
+                                      +{num}
+                                    </button>
+                                  ))}
+                                </div>
                               </div>
 
                               {/* Unit Price */}
                               <div className="space-y-1">
-                                <label className="text-[9px] font-bold uppercase opacity-60">Unitario ($)</label>
+                                <label className="text-[10px] font-bold uppercase opacity-60">Unitario ($)</label>
                                 <input
                                   type="number"
                                   step="0.01"
@@ -2175,14 +2265,14 @@ export default function Inventory() {
                                   placeholder="Ej: 1500"
                                   value={cartItem.unitPrice}
                                   onChange={e => updateRestockCartItem(idx, { unitPrice: e.target.value })}
-                                  className={`w-full px-3 py-2 rounded-xl text-xs font-semibold outline-none border transition-all focus:border-gold-500
+                                  className={`w-full px-3 py-2 rounded-xl text-base sm:text-xs font-semibold outline-none border transition-all focus:border-gold-500
                                     ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}
                                 />
                               </div>
 
                               {/* Total Cost */}
                               <div className="space-y-1">
-                                <label className="text-[9px] font-bold uppercase opacity-60">Total ($)</label>
+                                <label className="text-[10px] font-bold uppercase opacity-60">Total ($)</label>
                                 <input
                                   type="number"
                                   step="0.01"
@@ -2190,7 +2280,7 @@ export default function Inventory() {
                                   placeholder="Ej: 7500"
                                   value={cartItem.totalCost}
                                   onChange={e => updateRestockCartItem(idx, { totalCost: e.target.value })}
-                                  className={`w-full px-3 py-2 rounded-xl text-xs font-semibold outline-none border transition-all focus:border-gold-500
+                                  className={`w-full px-3 py-2 rounded-xl text-base sm:text-xs font-semibold outline-none border transition-all focus:border-gold-500
                                     ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}
                                 />
                               </div>
@@ -2301,11 +2391,52 @@ export default function Inventory() {
                     </div>
                   </form>
                 )}
-              </div>
             </div>
           </div>
-        </>
-      )}
+
+          {/* Floating Mobile Summary & Action Bar */}
+          {restockCart.length > 0 && (
+            <div className="lg:hidden fixed bottom-4 left-4 right-4 z-40 p-4 rounded-3xl bg-dark-surface/95 border border-gold-500/40 shadow-2xl backdrop-blur-md flex items-center justify-between gap-3 animate-slide-in-up">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                  {restockCart.length} {restockCart.length === 1 ? 'ítem' : 'ítems'} seleccionados
+                </span>
+                <span className="font-display font-black text-lg text-gold-400">
+                  ${restockCart.reduce((sum, c) => sum + (parseFloat(c.totalCost) || 0), 0).toLocaleString('es-CO')}
+                </span>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                {mobileEntriesSubTab === 'search' ? (
+                  <button
+                    type="button"
+                    onClick={() => setMobileEntriesSubTab('cart')}
+                    className="px-4 py-2.5 rounded-2xl font-extrabold text-xs uppercase bg-gold-gradient text-dark-bg shadow-gold-sm flex items-center gap-1.5 active:scale-95"
+                  >
+                    <ShoppingCart size={15} />
+                    Ver Lista ({restockCart.length})
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleBatchRestockSubmit}
+                    disabled={isRestockingSubmit}
+                    className="px-4 py-2.5 rounded-2xl font-extrabold text-xs uppercase bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                  >
+                    {isRestockingSubmit ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Check size={15} />
+                    )}
+                    Guardar
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </>
+    )}
 
       {/* Modal - Producto */}
       {isModalOpen && (
@@ -3167,49 +3298,108 @@ export default function Inventory() {
                       <button
                         type="button"
                         onClick={() => setEntryUnitType('large')}
-                        className={`py-2 rounded-xl text-xs font-bold transition-all border
-                          ${entryUnitType === 'large'
-                            ? 'border-gold-500 bg-gold-500/10 text-gold-500'
-                            : isDark ? 'border-dark-border bg-dark-card text-gray-400 hover:text-white' : 'border-light-border bg-light-surface text-gray-600 hover:text-gray-900'}`}
-                      >
-                        {entryTarget.item.pack_large_unit} ({entryTarget.item.pack_large_ratio})
-                      </button>
+                              type="button"
+                              onClick={() => setEntryUnitType('large')}
+                              className={`py-2 rounded-xl text-xs font-bold transition-all border
+                                ${entryUnitType === 'large'
+                                  ? 'border-gold-500 bg-gold-500/10 text-gold-500'
+                                  : isDark ? 'border-dark-border bg-dark-card text-gray-400 hover:text-white' : 'border-light-border bg-light-surface text-gray-600 hover:text-gray-900'}`}
+                            >
+                              {entryTarget.item.pack_large_unit} ({entryTarget.item.pack_large_ratio})
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     )}
-                  </div>
-                </div>
-              )}
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-wider opacity-70">
-                  Cantidad a ingresar (en {
-                    entryTarget.type === 'supply'
-                      ? (entryUnitType === 'medium' ? entryTarget.item.pack_medium_unit : entryUnitType === 'large' ? entryTarget.item.pack_large_unit : (entryTarget.item.unidad || 'unidades'))
-                      : 'unidades'
-                  })
-                </label>
-                <input
-                  required
-                  autoFocus
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  placeholder="Ej: 10"
-                  value={entryQty}
-                  onChange={e => {
-                    const val = e.target.value
-                    setEntryQty(val)
-                    const qty = parseFloat(val) || 0
-                    const uPrice = parseFloat(entryUnitPrice) || 0
-                    if (qty > 0 && uPrice > 0) {
-                      setEntryTotalCost((qty * uPrice).toFixed(0))
-                    } else {
-                      setEntryTotalCost('')
-                    }
-                  }}
-                  className={`w-full px-4 py-3 rounded-2xl text-sm font-medium outline-none border-2 transition-all focus:border-emerald-500
-                    ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
-                />
-              </div>
+                    <div className="space-y-2 text-left">
+                      <label className="text-[10px] font-bold uppercase tracking-wider opacity-70">
+                        Cantidad a ingresar (en {
+                          entryTarget.type === 'supply'
+                            ? (entryUnitType === 'medium' ? entryTarget.item.pack_medium_unit : entryUnitType === 'large' ? entryTarget.item.pack_large_unit : (entryTarget.item.unidad || 'unidades'))
+                            : 'unidades'
+                        })
+                      </label>
+
+                      {/* Touch Stepper & Quantity Input */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const current = parseFloat(entryQty) || 0
+                            if (current > 1) {
+                              const updated = current - 1
+                              setEntryQty(String(updated))
+                              const uPrice = parseFloat(entryUnitPrice) || 0
+                              if (uPrice > 0) setEntryTotalCost((updated * uPrice).toFixed(0))
+                            }
+                          }}
+                          className={`w-12 h-12 rounded-2xl border font-black text-xl flex items-center justify-center shrink-0 active:scale-95 transition-all
+                            ${isDark ? 'bg-dark-card border-dark-border text-gray-300 hover:text-white' : 'bg-light-surface border-light-border text-gray-700 hover:text-gray-900'}`}
+                        >
+                          -
+                        </button>
+
+                        <input
+                          required
+                          autoFocus
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          placeholder="Ej: 10"
+                          value={entryQty}
+                          onChange={e => {
+                            const val = e.target.value
+                            setEntryQty(val)
+                            const qty = parseFloat(val) || 0
+                            const uPrice = parseFloat(entryUnitPrice) || 0
+                            if (qty > 0 && uPrice > 0) {
+                              setEntryTotalCost((qty * uPrice).toFixed(0))
+                            } else {
+                              setEntryTotalCost('')
+                            }
+                          }}
+                          className={`w-full px-4 py-3 rounded-2xl text-base font-bold outline-none border-2 transition-all focus:border-emerald-500 text-center
+                            ${isDark ? 'bg-dark-card border-dark-border text-white' : 'bg-light-surface border-light-border text-gray-900'}`}
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const current = parseFloat(entryQty) || 0
+                            const updated = current + 1
+                            setEntryQty(String(updated))
+                            const uPrice = parseFloat(entryUnitPrice) || 0
+                            if (uPrice > 0) setEntryTotalCost((updated * uPrice).toFixed(0))
+                          }}
+                          className={`w-12 h-12 rounded-2xl border font-black text-xl flex items-center justify-center shrink-0 active:scale-95 transition-all
+                            ${isDark ? 'bg-dark-card border-dark-border text-gray-300 hover:text-white' : 'bg-light-surface border-light-border text-gray-700 hover:text-gray-900'}`}
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      {/* Touch Presets */}
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {[1, 5, 10, 20, 50, 100].map(num => (
+                          <button
+                            key={num}
+                            type="button"
+                            onClick={() => {
+                              setEntryQty(String(num))
+                              const uPrice = parseFloat(entryUnitPrice) || 0
+                              if (uPrice > 0) setEntryTotalCost((num * uPrice).toFixed(0))
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all active:scale-95
+                              ${parseFloat(entryQty) === num
+                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 font-extrabold'
+                                : isDark ? 'bg-dark-card border-dark-border text-gray-400 hover:text-white' : 'bg-light-surface border-light-border text-gray-600 hover:text-gray-900'}`}
+                          >
+                            +{num}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
               {/* Toggle to record expense */}
               <div className="flex items-center gap-2.5 py-1">
