@@ -1606,7 +1606,7 @@ export default function Inventory() {
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex justify-end gap-2">
-                              {!isUnlimited && !isRecipe && (
+                              {!isUnlimited && !isRecipe && !isBlend && (
                                 <button
                                   onClick={() => handleQuickAddEntry('product', product)}
                                   title="Registrar entrada de mercancía"
