@@ -9,5 +9,5 @@ const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 (async () => {
-  console.log('xdrinks inspection complete.');
+  console.log('Subscription renewal complete.');
 })();
