@@ -299,75 +299,121 @@ export function InventoryProvider({ children }) {
       .sort((a, b) => a.sort_order - b.sort_order)
   }
 
-  const processSale = async (cartItems, total, deliveryData = null, kitchenStatus = null, paymentMethod = 'Efectivo', notes = '') => {
-    // Optimistic UI: update stock locally right away
-    setProducts(prev => prev.map(product => {
-      const cartItem = cartItems.find(item => item.id === product.id)
-      if (cartItem && (product.inventory_mode === 'finished' || !product.inventory_mode)) {
-        return { ...product, stock_actual: Math.max(0, product.stock_actual - cartItem.quantity) }
+  const calculateStockDeltas = (rawItems, multiplier = 1) => {
+    const productDeltas = {}
+    const supplyDeltas = {}
+
+    let itemList = rawItems
+    if (typeof rawItems === 'string') {
+      try {
+        itemList = JSON.parse(rawItems)
+      } catch {
+        itemList = []
       }
-      return product
-    }))
+    }
+    if (!Array.isArray(itemList)) itemList = []
 
-    // Optimistically update supply items stock locally for recipe and blend products
-    setSupplyItems(prev => {
-      let updated = [...prev]
-      for (const item of cartItems) {
-        const product = products.find(p => p.id === item.id || p.id === item.productId)
-        if (product && product.inventory_mode === 'recipe') {
-          const recipe = productRecipes.filter(r => r.product_id === product.id)
-          for (const recipeItem of recipe) {
-            updated = updated.map(s => {
-              if (s.id === recipeItem.supply_item_id) {
-                return { ...s, stock_actual: Math.max(0, Number(s.stock_actual) - (Number(recipeItem.cantidad) * item.quantity)) }
-              }
-              return s
-            })
-          }
-        } else if (product && product.inventory_mode === 'blend' && product.blend_config) {
-          const config = product.blend_config
-          // 1. Cup supply deduction
-          if (config.cup_supply_id) {
-            updated = updated.map(s => {
-              if (String(s.id) === String(config.cup_supply_id)) {
-                return { ...s, stock_actual: Math.max(0, Number(s.stock_actual) - (1 * item.quantity)) }
-              }
-              return s
-            })
-          }
-          // 2. Fixed supplies deduction
-          if (Array.isArray(config.fixed_supplies)) {
-            for (const fs of config.fixed_supplies) {
-              if (!fs.supply_item_id) continue
-              updated = updated.map(s => {
-                if (String(s.id) === String(fs.supply_item_id)) {
-                  return { ...s, stock_actual: Math.max(0, Number(s.stock_actual) - (Number(fs.cantidad) * item.quantity)) }
-                }
-                return s
-              })
-            }
-          }
-          // 3. Flavor deduction
-          if (Array.isArray(item.blendSelections) && item.blendSelections.length > 0) {
-            const numFlavors = item.blendSelections.length
-            const capacityOz = Number(config.cup_capacity) || 16
-            const litersPerFlavor = (capacityOz / numFlavors) * 0.02957
-            const totalDeductL = litersPerFlavor * item.quantity
+    for (const item of itemList) {
+      if (!item) continue
+      const itemQty = Number(item.quantity || item.cantidad || 1)
+      if (isNaN(itemQty) || itemQty <= 0) continue
 
-            for (const flavorId of item.blendSelections) {
-              updated = updated.map(s => {
-                if (String(s.id) === String(flavorId)) {
-                  return { ...s, stock_actual: Math.max(0, Number(s.stock_actual) - totalDeductL) }
-                }
-                return s
-              })
-            }
+      const product = products.find(p => String(p.id) === String(item.id || item.productId))
+      if (!product) continue
+
+      const mode = product.inventory_mode || 'finished'
+
+      if (mode === 'finished') {
+        const pid = String(product.id)
+        productDeltas[pid] = (productDeltas[pid] || 0) + (multiplier * itemQty)
+      } else if (mode === 'recipe') {
+        const recipe = productRecipes.filter(r => String(r.product_id) === String(product.id))
+        for (const recipeItem of recipe) {
+          if (!recipeItem?.supply_item_id) continue
+          const sid = String(recipeItem.supply_item_id)
+          const qtyUsed = Number(recipeItem.cantidad) || 0
+          supplyDeltas[sid] = (supplyDeltas[sid] || 0) + (multiplier * qtyUsed * itemQty)
+        }
+      } else if (mode === 'blend' && product.blend_config) {
+        const config = product.blend_config
+
+        // 1. Cup supply
+        if (config.cup_supply_id) {
+          const sid = String(config.cup_supply_id)
+          supplyDeltas[sid] = (supplyDeltas[sid] || 0) + (multiplier * 1 * itemQty)
+        }
+
+        // 2. Fixed supplies
+        if (Array.isArray(config.fixed_supplies)) {
+          for (const fs of config.fixed_supplies) {
+            if (!fs?.supply_item_id) continue
+            const sid = String(fs.supply_item_id)
+            const qtyUsed = Number(fs.cantidad) || 0
+            supplyDeltas[sid] = (supplyDeltas[sid] || 0) + (multiplier * qtyUsed * itemQty)
+          }
+        }
+
+        // 3. Flavors
+        if (Array.isArray(item.blendSelections) && item.blendSelections.length > 0) {
+          const numFlavors = item.blendSelections.length
+          const capacityOz = Number(config.cup_capacity) || 16
+          const litersPerFlavor = (capacityOz / numFlavors) * 0.02957
+          const totalLiters = litersPerFlavor * itemQty
+
+          for (const flavorId of item.blendSelections) {
+            if (!flavorId) continue
+            const sid = String(flavorId)
+            supplyDeltas[sid] = (supplyDeltas[sid] || 0) + (multiplier * totalLiters)
           }
         }
       }
-      return updated
-    })
+    }
 
+    for (const key in productDeltas) {
+      productDeltas[key] = Math.round(productDeltas[key] * 10000) / 10000
+    }
+    for (const key in supplyDeltas) {
+      supplyDeltas[key] = Math.round(supplyDeltas[key] * 10000) / 10000
+    }
+
+    return { productDeltas, supplyDeltas }
+  }
+
+  const processSale = async (cartItems, total, deliveryData = null, kitchenStatus = null, paymentMethod = 'Efectivo', notes = '') => {
+    const { productDeltas, supplyDeltas } = calculateStockDeltas(cartItems, -1)
+
+    // Snapshot stock values BEFORE optimistic update for accurate DB writes
+    const productStockSnapshot = {}
+    const supplyStockSnapshot = {}
+    for (const pid of Object.keys(productDeltas)) {
+      const p = products.find(p => String(p.id) === pid)
+      if (p) productStockSnapshot[pid] = Number(p.stock_actual) || 0
+    }
+    for (const sid of Object.keys(supplyDeltas)) {
+      const s = supplyItems.find(s => String(s.id) === sid)
+      if (s) supplyStockSnapshot[sid] = Number(s.stock_actual) || 0
+    }
+
+    // Optimistic UI: update stock locally right away
+    setProducts(prev => prev.map(p => {
+      const delta = productDeltas[String(p.id)]
+      if (delta !== undefined) {
+        const curStock = Number(p.stock_actual) || 0
+        const newStock = Math.max(0, Math.round((curStock + delta) * 10000) / 10000)
+        return { ...p, stock_actual: newStock }
+      }
+      return p
+    }))
+
+    setSupplyItems(prev => prev.map(s => {
+      const delta = supplyDeltas[String(s.id)]
+      if (delta !== undefined) {
+        const curStock = Number(s.stock_actual) || 0
+        const newStock = Math.max(0, Math.round((curStock + delta) * 10000) / 10000)
+        return { ...s, stock_actual: newStock }
+      }
+      return s
+    }))
 
     // Build the record — do NOT include created_at, Supabase generates it automatically
     const dbSaleRecord = {
@@ -411,7 +457,6 @@ export function InventoryProvider({ children }) {
       }
 
       // Save turn number locally under ordenpos_orders in localStorage
-      // Turns reset at 5:00 AM each day (start of new sales shift)
       try {
         const storedStr = localStorage.getItem('ordenpos_orders') || '[]'
         let stored = []
@@ -422,12 +467,10 @@ export function InventoryProvider({ children }) {
           stored = []
         }
 
-        // Helper: returns the shift-day boundary (5 AM today, or yesterday if before 5 AM)
         const getShiftStart = (date) => {
           const d = new Date(date)
           const shiftStart = new Date(d)
           shiftStart.setHours(5, 0, 0, 0)
-          // If it's before 5 AM, the current shift started at 5 AM the previous day
           if (d < shiftStart) {
             shiftStart.setDate(shiftStart.getDate() - 1)
           }
@@ -443,11 +486,9 @@ export function InventoryProvider({ children }) {
           const lastNum = lastOrder && typeof lastOrder.number === 'number' ? lastOrder.number : 0
           const lastOrderTime = lastOrder && lastOrder.ts ? new Date(lastOrder.ts) : null
 
-          // Only continue the sequence if the last order was in the same shift
           if (lastOrderTime && getShiftStart(lastOrderTime).getTime() === currentShiftStart.getTime()) {
             nextNumber = lastNum < 50 ? lastNum + 1 : 1
           }
-          // Otherwise nextNumber stays 1 (new shift reset)
         }
 
         stored.push({ id: data.id, number: nextNumber, ts: now.toISOString() })
@@ -461,94 +502,32 @@ export function InventoryProvider({ children }) {
 
       setSalesHistory(prev => [mappedData, ...prev])
 
-      // Update stock in DB for each sold item according to inventory mode
-      for (const item of cartItems) {
-        const product = products.find(p => p.id === item.id || p.id === item.productId)
-        if (!product) continue
-
-        if (product.inventory_mode === 'finished' || !product.inventory_mode) {
-          await supabase
-            .from('products')
-            .update({ stock_actual: Math.max(0, product.stock_actual - item.quantity) })
-            .eq('id', product.id)
-        } else if (product.inventory_mode === 'recipe') {
-          const recipe = productRecipes.filter(r => r.product_id === product.id)
-          for (const recipeItem of recipe) {
-            const supply = supplyItems.find(s => s.id === recipeItem.supply_item_id)
-            if (supply) {
-              const newStock = Math.max(0, Number(supply.stock_actual) - (Number(recipeItem.cantidad) * item.quantity))
-              await supabase
-                .from('supply_items')
-                .update({ stock_actual: newStock })
-                .eq('id', supply.id)
-              
-              setSupplyItems(prev => prev.map(s => s.id === supply.id ? { ...s, stock_actual: newStock } : s))
-            }
+      // Update stock in DB using pre-optimistic snapshot to avoid double counting
+      if (isValidUUID(bid)) {
+        for (const [pid, delta] of Object.entries(productDeltas)) {
+          const product = products.find(p => String(p.id) === pid)
+          if (product) {
+            const baseStock = productStockSnapshot[pid] !== undefined ? productStockSnapshot[pid] : (Number(product.stock_actual) || 0)
+            const newStock = Math.max(0, Math.round((baseStock + delta) * 10000) / 10000)
+            await supabase.from('products').update({ stock_actual: newStock }).eq('id', product.id)
           }
-        } else if (product.inventory_mode === 'blend' && product.blend_config) {
-          const config = product.blend_config
-          
-          // 1. Cup supply deduction
-          if (config.cup_supply_id) {
-            const supply = supplyItems.find(s => String(s.id) === String(config.cup_supply_id))
-            if (supply) {
-              const newStock = Math.max(0, Number(supply.stock_actual) - (1 * item.quantity))
-              await supabase
-                .from('supply_items')
-                .update({ stock_actual: newStock })
-                .eq('id', supply.id)
-              
-              setSupplyItems(prev => prev.map(s => s.id === supply.id ? { ...s, stock_actual: newStock } : s))
-            }
-          }
+        }
 
-          // 2. Fixed supplies deduction
-          if (Array.isArray(config.fixed_supplies)) {
-            for (const fs of config.fixed_supplies) {
-              if (!fs.supply_item_id) continue
-              const supply = supplyItems.find(s => String(s.id) === String(fs.supply_item_id))
-              if (supply) {
-                const newStock = Math.max(0, Number(supply.stock_actual) - (Number(fs.cantidad) * item.quantity))
-                await supabase
-                  .from('supply_items')
-                  .update({ stock_actual: newStock })
-                  .eq('id', supply.id)
-                
-                setSupplyItems(prev => prev.map(s => s.id === supply.id ? { ...s, stock_actual: newStock } : s))
-              }
-            }
-          }
-
-          // 3. Flavor deduction
-          if (Array.isArray(item.blendSelections) && item.blendSelections.length > 0) {
-            const numFlavors = item.blendSelections.length
-            const capacityOz = Number(config.cup_capacity) || 16
-            const litersPerFlavor = (capacityOz / numFlavors) * 0.02957
-            const totalDeductL = litersPerFlavor * item.quantity
-
-            for (const flavorId of item.blendSelections) {
-              const supply = supplyItems.find(s => String(s.id) === String(flavorId))
-              if (supply) {
-                const newStock = Math.max(0, Number(supply.stock_actual) - totalDeductL)
-                await supabase
-                  .from('supply_items')
-                  .update({ stock_actual: newStock })
-                  .eq('id', supply.id)
-                
-                setSupplyItems(prev => prev.map(s => s.id === supply.id ? { ...s, stock_actual: newStock } : s))
-              }
-            }
+        for (const [sid, delta] of Object.entries(supplyDeltas)) {
+          const supply = supplyItems.find(s => String(s.id) === sid)
+          if (supply) {
+            const baseStock = supplyStockSnapshot[sid] !== undefined ? supplyStockSnapshot[sid] : (Number(supply.stock_actual) || 0)
+            const newStock = Math.max(0, Math.round((baseStock + delta) * 10000) / 10000)
+            await supabase.from('supply_items').update({ stock_actual: newStock }).eq('id', supply.id)
           }
         }
       }
-
 
       return mappedData
 
     } catch (e) {
       console.error("Error saving sale to Supabase:", e)
 
-      // Fallback: create a temporary local sale so the ticket always shows
       const tempSale = {
         id: `temp-${Date.now()}`,
         business_id: bid,
@@ -564,7 +543,7 @@ export function InventoryProvider({ children }) {
         notes: notes
       }
       setSalesHistory(prev => [tempSale, ...prev])
-      return tempSale  // Always return something so the ticket modal works
+      return tempSale
     }
   }
 
@@ -572,73 +551,41 @@ export function InventoryProvider({ children }) {
     const sale = salesHistory.find(s => s.id === saleId)
     if (!sale) return
 
+    const { productDeltas, supplyDeltas } = calculateStockDeltas(sale.items, +1)
+
+    // Snapshot stock values BEFORE optimistic update for accurate DB writes
+    const productStockSnapshot = {}
+    const supplyStockSnapshot = {}
+    for (const pid of Object.keys(productDeltas)) {
+      const p = products.find(p => String(p.id) === pid)
+      if (p) productStockSnapshot[pid] = Number(p.stock_actual) || 0
+    }
+    for (const sid of Object.keys(supplyDeltas)) {
+      const s = supplyItems.find(s => String(s.id) === sid)
+      if (s) supplyStockSnapshot[sid] = Number(s.stock_actual) || 0
+    }
+
     // Optimistic UI restore for products
-    setProducts(prev => prev.map(product => {
-      const soldItem = sale.items.find(item => item.id === product.id)
-      if (soldItem && (product.inventory_mode === 'finished' || !product.inventory_mode)) {
-        return { ...product, stock_actual: product.stock_actual + soldItem.quantity }
+    setProducts(prev => prev.map(p => {
+      const delta = productDeltas[String(p.id)]
+      if (delta !== undefined) {
+        const curStock = Number(p.stock_actual) || 0
+        const newStock = Math.max(0, Math.round((curStock + delta) * 10000) / 10000)
+        return { ...p, stock_actual: newStock }
       }
-      return product
+      return p
     }))
 
     // Optimistic UI restore for supply items
-    setSupplyItems(prev => {
-      let updated = [...prev]
-      for (const item of sale.items) {
-        const product = products.find(p => p.id === item.id || p.id === item.productId)
-        if (product && product.inventory_mode === 'recipe') {
-          const recipe = productRecipes.filter(r => r.product_id === product.id)
-          for (const recipeItem of recipe) {
-            updated = updated.map(s => {
-              if (s.id === recipeItem.supply_item_id) {
-                return { ...s, stock_actual: Number(s.stock_actual) + (Number(recipeItem.cantidad) * item.quantity) }
-              }
-              return s
-            })
-          }
-        } else if (product && product.inventory_mode === 'blend' && product.blend_config) {
-          const config = product.blend_config
-          // 1. Cup restore
-          if (config.cup_supply_id) {
-            updated = updated.map(s => {
-              if (String(s.id) === String(config.cup_supply_id)) {
-                return { ...s, stock_actual: Number(s.stock_actual) + (1 * item.quantity) }
-              }
-              return s
-            })
-          }
-          // 2. Fixed restore
-          if (Array.isArray(config.fixed_supplies)) {
-            for (const fs of config.fixed_supplies) {
-              if (!fs.supply_item_id) continue
-              updated = updated.map(s => {
-                if (String(s.id) === String(fs.supply_item_id)) {
-                  return { ...s, stock_actual: Number(s.stock_actual) + (Number(fs.cantidad) * item.quantity) }
-                }
-                return s
-              })
-            }
-          }
-          // 3. Flavors restore
-          if (Array.isArray(item.blendSelections) && item.blendSelections.length > 0) {
-            const numFlavors = item.blendSelections.length
-            const capacityOz = Number(config.cup_capacity) || 16
-            const litersPerFlavor = (capacityOz / numFlavors) * 0.02957
-            const totalDeductL = litersPerFlavor * item.quantity
-
-            for (const flavorId of item.blendSelections) {
-              updated = updated.map(s => {
-                if (String(s.id) === String(flavorId)) {
-                  return { ...s, stock_actual: Number(s.stock_actual) + totalDeductL }
-                }
-                return s
-              })
-            }
-          }
-        }
+    setSupplyItems(prev => prev.map(s => {
+      const delta = supplyDeltas[String(s.id)]
+      if (delta !== undefined) {
+        const curStock = Number(s.stock_actual) || 0
+        const newStock = Math.max(0, Math.round((curStock + delta) * 10000) / 10000)
+        return { ...s, stock_actual: newStock }
       }
-      return updated
-    })
+      return s
+    }))
 
     setSalesHistory(prev => prev.filter(s => s.id !== saleId))
 
@@ -646,75 +593,23 @@ export function InventoryProvider({ children }) {
 
     try {
       await supabase.from('sales').delete().eq('id', saleId)
-      for (const item of sale.items) {
-        const product = products.find(p => p.id === item.id || p.id === item.productId)
-        if (!product) continue
 
-        if (product.inventory_mode === 'finished' || !product.inventory_mode) {
-          await supabase
-            .from('products')
-            .update({ stock_actual: product.stock_actual + item.quantity })
-            .eq('id', product.id)
-        } else if (product.inventory_mode === 'recipe') {
-          const recipe = productRecipes.filter(r => r.product_id === product.id)
-          for (const recipeItem of recipe) {
-            const supply = supplyItems.find(s => s.id === recipeItem.supply_item_id)
-            if (supply) {
-              const newStock = Number(supply.stock_actual) + (Number(recipeItem.cantidad) * item.quantity)
-              await supabase
-                .from('supply_items')
-                .update({ stock_actual: newStock })
-                .eq('id', supply.id)
-            }
-          }
-        } else if (product.inventory_mode === 'blend' && product.blend_config) {
-          const config = product.blend_config
+      // Use pre-optimistic snapshot to calculate correct new stock in DB
+      for (const [pid, delta] of Object.entries(productDeltas)) {
+        const product = products.find(p => String(p.id) === pid)
+        if (product) {
+          const baseStock = productStockSnapshot[pid] !== undefined ? productStockSnapshot[pid] : (Number(product.stock_actual) || 0)
+          const newStock = Math.max(0, Math.round((baseStock + delta) * 10000) / 10000)
+          await supabase.from('products').update({ stock_actual: newStock }).eq('id', product.id)
+        }
+      }
 
-          // 1. Cup restore
-          if (config.cup_supply_id) {
-            const supply = supplyItems.find(s => String(s.id) === String(config.cup_supply_id))
-            if (supply) {
-              const newStock = Number(supply.stock_actual) + (1 * item.quantity)
-              await supabase
-                .from('supply_items')
-                .update({ stock_actual: newStock })
-                .eq('id', supply.id)
-            }
-          }
-
-          // 2. Fixed restore
-          if (Array.isArray(config.fixed_supplies)) {
-            for (const fs of config.fixed_supplies) {
-              if (!fs.supply_item_id) continue
-              const supply = supplyItems.find(s => String(s.id) === String(fs.supply_item_id))
-              if (supply) {
-                const newStock = Number(supply.stock_actual) + (Number(fs.cantidad) * item.quantity)
-                await supabase
-                  .from('supply_items')
-                  .update({ stock_actual: newStock })
-                  .eq('id', supply.id)
-              }
-            }
-          }
-
-          // 3. Flavors restore
-          if (Array.isArray(item.blendSelections) && item.blendSelections.length > 0) {
-            const numFlavors = item.blendSelections.length
-            const capacityOz = Number(config.cup_capacity) || 16
-            const litersPerFlavor = (capacityOz / numFlavors) * 0.02957
-            const totalDeductL = litersPerFlavor * item.quantity
-
-            for (const flavorId of item.blendSelections) {
-              const supply = supplyItems.find(s => String(s.id) === String(flavorId))
-              if (supply) {
-                const newStock = Number(supply.stock_actual) + totalDeductL
-                await supabase
-                  .from('supply_items')
-                  .update({ stock_actual: newStock })
-                  .eq('id', supply.id)
-              }
-            }
-          }
+      for (const [sid, delta] of Object.entries(supplyDeltas)) {
+        const supply = supplyItems.find(s => String(s.id) === sid)
+        if (supply) {
+          const baseStock = supplyStockSnapshot[sid] !== undefined ? supplyStockSnapshot[sid] : (Number(supply.stock_actual) || 0)
+          const newStock = Math.max(0, Math.round((baseStock + delta) * 10000) / 10000)
+          await supabase.from('supply_items').update({ stock_actual: newStock }).eq('id', supply.id)
         }
       }
     } catch (e) {

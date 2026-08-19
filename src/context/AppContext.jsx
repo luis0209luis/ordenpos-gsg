@@ -13,26 +13,69 @@ export function AuthProvider({ children }) {
   })
 
   const verifyBusiness = async (businessNameOrId) => {
-    if (businessNameOrId.toLowerCase() === 'smok' || businessNameOrId.toLowerCase() === 'ordenpos') {
+    const cleanInput = (businessNameOrId || '').trim()
+    if (!cleanInput) {
+      return { success: false, error: 'Por favor ingrese el nombre o ID de su empresa.' }
+    }
+
+    if (cleanInput.toLowerCase() === 'smok' || cleanInput.toLowerCase() === 'ordenpos') {
       return { success: true, business: { id: 'master', name: 'ORDENPOS Master' } }
     }
+
     try {
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(businessNameOrId)
-      const query = isUUID
-        ? `id.eq.${businessNameOrId},name.ilike.${businessNameOrId}`
-        : `name.ilike.${businessNameOrId}`
+      const isUUID = isValidUUID(cleanInput)
 
-      const { data, error } = await supabase
-        .from('businesses')
-        .select('id, name, owner_name, days_remaining, force_phase')
-        .or(query)
-        .single()
+      const fetchPromise = (async () => {
+        if (isUUID) {
+          const { data, error } = await supabase
+            .from('businesses')
+            .select('id, name, owner_name, days_remaining, force_phase')
+            .eq('id', cleanInput)
+            .maybeSingle()
+          if (!error && data) return data
+        }
 
-      if (error || !data) return { success: false, error: 'Negocio no encontrado.' }
-      return { success: true, business: data }
+        // 1. Try exact name match (case-insensitive)
+        const { data: exactData, error: exactErr } = await supabase
+          .from('businesses')
+          .select('id, name, owner_name, days_remaining, force_phase')
+          .ilike('name', cleanInput)
+          .maybeSingle()
+
+        if (!exactErr && exactData) return exactData
+
+        // 2. Try wildcard name match if exact match wasn't found
+        const { data: fuzzyData, error: fuzzyErr } = await supabase
+          .from('businesses')
+          .select('id, name, owner_name, days_remaining, force_phase')
+          .ilike('name', `%${cleanInput}%`)
+          .limit(1)
+          .maybeSingle()
+
+        if (!fuzzyErr && fuzzyData) return fuzzyData
+
+        return null
+      })()
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout de conexión')), 10000)
+      )
+
+      const businessData = await Promise.race([fetchPromise, timeoutPromise])
+
+      if (!businessData) {
+        return { success: false, error: `Negocio "${cleanInput}" no encontrado. Verifique el nombre o ID.` }
+      }
+
+      return { success: true, business: businessData }
     } catch (e) {
-      console.error(e)
-      return { success: false, error: 'Error al conectar con el servidor.' }
+      console.error('Error en verifyBusiness:', e)
+      return { 
+        success: false, 
+        error: e.message === 'Timeout de conexión' 
+          ? 'La conexión con el servidor tardó demasiado. Intente nuevamente.' 
+          : 'Error al conectar con el servidor.' 
+      }
     }
   }
 
@@ -109,7 +152,7 @@ export function AuthProvider({ children }) {
           .from('businesses')
           .select('name')
           .eq('id', businessId)
-          .single()
+          .maybeSingle()
         
         const getFallbackPermissions = (role) => {
           switch(role) {

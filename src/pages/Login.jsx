@@ -29,7 +29,8 @@ export default function Login() {
 
   const handleVerifyBusiness = async (e) => {
     e.preventDefault()
-    if (!businessInput) {
+    const cleanBusinessInput = businessInput.trim()
+    if (!cleanBusinessInput) {
       setError('Por favor ingrese el nombre o ID de su empresa.')
       triggerShake()
       return
@@ -37,41 +38,57 @@ export default function Login() {
     setLoading(true)
     setError('')
 
-    await new Promise(r => setTimeout(r, 600))
-    const result = await verifyBusiness(businessInput)
-    setLoading(false)
+    try {
+      await new Promise(r => setTimeout(r, 400))
+      const result = await verifyBusiness(cleanBusinessInput)
 
-    if (result.success) {
-      setBusinessContext(result.business)
-      setStep(2)
-    } else {
-      setError(result.error)
+      if (result.success) {
+        setBusinessContext(result.business)
+        setStep(2)
+      } else {
+        setError(result.error || 'Negocio no encontrado.')
+        triggerShake()
+      }
+    } catch (err) {
+      console.error(err)
+      setError('Error al verificar el negocio. Por favor intente de nuevo.')
       triggerShake()
+    } finally {
+      setLoading(false)
     }
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!username || !password) {
+    const cleanUsername = username.trim()
+    const cleanPassword = password.trim()
+    if (!cleanUsername || !cleanPassword) {
       setError('Por favor complete todos los campos.')
       triggerShake()
       return
     }
     setLoading(true)
     setError('')
-    await new Promise(r => setTimeout(r, 600))
-    const result = await login(username, password, businessContext.id)
-    setLoading(false)
+    try {
+      await new Promise(r => setTimeout(r, 400))
+      const result = await login(cleanUsername, cleanPassword, businessContext?.id)
 
-    if (result.success) {
-      if (result.requiresPasswordChange) {
-        setTempUser(result.tempUser)
+      if (result.success) {
+        if (result.requiresPasswordChange) {
+          setTempUser(result.tempUser)
+        } else {
+          navigate('/')
+        }
       } else {
-        navigate('/')
+        setError(result.error || 'Credenciales incorrectas.')
+        triggerShake()
       }
-    } else {
-      setError(result.error)
+    } catch (err) {
+      console.error(err)
+      setError('Error al iniciar sesión. Intente nuevamente.')
       triggerShake()
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -94,11 +111,22 @@ export default function Login() {
     }
     setLoading(true)
     setError('')
-    await new Promise(r => setTimeout(r, 600))
-
-    await changePassword(tempUser, newPassword)
-    setLoading(false)
-    navigate('/')
+    try {
+      await new Promise(r => setTimeout(r, 400))
+      const success = await changePassword(tempUser, newPassword)
+      if (success) {
+        navigate('/')
+      } else {
+        setError('Error al actualizar contraseña. Intente nuevamente.')
+        triggerShake()
+      }
+    } catch (err) {
+      console.error(err)
+      setError('Error inesperado al guardar la contraseña.')
+      triggerShake()
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleForgotPassword = () => {

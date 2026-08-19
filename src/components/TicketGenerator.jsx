@@ -102,7 +102,14 @@ export const generateRawTicket = (sale, settings, salesHistory = []) => {
   
   // Payment method
   const payMethod = sale.paymentMethod || 'Efectivo'
-  text += `Pago: `.padEnd(20) + `${payMethod.toUpperCase().padStart(12)}\n`
+  const isGift = payMethod === 'Regalo' || payMethod === 'Gratis'
+  const displayMethod = isGift ? 'REGALO/CORTESIA' : payMethod.toUpperCase()
+  text += `Pago: `.padEnd(16) + `${displayMethod.padStart(16)}\n`
+  
+  if (isGift) {
+    const giftValue = (sale.items || []).reduce((acc, item) => acc + ((item.precio || 0) * (item.quantity || 0)), 0)
+    text += `Valor Obsequio: `.padEnd(20) + `$${giftValue.toLocaleString('es-CO').padStart(10)}\n`
+  }
   
   text += "================================\n"
   text += `TOTAL: `.padEnd(20) + `$${(sale.total || 0).toLocaleString('es-CO').padStart(10)}\n`
@@ -208,10 +215,25 @@ export default function TicketGenerator({ sale, settings }) {
         )}
         
         {/* Payment method in print component */}
-        <div className="flex justify-between mb-1 font-mono">
-          <span>Método de Pago</span>
-          <span className="uppercase">{sale.paymentMethod || 'Efectivo'}</span>
-        </div>
+        {(() => {
+          const payMethod = sale.paymentMethod || 'Efectivo'
+          const isGift = payMethod === 'Regalo' || payMethod === 'Gratis'
+          const giftVal = (sale.items || []).reduce((acc, item) => acc + ((item.precio || 0) * (item.quantity || 0)), 0)
+          return (
+            <>
+              <div className="flex justify-between mb-1 font-mono">
+                <span>Método de Pago</span>
+                <span className="uppercase font-bold">{isGift ? '🎁 REGALO / CORTESÍA' : payMethod}</span>
+              </div>
+              {isGift && (
+                <div className="flex justify-between mb-1 font-mono text-[11px] text-gray-700">
+                  <span>Valor Obsequio</span>
+                  <span>${giftVal.toLocaleString('es-CO')}</span>
+                </div>
+              )}
+            </>
+          )
+        })()}
         
         {/* TOTAL highlighted with double line border above it */}
         <div className="flex justify-between font-bold text-base pt-1 font-mono border-t-4 border-double border-black">

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
-import { useTheme, useSettings, useDeleteConfirmation } from '../context/AppContext'
+import { useTheme, useSettings, useDeleteConfirmation, useAuth } from '../context/AppContext'
 import { useInventory } from '../context/InventoryContext'
 import { useFinance } from '../context/FinanceContext'
 import { Plus, Edit2, Trash2, AlertTriangle, Search, X, Check, PackagePlus, Copy, GripVertical, ShoppingCart, Sparkles } from 'lucide-react'
@@ -31,6 +31,8 @@ const safeString = (val) => {
 
 export default function Inventory() {
   const { theme } = useTheme() || {}
+  const { user } = useAuth() || {}
+  const isAdmin = user?.role === 'admin' || user?.role === 'Superadmin' || user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'superadmin'
   const { confirmDelete } = useDeleteConfirmation()
   const isDark = theme === 'dark'
   const {
@@ -50,6 +52,10 @@ export default function Inventory() {
   const { addExpense } = useFinance() || {}
 
   const handleDeleteProduct = (product) => {
+    if (!isAdmin) {
+      alert('Solo el administrador puede eliminar productos del inventario.')
+      return
+    }
     confirmDelete({
       title: 'Eliminar Producto',
       description: `¿Estás seguro de que deseas eliminar el producto "${product.nombre}"? Esta acción es irreversible y requiere contraseña del administrador.`,
@@ -60,6 +66,10 @@ export default function Inventory() {
   }
 
   const handleDeleteSupplyItem = (item) => {
+    if (!isAdmin) {
+      alert('Solo el administrador puede eliminar insumos del inventario.')
+      return
+    }
     confirmDelete({
       title: 'Eliminar Insumo',
       description: `¿Estás seguro de que deseas eliminar el insumo "${item.nombre}"? Esta acción es irreversible y requiere contraseña del administrador.`,
@@ -494,7 +504,7 @@ export default function Inventory() {
   const location = useLocation()
 
   useEffect(() => {
-    if (location.state?.editProductId && (products || []).length > 0) {
+    if (isAdmin && location.state?.editProductId && (products || []).length > 0) {
       const productToEdit = (products || []).find(p => p.id === location.state.editProductId)
       if (productToEdit) {
         setEditingProduct(productToEdit)
@@ -505,9 +515,13 @@ export default function Inventory() {
         window.history.replaceState({}, document.title)
       }
     }
-  }, [location.state, products])
+  }, [location.state, products, isAdmin])
 
   const openModal = (product = null) => {
+    if (!isAdmin) {
+      alert('Solo el administrador puede crear o modificar productos.')
+      return
+    }
     setErrorMsg('')
     if (product) {
       setEditingProduct(product)
@@ -569,6 +583,7 @@ export default function Inventory() {
   }
 
   const handleDuplicateProduct = (product) => {
+    if (!isAdmin) return
     setErrorMsg('')
     setEditingProduct(null)
     const { id, created_at, business_id, ...productClean } = product || {}
@@ -615,6 +630,10 @@ export default function Inventory() {
   }
 
   const openSupplyModal = (item = null) => {
+    if (!isAdmin) {
+      alert('Solo el administrador puede crear o modificar insumos.')
+      return
+    }
     setSupplyErrorMsg('')
     if (item) {
       setEditingSupplyItem(item)
@@ -666,6 +685,7 @@ export default function Inventory() {
   }
 
   const handleDuplicateSupply = (item) => {
+    if (!isAdmin) return
     setSupplyErrorMsg('')
     setEditingSupplyItem(null)
     // Backward-compatible loading: map either large or medium pack to pack_large fields
@@ -1122,6 +1142,10 @@ export default function Inventory() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!isAdmin) {
+      setErrorMsg('Solo el administrador puede crear o modificar productos.')
+      return
+    }
     try {
       setErrorMsg('')
 
@@ -1191,6 +1215,10 @@ export default function Inventory() {
 
   const handleSupplySubmit = async (e) => {
     e.preventDefault()
+    if (!isAdmin) {
+      setSupplyErrorMsg('Solo el administrador puede crear o modificar insumos.')
+      return
+    }
     try {
       setSupplyErrorMsg('')
       if (!supplyFormData.nombre?.trim()) {
@@ -1443,15 +1471,17 @@ export default function Inventory() {
               </div>
             </div>
 
-            <button
-              onClick={() => openModal()}
-              className="px-6 py-3 rounded-2xl font-bold text-sm tracking-wider uppercase flex items-center gap-2
-              bg-gold-gradient text-dark-bg shadow-gold-md hover:shadow-gold-lg
-              hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 whitespace-nowrap"
-            >
-              <Plus size={18} />
-              Nuevo Producto
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => openModal()}
+                className="px-6 py-3 rounded-2xl font-bold text-sm tracking-wider uppercase flex items-center gap-2
+                bg-gold-gradient text-dark-bg shadow-gold-md hover:shadow-gold-lg
+                hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 whitespace-nowrap"
+              >
+                <Plus size={18} />
+                Nuevo Producto
+              </button>
+            )}
           </div>
 
           {/* Inventory Table - Productos */}
@@ -1586,25 +1616,29 @@ export default function Inventory() {
                                   <PackagePlus size={18} />
                                 </button>
                               )}
-                              <button
-                                onClick={() => handleDuplicateProduct(product)}
-                                title="Copiar/Duplicar producto"
-                                className={`p-2 rounded-xl transition-all
-                                  ${isDark ? 'hover:bg-blue-500/10 text-gray-400 hover:text-blue-400'
-                                    : 'hover:bg-blue-50 text-gray-500 hover:text-blue-500'}`}
-                              >
-                                <Copy size={18} />
-                              </button>
-                              <button onClick={() => openModal(product)} className={`p-2 rounded-xl transition-all
-                                ${isDark ? 'hover:bg-dark-card text-gray-400 hover:text-white'
-                                  : 'hover:bg-light-surface text-gray-500 hover:text-gray-900'}`}>
-                                <Edit2 size={18} />
-                              </button>
-                              <button onClick={() => handleDeleteProduct(product)} className={`p-2 rounded-xl transition-all
-                                ${isDark ? 'hover:bg-red-500/10 text-gray-400 hover:text-red-400'
-                                  : 'hover:bg-red-50 text-gray-500 hover:text-red-500'}`}>
-                                <Trash2 size={18} />
-                              </button>
+                              {isAdmin && (
+                                <>
+                                  <button
+                                    onClick={() => handleDuplicateProduct(product)}
+                                    title="Copiar/Duplicar producto"
+                                    className={`p-2 rounded-xl transition-all
+                                      ${isDark ? 'hover:bg-blue-500/10 text-gray-400 hover:text-blue-400'
+                                        : 'hover:bg-blue-50 text-gray-500 hover:text-blue-500'}`}
+                                  >
+                                    <Copy size={18} />
+                                  </button>
+                                  <button onClick={() => openModal(product)} className={`p-2 rounded-xl transition-all
+                                    ${isDark ? 'hover:bg-dark-card text-gray-400 hover:text-white'
+                                      : 'hover:bg-light-surface text-gray-500 hover:text-gray-900'}`}>
+                                    <Edit2 size={18} />
+                                  </button>
+                                  <button onClick={() => handleDeleteProduct(product)} className={`p-2 rounded-xl transition-all
+                                    ${isDark ? 'hover:bg-red-500/10 text-gray-400 hover:text-red-400'
+                                      : 'hover:bg-red-50 text-gray-500 hover:text-red-500'}`}>
+                                    <Trash2 size={18} />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1664,15 +1698,17 @@ export default function Inventory() {
               )}
             </div>
 
-            <button
-              onClick={() => openSupplyModal()}
-              className="px-6 py-3 rounded-2xl font-bold text-sm tracking-wider uppercase flex items-center gap-2
-              bg-gold-gradient text-dark-bg shadow-gold-md hover:shadow-gold-lg
-              hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 whitespace-nowrap"
-            >
-              <Plus size={18} />
-              Nuevo Insumo
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => openSupplyModal()}
+                className="px-6 py-3 rounded-2xl font-bold text-sm tracking-wider uppercase flex items-center gap-2
+                bg-gold-gradient text-dark-bg shadow-gold-md hover:shadow-gold-lg
+                hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 whitespace-nowrap"
+              >
+                <Plus size={18} />
+                Nuevo Insumo
+              </button>
+            )}
           </div>
 
           {/* Table - Insumos */}
@@ -1821,25 +1857,29 @@ export default function Inventory() {
                               >
                                 <PackagePlus size={18} />
                               </button>
-                              <button
-                                onClick={() => handleDuplicateSupply(item)}
-                                title="Copiar/Duplicar insumo"
-                                className={`p-2 rounded-xl transition-all
-                                  ${isDark ? 'hover:bg-blue-500/10 text-gray-400 hover:text-blue-400'
-                                    : 'hover:bg-blue-50 text-gray-500 hover:text-blue-500'}`}
-                              >
-                                <Copy size={18} />
-                              </button>
-                              <button onClick={() => openSupplyModal(item)} className={`p-2 rounded-xl transition-all
-                                ${isDark ? 'hover:bg-dark-card text-gray-400 hover:text-white'
-                                  : 'hover:bg-light-surface text-gray-500 hover:text-gray-900'}`}>
-                                <Edit2 size={18} />
-                              </button>
-                              <button onClick={() => handleDeleteSupplyItem(item)} className={`p-2 rounded-xl transition-all
-                                ${isDark ? 'hover:bg-red-500/10 text-gray-400 hover:text-red-400'
-                                  : 'hover:bg-red-50 text-gray-500 hover:text-red-500'}`}>
-                                <Trash2 size={18} />
-                              </button>
+                              {isAdmin && (
+                                <>
+                                  <button
+                                    onClick={() => handleDuplicateSupply(item)}
+                                    title="Copiar/Duplicar insumo"
+                                    className={`p-2 rounded-xl transition-all
+                                      ${isDark ? 'hover:bg-blue-500/10 text-gray-400 hover:text-blue-400'
+                                        : 'hover:bg-blue-50 text-gray-500 hover:text-blue-500'}`}
+                                  >
+                                    <Copy size={18} />
+                                  </button>
+                                  <button onClick={() => openSupplyModal(item)} className={`p-2 rounded-xl transition-all
+                                    ${isDark ? 'hover:bg-dark-card text-gray-400 hover:text-white'
+                                      : 'hover:bg-light-surface text-gray-500 hover:text-gray-900'}`}>
+                                    <Edit2 size={18} />
+                                  </button>
+                                  <button onClick={() => handleDeleteSupplyItem(item)} className={`p-2 rounded-xl transition-all
+                                    ${isDark ? 'hover:bg-red-500/10 text-gray-400 hover:text-red-400'
+                                      : 'hover:bg-red-50 text-gray-500 hover:text-red-500'}`}>
+                                    <Trash2 size={18} />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>

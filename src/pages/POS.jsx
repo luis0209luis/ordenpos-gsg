@@ -203,6 +203,8 @@ export default function POS() {
     if (cart.length === 0) return
     if (isDelivery && (!deliveryData.confirmed || !deliveryData.address)) return
     
+    const isGift = paymentMethod === 'Regalo' || paymentMethod === 'Gratis'
+    const finalTotal = isGift ? 0 : total
     const kitchenStatus = 'pending'
     const nowISO = new Date().toISOString()
     const tempId = `temp-${Date.now()}`
@@ -213,7 +215,7 @@ export default function POS() {
       created_at: nowISO,
       date: nowISO,
       items: [...cart],
-      total,
+      total: finalTotal,
       isDelivery,
       deliveryData: isDelivery ? { ...deliveryData } : null,
       deliveryStatus: isDelivery ? 'Pendiente' : null,
@@ -240,7 +242,7 @@ export default function POS() {
     
     try {
       // Process sale in background
-      const saleRecord = await processSale(cartCopy, total, deliveryDataCopy, kitchenStatus, paymentMethod, notesCopy)
+      const saleRecord = await processSale(cartCopy, finalTotal, deliveryDataCopy, kitchenStatus, paymentMethod, notesCopy)
       
       // Update finished sale in modal with the actual record from DB
       setFinishedSale(prev => prev && prev.id === tempId ? saleRecord : prev)
@@ -939,6 +941,21 @@ export default function POS() {
                   <div>
                     <h4 className="font-bold text-base">Transferencia</h4>
                     <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Bancolombia u otras cuentas</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleProcessSale('Regalo')}
+                  className={`w-full p-4 rounded-2xl border-2 flex items-center gap-4 transition-all duration-200 hover:scale-[1.02] text-left
+                    ${isDark 
+                      ? 'bg-dark-card border-dark-border hover:border-purple-500/50 hover:bg-purple-500/10' 
+                      : 'bg-gray-50 border-gray-100 hover:border-purple-500/50 hover:bg-purple-50'}`}
+                >
+                  <span className="text-3xl">🎁</span>
+                  <div>
+                    <h4 className="font-bold text-base text-purple-400">Regalo / Cortesía</h4>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Obsequio de evento ($0 cobrado, descuenta inventario)</p>
                   </div>
                 </button>
               </div>

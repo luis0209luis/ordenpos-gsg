@@ -96,12 +96,20 @@ function ClosingModal({ isDark, onClose, onCancel, currentRegister }) {
     ? salesHistory.filter(s => new Date(s.date) >= openedAt)
     : salesHistory
 
+  const giftSalesVal = turnoSales
+    .filter(s => s.paymentMethod === 'Regalo' || s.paymentMethod === 'Gratis')
+    .reduce((acc, s) => {
+      const itemsVal = (s.items || []).reduce((sum, i) => sum + ((i.precio || 0) * (i.quantity || 0)), 0)
+      return acc + itemsVal
+    }, 0)
+  const giftCount = turnoSales.filter(s => s.paymentMethod === 'Regalo' || s.paymentMethod === 'Gratis').length
+
   const paymentTotals = turnoSales.reduce((acc, s) => {
     const method = s.paymentMethod || 'Efectivo'
     if (!acc[method]) acc[method] = 0
     acc[method] += Number(s.total) || 0
     return acc
-  }, { Efectivo: 0, Nequi: 0, Transferencia: 0, Otros: 0 })
+  }, { Efectivo: 0, Nequi: 0, Transferencia: 0, Regalo: 0, Otros: 0 })
 
   const totalSystem = turnoSales.reduce((acc, s) => acc + (Number(s.total) || 0), 0)
   const expectedCash = (Number(currentRegister?.opening_amount) || 0) + (paymentTotals.Efectivo || 0)
@@ -159,18 +167,22 @@ function ClosingModal({ isDark, onClose, onCancel, currentRegister }) {
             </div>
             <div className={`divide-y ${isDark ? 'divide-dark-border' : 'divide-light-border'}`}>
               {[
-                { label: '💵 Efectivo', value: paymentTotals.Efectivo || 0 },
-                { label: '📱 Nequi', value: paymentTotals.Nequi || 0 },
-                { label: '🏦 Transferencia', value: paymentTotals.Transferencia || 0 },
-                { label: '📝 Otros', value: (paymentTotals.Otros || 0) + Object.entries(paymentTotals).filter(([k]) => !['Efectivo','Nequi','Transferencia','Otros'].includes(k)).reduce((s,[,v]) => s+v, 0) },
-              ].map(({ label, value }) => (
+                { label: '💵 Efectivo', value: paymentTotals.Efectivo || 0, sub: null },
+                { label: '📱 Nequi', value: paymentTotals.Nequi || 0, sub: null },
+                { label: '🏦 Transferencia', value: paymentTotals.Transferencia || 0, sub: null },
+                { label: '🎁 Regalo / Cortesía', value: 0, sub: giftCount > 0 ? `Valor obsequiado: $${fmt(giftSalesVal)} (${giftCount} órd.)` : '0 órdenes' },
+                { label: '📝 Otros', value: (paymentTotals.Otros || 0) + Object.entries(paymentTotals).filter(([k]) => !['Efectivo','Nequi','Transferencia','Regalo','Gratis','Otros'].includes(k)).reduce((s,[,v]) => s+v, 0), sub: null },
+              ].map(({ label, value, sub }) => (
                 <div key={label} className={`flex justify-between items-center px-4 py-2.5 text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  <span>{label}</span>
+                  <div>
+                    <span>{label}</span>
+                    {sub && <span className="block text-[11px] text-purple-400 font-medium">{sub}</span>}
+                  </div>
                   <span className="font-bold">${fmt(value)}</span>
                 </div>
               ))}
               <div className={`flex justify-between items-center px-4 py-3 font-bold text-sm ${isDark ? 'bg-dark-card text-white' : 'bg-gray-50 text-gray-900'}`}>
-                <span>Total Ventas del Turno</span>
+                <span>Total Ventas del Turno (Ingresos)</span>
                 <span className="text-gold-500 text-base">${fmt(totalSystem)}</span>
               </div>
             </div>
