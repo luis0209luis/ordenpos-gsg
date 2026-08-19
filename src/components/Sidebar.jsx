@@ -194,8 +194,8 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
           </div>
         )}
 
-        {/* Cerrar Caja — solo para CAJERO */}
-        {user && user.role === 'CAJERO' && currentRegister && (
+        {/* Cerrar Caja — visible para CAJERO, admin y Superadmin justo antes de Cerrar Sesión */}
+        {user && ['CAJERO', 'ADMIN', 'SUPERADMIN'].includes((user?.role || '').toUpperCase()) && (
           <button
             id="sidebar-close-cash"
             onClick={() => {
@@ -204,8 +204,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
             }}
             className={`
               w-full flex items-center gap-3 px-3 py-2.5 rounded-xl
-              text-sm font-bold border transition-all duration-200 group relative overflow-hidden
-              ${collapsed ? 'justify-center' : ''}
+              text-sm font-extrabold border transition-all duration-200 group relative overflow-hidden active:scale-95 mb-1
               ${isDark
                 ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20'
                 : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'}

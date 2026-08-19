@@ -274,11 +274,11 @@ export default function Topbar({ title, onMenuClick }) {
             )}
           </div>
 
-          {/* Cash Register indicator — solo para cajeros y admins */}
-          {user && CASH_ROLES.includes(user.role) && (
-            currentRegister ? (
-              <>
-                {/* Desktop View */}
+          {/* Cash Register indicator — visible en header para cajeros y admins */}
+          {user && ['CAJERO', 'ADMIN', 'SUPERADMIN'].includes((user?.role || '').toUpperCase()) && (
+            <>
+              {/* Desktop View */}
+              {currentRegister && (
                 <div className="hidden md:flex items-center gap-2">
                   <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold
                     ${isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
@@ -294,19 +294,19 @@ export default function Topbar({ title, onMenuClick }) {
                     Cerrar Caja
                   </button>
                 </div>
+              )}
 
-                {/* Mobile View */}
-                <button
-                  onClick={() => setShowCloseModal(true)}
-                  className={`md:hidden flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all active:scale-95 shrink-0
-                    ${isDark ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20' : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'}`}
-                  title="Cerrar Caja"
-                >
-                  <Lock size={13} />
-                  <span>Cerrar Caja</span>
-                </button>
-              </>
-            ) : null
+              {/* Mobile Header Button */}
+              <button
+                onClick={() => setShowCloseModal(true)}
+                className={`md:hidden flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-extrabold transition-all active:scale-95 shrink-0
+                  ${isDark ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20' : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'}`}
+                title="Cerrar Caja"
+              >
+                <Lock size={14} className="text-red-500" />
+                <span>Cerrar Caja</span>
+              </button>
+            </>
           )}
 
           {/* Theme toggle */}
