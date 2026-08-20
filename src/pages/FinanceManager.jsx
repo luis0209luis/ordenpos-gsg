@@ -107,17 +107,33 @@ export default function FinanceManager() {
   const [exportYear, setExportYear] = useState(new Date().getFullYear())
 
   // Filter by period
-  const [timeFilter, setTimeFilter] = useState('Todo')
+  const [timeFilter, setTimeFilter] = useState('Hoy')
   const [selectedCustomDate, setSelectedCustomDate] = useState(new Date().toISOString().split('T')[0])
+  const [isCustomDaySelected, setIsCustomDaySelected] = useState(false)
+  const [showDailyCalendarModal, setShowDailyCalendarModal] = useState(false)
+
   const [selectedCajaCustomDate, setSelectedCajaCustomDate] = useState(new Date().toISOString().split('T')[0])
+  const [isCajaCustomDaySelected, setIsCajaCustomDaySelected] = useState(false)
+  const [showCajaCalendarModal, setShowCajaCalendarModal] = useState(false)
+
   const [weekOffset, setWeekOffset] = useState(0) // 0 = esta semana, -1 = semana anterior, -2 = hace 2 semanas...
   const [showWeekDropdown, setShowWeekDropdown] = useState(false)
 
+  const isMatchingDay = (itemDateStr, customDateStr, checkIsCustom) => {
+    if (!itemDateStr) return false
+    const date = parseISO(itemDateStr)
+    if (checkIsCustom && customDateStr) {
+      return format(date, 'yyyy-MM-dd') === customDateStr
+    }
+    return isToday(date)
+  }
+
   const filteredSales = (salesHistory || []).filter(sale => {
     if (timeFilter === 'Todo') return true
+    if (timeFilter === 'Hoy') {
+      return isMatchingDay(sale?.date, selectedCustomDate, isCustomDaySelected)
+    }
     const date = parseISO(sale?.date || new Date().toISOString())
-    if (timeFilter === 'Hoy') return isToday(date)
-    if (timeFilter === 'Fecha') return format(date, 'yyyy-MM-dd') === selectedCustomDate
     if (timeFilter === 'Semana') {
       const targetWeekDate = addWeeks(new Date(), weekOffset)
       return isSameWeek(date, targetWeekDate, { weekStartsOn: 1 })
@@ -129,9 +145,10 @@ export default function FinanceManager() {
 
   const filteredExpenses = (expenses || []).filter(exp => {
     if (timeFilter === 'Todo') return true
+    if (timeFilter === 'Hoy') {
+      return isMatchingDay(exp?.date, selectedCustomDate, isCustomDaySelected)
+    }
     const date = parseISO(exp?.date || new Date().toISOString())
-    if (timeFilter === 'Hoy') return isToday(date)
-    if (timeFilter === 'Fecha') return format(date, 'yyyy-MM-dd') === selectedCustomDate
     if (timeFilter === 'Semana') {
       const targetWeekDate = addWeeks(new Date(), weekOffset)
       return isSameWeek(date, targetWeekDate, { weekStartsOn: 1 })
@@ -143,9 +160,10 @@ export default function FinanceManager() {
 
   const filteredPayroll = (payrollHistory || []).filter(p => {
     if (timeFilter === 'Todo') return true
+    if (timeFilter === 'Hoy') {
+      return isMatchingDay(p?.date, selectedCustomDate, isCustomDaySelected)
+    }
     const date = parseISO(p?.date || new Date().toISOString())
-    if (timeFilter === 'Hoy') return isToday(date)
-    if (timeFilter === 'Fecha') return format(date, 'yyyy-MM-dd') === selectedCustomDate
     if (timeFilter === 'Semana') {
       const targetWeekDate = addWeeks(new Date(), weekOffset)
       return isSameWeek(date, targetWeekDate, { weekStartsOn: 1 })
@@ -463,11 +481,15 @@ export default function FinanceManager() {
         </div>
         
         <div className="flex flex-wrap items-center gap-4">
-          <div className={`flex flex-wrap items-center gap-1 p-1 rounded-xl border
+          <div className={`flex flex-wrap items-center gap-1 p-1 rounded-xl border relative
             ${isDark ? 'bg-dark-card border-dark-border' : 'bg-light-surface border-light-border'}`}>
             {[
-              { id: 'Hoy', label: 'Diario' },
-              { id: 'Fecha', label: '📅 Elegir Día' },
+              { 
+                id: 'Hoy', 
+                label: isCustomDaySelected && timeFilter === 'Hoy'
+                  ? `📅 ${format(parseISO(selectedCustomDate), 'dd/MM/yyyy')}`
+                  : 'Diario 📅'
+              },
               { id: 'Semana', label: 'Semanal' },
               { id: 'Mes', label: 'Mensual' },
               { id: 'Año', label: 'Anual' },
@@ -476,39 +498,23 @@ export default function FinanceManager() {
               <button
                 key={filter.id}
                 onClick={() => {
-                  setTimeFilter(filter.id)
-                  if (filter.id === 'Semana') {
-                    setWeekOffset(0)
+                  if (filter.id === 'Hoy') {
+                    setTimeFilter('Hoy')
+                    setShowDailyCalendarModal(true)
+                  } else {
+                    setTimeFilter(filter.id)
+                    if (filter.id === 'Semana') setWeekOffset(0)
                   }
                 }}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1
                   ${timeFilter === filter.id
                     ? 'bg-gold-gradient text-dark-bg shadow-gold-sm font-black'
                     : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
               >
-                {filter.label}
+                <span>{filter.label}</span>
               </button>
             ))}
           </div>
-
-          {/* Date Picker Selector when 'Fecha' filter is selected */}
-          {timeFilter === 'Fecha' && (
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border animate-fade-in
-              ${isDark ? 'bg-dark-card border-gold-500/50 text-white' : 'bg-white border-gold-500 text-gray-900'}`}>
-              <Calendar size={16} className="text-gold-500 shrink-0" />
-              <input
-                type="date"
-                value={selectedCustomDate}
-                onChange={(e) => {
-                  if (e.target.value) {
-                    setSelectedCustomDate(e.target.value)
-                  }
-                }}
-                className={`bg-transparent text-xs font-bold outline-none cursor-pointer
-                  ${isDark ? 'text-white' : 'text-gray-900'}`}
-              />
-            </div>
-          )}
 
           <button 
             onClick={exportToExcel}
@@ -1014,45 +1020,39 @@ export default function FinanceManager() {
       {/* Tab Content: Historial de Caja */}
       {activeTab === 'caja' && (
         <div>
-          {/* Filtros de fecha */}
+          {/* Filtros de fecha en caja */}
           <div className="flex flex-wrap items-center gap-2 mb-6">
             <span className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Período:</span>
             <div className={`flex flex-wrap items-center gap-1 p-1 rounded-xl border
               ${isDark ? 'bg-dark-card border-dark-border' : 'bg-light-surface border-light-border'}`}>
               {[
-                { id: 'Hoy', label: 'Hoy' },
-                { id: 'Fecha', label: '📅 Elegir Día' },
+                { 
+                  id: 'Hoy', 
+                  label: isCajaCustomDaySelected && cajaTimeFilter === 'Hoy'
+                    ? `📅 ${format(parseISO(selectedCajaCustomDate), 'dd/MM/yyyy')}`
+                    : 'Hoy 📅'
+                },
                 { id: 'Semana', label: 'Semana' },
                 { id: 'Mes', label: 'Mes' },
                 { id: 'Todo', label: 'Todo' }
               ].map(f => (
-                <button key={f.id} onClick={() => setCajaTimeFilter(f.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all
+                <button key={f.id} 
+                  onClick={() => {
+                    if (f.id === 'Hoy') {
+                      setCajaTimeFilter('Hoy')
+                      setShowCajaCalendarModal(true)
+                    } else {
+                      setCajaTimeFilter(f.id)
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all
                     ${cajaTimeFilter === f.id
-                      ? 'bg-gold-gradient text-dark-bg shadow-gold-sm font-bold'
+                      ? 'bg-gold-gradient text-dark-bg shadow-gold-sm font-black'
                       : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}>
                   {f.label}
                 </button>
               ))}
             </div>
-
-            {cajaTimeFilter === 'Fecha' && (
-              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border animate-fade-in
-                ${isDark ? 'bg-dark-card border-gold-500/50 text-white' : 'bg-white border-gold-500 text-gray-900'}`}>
-                <Calendar size={16} className="text-gold-500 shrink-0" />
-                <input
-                  type="date"
-                  value={selectedCajaCustomDate}
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      setSelectedCajaCustomDate(e.target.value)
-                    }
-                  }}
-                  className={`bg-transparent text-xs font-bold outline-none cursor-pointer
-                    ${isDark ? 'text-white' : 'text-gray-900'}`}
-                />
-              </div>
-            )}
           </div>
 
           <div className={`rounded-3xl border overflow-hidden ${isDark ? 'bg-dark-surface border-dark-border' : 'bg-white border-light-border'}`}>
@@ -1070,8 +1070,12 @@ export default function FinanceManager() {
                 if (cajaTimeFilter === 'Todo') return true
                 if (!r.closed_at) return false
                 const d = new Date(r.closed_at)
-                if (cajaTimeFilter === 'Hoy') return isToday(d)
-                if (cajaTimeFilter === 'Fecha') return format(parseISO(r.closed_at), 'yyyy-MM-dd') === selectedCajaCustomDate
+                if (cajaTimeFilter === 'Hoy') {
+                  if (isCajaCustomDaySelected && selectedCajaCustomDate) {
+                    return format(parseISO(r.closed_at), 'yyyy-MM-dd') === selectedCajaCustomDate
+                  }
+                  return isToday(d)
+                }
                 if (cajaTimeFilter === 'Semana') return isThisWeek(d, { weekStartsOn: 1 })
                 if (cajaTimeFilter === 'Mes') return isThisMonth(d)
                 return true
@@ -1742,6 +1746,221 @@ export default function FinanceManager() {
                   )
                 })()}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ventana Modal de Calendario para Diario (Finanzas / Nómina) */}
+      {showDailyCalendarModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-xs animate-fade-in" 
+            onClick={() => setShowDailyCalendarModal(false)} 
+          />
+          <div className={`relative w-full max-w-sm p-6 rounded-3xl shadow-2xl border animate-scale-up z-10
+            ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
+            
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-gold-500/10 text-gold-500">
+                  <Calendar size={20} />
+                </div>
+                <div>
+                  <h4 className="font-display font-black text-lg leading-none">Elegir Día</h4>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Selecciona una fecha del calendario</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDailyCalendarModal(false)}
+                className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-dark-card text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-gold-500">
+                  Fecha del Calendario:
+                </label>
+                <div className={`flex items-center gap-3 p-3 rounded-2xl border
+                  ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-200'}`}>
+                  <Calendar size={18} className="text-gold-500 shrink-0" />
+                  <input
+                    type="date"
+                    value={selectedCustomDate}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        setSelectedCustomDate(e.target.value)
+                        setIsCustomDaySelected(true)
+                        setTimeFilter('Hoy')
+                      }
+                    }}
+                    className={`w-full bg-transparent text-sm font-bold outline-none cursor-pointer
+                      ${isDark ? 'text-white' : 'text-gray-900'}`}
+                  />
+                </div>
+              </div>
+
+              {/* Botones de Selección Rápida */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const todayStr = new Date().toISOString().split('T')[0]
+                    setSelectedCustomDate(todayStr)
+                    setIsCustomDaySelected(false)
+                    setTimeFilter('Hoy')
+                    setShowDailyCalendarModal(false)
+                  }}
+                  className={`py-2.5 px-3 rounded-xl text-xs font-extrabold border transition-all active:scale-95 text-center
+                    ${!isCustomDaySelected
+                      ? 'bg-gold-gradient text-dark-bg border-gold-500 shadow-gold-sm'
+                      : isDark ? 'bg-dark-card border-dark-border text-gray-300 hover:bg-dark-card/80' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
+                >
+                  Hoy (Actual)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const yesterday = new Date()
+                    yesterday.setDate(yesterday.getDate() - 1)
+                    const yesterdayStr = yesterday.toISOString().split('T')[0]
+                    setSelectedCustomDate(yesterdayStr)
+                    setIsCustomDaySelected(true)
+                    setTimeFilter('Hoy')
+                    setShowDailyCalendarModal(false)
+                  }}
+                  className={`py-2.5 px-3 rounded-xl text-xs font-extrabold border transition-all active:scale-95 text-center
+                    ${isCustomDaySelected && selectedCustomDate === new Date(Date.now() - 86400000).toISOString().split('T')[0]
+                      ? 'bg-gold-gradient text-dark-bg border-gold-500 shadow-gold-sm'
+                      : isDark ? 'bg-dark-card border-dark-border text-gray-300 hover:bg-dark-card/80' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
+                >
+                  Ayer
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCustomDaySelected(true)
+                  setTimeFilter('Hoy')
+                  setShowDailyCalendarModal(false)
+                }}
+                className="w-full py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider bg-gold-gradient text-dark-bg shadow-gold-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2"
+              >
+                <CheckCircle2 size={18} />
+                Mostrar Datos del Día
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ventana Modal de Calendario para Cierres de Caja */}
+      {showCajaCalendarModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-xs animate-fade-in" 
+            onClick={() => setShowCajaCalendarModal(false)} 
+          />
+          <div className={`relative w-full max-w-sm p-6 rounded-3xl shadow-2xl border animate-scale-up z-10
+            ${isDark ? 'bg-dark-surface border-dark-border text-white' : 'bg-white border-light-border text-gray-900'}`}>
+            
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-gold-500/10 text-gold-500">
+                  <Calendar size={20} />
+                </div>
+                <div>
+                  <h4 className="font-display font-black text-lg leading-none">Cierres de Caja</h4>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Selecciona el día a consultar</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCajaCalendarModal(false)}
+                className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-dark-card text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-gold-500">
+                  Fecha del Calendario:
+                </label>
+                <div className={`flex items-center gap-3 p-3 rounded-2xl border
+                  ${isDark ? 'bg-dark-card border-dark-border' : 'bg-gray-50 border-gray-200'}`}>
+                  <Calendar size={18} className="text-gold-500 shrink-0" />
+                  <input
+                    type="date"
+                    value={selectedCajaCustomDate}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        setSelectedCajaCustomDate(e.target.value)
+                        setIsCajaCustomDaySelected(true)
+                        setCajaTimeFilter('Hoy')
+                      }
+                    }}
+                    className={`w-full bg-transparent text-sm font-bold outline-none cursor-pointer
+                      ${isDark ? 'text-white' : 'text-gray-900'}`}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const todayStr = new Date().toISOString().split('T')[0]
+                    setSelectedCajaCustomDate(todayStr)
+                    setIsCajaCustomDaySelected(false)
+                    setCajaTimeFilter('Hoy')
+                    setShowCajaCalendarModal(false)
+                  }}
+                  className={`py-2.5 px-3 rounded-xl text-xs font-extrabold border transition-all active:scale-95 text-center
+                    ${!isCajaCustomDaySelected
+                      ? 'bg-gold-gradient text-dark-bg border-gold-500 shadow-gold-sm'
+                      : isDark ? 'bg-dark-card border-dark-border text-gray-300 hover:bg-dark-card/80' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
+                >
+                  Hoy (Actual)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const yesterday = new Date()
+                    yesterday.setDate(yesterday.getDate() - 1)
+                    const yesterdayStr = yesterday.toISOString().split('T')[0]
+                    setSelectedCajaCustomDate(yesterdayStr)
+                    setIsCajaCustomDaySelected(true)
+                    setCajaTimeFilter('Hoy')
+                    setShowCajaCalendarModal(false)
+                  }}
+                  className={`py-2.5 px-3 rounded-xl text-xs font-extrabold border transition-all active:scale-95 text-center
+                    ${isCajaCustomDaySelected && selectedCajaCustomDate === new Date(Date.now() - 86400000).toISOString().split('T')[0]
+                      ? 'bg-gold-gradient text-dark-bg border-gold-500 shadow-gold-sm'
+                      : isDark ? 'bg-dark-card border-dark-border text-gray-300 hover:bg-dark-card/80' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'}`}
+                >
+                  Ayer
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCajaCustomDaySelected(true)
+                  setCajaTimeFilter('Hoy')
+                  setShowCajaCalendarModal(false)
+                }}
+                className="w-full py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider bg-gold-gradient text-dark-bg shadow-gold-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2"
+              >
+                <CheckCircle2 size={18} />
+                Ver Cierres del Día
+              </button>
             </div>
           </div>
         </div>
